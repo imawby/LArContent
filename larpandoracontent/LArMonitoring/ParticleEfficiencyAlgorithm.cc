@@ -20,29 +20,19 @@ using namespace pandora;
 
 namespace lar_content {
 
-  ParticleEfficiencyAlgorithm::RecoParameters::RecoParameters() :
-    m_minPrimaryGoodHits(15),
-    m_minHitsForGoodView(5),
-    m_minPrimaryGoodViews(2),
-    m_foldToPrimaries(false),
-    m_minHitSharingFraction(0.9f)
-  {
-  }
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-//------------------------------------------------------------------------------------------------------------------------------------------
-
   ParticleEfficiencyAlgorithm::ParticleEfficiencyAlgorithm() :
     m_caloHitListName(), 
-    m_pfoListName(), 
-    m_recoParameters(), 
+    m_pfoListName(),
+    m_foldToPrimaries(false), 
     m_writeToTree(false), 
     m_treeName(),
     m_fileName(), 
+    m_printToScreen(false),
     m_eventNumber(0)
   {
   }
 
+//------------------------------------------------------------------------------------------------------------------------------------------
 
   ParticleEfficiencyAlgorithm::~ParticleEfficiencyAlgorithm() 
   {
@@ -56,12 +46,14 @@ namespace lar_content {
     }
   }
 
-
+//------------------------------------------------------------------------------------------------------------------------------------------
 
 
   StatusCode ParticleEfficiencyAlgorithm::Run() {
 
     ++m_eventNumber;
+
+    std::cout << "Event Number: " << m_eventNumber << std::endl;
 
     const MCParticleList *pMCParticleList = nullptr;
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetCurrentList(*this, pMCParticleList));
@@ -69,31 +61,47 @@ namespace lar_content {
     const CaloHitList *pCaloHitList = nullptr;
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetList(*this, m_caloHitListName, pCaloHitList));
 
+    // MC PARTICLES
+
     // Get MC Particle to reconstructable hits map
     LArMCParticleHelper::MCContributionMap mcToRecoHitsMap;
-    FillMCToRecoHitsMap(pMCParticleList, pCaloHitList, mcToRecoHitsMap);
+    m_foldToPrimaries ? LArMCParticleHelper::SelectReconstructableMCParticles(pMCParticleList, pCaloHitList, m_parameters, LArMCParticleHelper::IsBeamNeutrinoFinalState, mcToRecoHitsMap) : LArMCParticleHelper::SelectUnfoldedReconstructableMCParticles(pMCParticleList, pCaloHitList, m_parameters, mcToRecoHitsMap);
 
+    // For user output purposes
     MCParticleVector orderedTargetMCParticleVector;
     LArMonitoringHelper::GetOrderedMCParticleVector({mcToRecoHitsMap}, orderedTargetMCParticleVector);
 
+    // PRINT TO SCREEN
+    // Visualize the reconstructable MC particles and their hits
+    if(m_printToScreen) {
+      std::cout << "MC PARTICLES AND THEIR RECONSTRUCTABLE HITS (ON DISPLAY) " << std::endl;
+      VisualizeReconstructableMCParticles(orderedTargetMCParticleVector, mcToRecoHitsMap);
+    }
+
+    // PFOS
+
+    // WRITE TO TREE
     // If no pfos are created, still need to fill MC tree with this info
     const PfoList *pPfoList = nullptr;
     StatusCode pfoListStatus(PandoraContentApi::GetList(*this, m_pfoListName, pPfoList));
 
     // Handle case where no pfos are created
     if(pfoListStatus == STATUS_CODE_NOT_INITIALIZED){
-      AddNoPfoEntryToTree(orderedTargetMCParticleVector, mcToRecoHitsMap);
+      if(m_writeToTree) {
+        AddNoPfoEntryToTree(orderedTargetMCParticleVector, mcToRecoHitsMap);
+      }
       return STATUS_CODE_NOT_INITIALIZED;
     } 
  
     // ensure that other StatusCodes are still handled
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, pfoListStatus);
 
+
     // Get pfo to reconstructable hits map
     LArMCParticleHelper::PfoContributionMap pfoToRecoHitsMap;
 
-    if (m_recoParameters.m_foldToPrimaries) {
-      // Get list of pfos to be matched with the target MC particles
+    if (m_foldToPrimaries) {
+      // Get list of 'primary' pfos to be matched with the target MC particles
       PfoList finalStatePfos;
       for (const ParticleFlowObject *const pPfo : *pPfoList) {
 	if (LArPfoHelper::IsFinalState(pPfo))
@@ -104,8 +112,18 @@ namespace lar_content {
       LArMCParticleHelper::GetUnfoldedPfoToReconstructable2DHitsMap(*pPfoList, mcToRecoHitsMap, pfoToRecoHitsMap);
     }
 
+    // For user output purposes
     PfoVector orderedPfoVector;
     LArMonitoringHelper::GetOrderedPfoVector(pfoToRecoHitsMap, orderedPfoVector);
+
+    // PRINT TO SCREEN
+    if(m_printToScreen) {
+      std::cout << "RECONSTRUCTED PFOS AND THEIR RECONSTRUCTABLE HITS (ON DISPLAY) " << std::endl;
+      VisualizeReconstructedPfos(orderedPfoVector, pfoToRecoHitsMap);
+    }
+
+
+    // MC PARTICLE AND PFO
 
     // Find hits that they share
     LArMCParticleHelper::PfoToMCParticleHitSharingMap pfoToMCParticleHitSharingMap;
@@ -117,7 +135,7 @@ namespace lar_content {
     LArMCParticleHelper::MCParticleToPfoCompletenessPurityMap mcParticleToPfoPurityMap; 
     LArMCParticleHelper::GetMCToPfoCompletenessPurityMaps(mcToRecoHitsMap, pfoToRecoHitsMap, mcParticleToPfoHitSharingMap, mcParticleToPfoCompletenessMap, mcParticleToPfoPurityMap);
 
-
+    // WRITE TO TREE
     if(m_writeToTree) {
       AddMatchesEntryToTree(orderedTargetMCParticleVector, mcToRecoHitsMap, mcParticleToPfoHitSharingMap, mcParticleToPfoCompletenessMap, mcParticleToPfoPurityMap);
     }
@@ -130,156 +148,45 @@ namespace lar_content {
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-  void ParticleEfficiencyAlgorithm::FillMCToRecoHitsMap(const MCParticleList *pMCParticleList, const CaloHitList *pCaloHitList, LArMCParticleHelper::MCContributionMap &mcToRecoHitsMap)
-{
-
-    // Obtain map: [MC particle -> self] (to prevent folding to primary MC particle)
-    // or [MC particle -> primary mc particle] (to fold to primary MC particle)
-    LArMCParticleHelper::MCRelationMap mcToTargetMCMap;
-    m_recoParameters.m_foldToPrimaries ? LArMCParticleHelper::GetMCPrimaryMap(pMCParticleList, mcToTargetMCMap) : GetMCToSelfMap(pMCParticleList, mcToTargetMCMap);
-
-    //REMOVED NEUTRON AND PHOTON CONSIDERATION
-
-    // Obtain maps: [hits -> MC particle (either primary or a downstream MC particle)], [MC particle -> list of hits]
-    LArMCParticleHelper::CaloHitToMCMap trueHitToTargetMCMap;
-    LArMCParticleHelper::MCContributionMap targetMCToTrueHitListMap;
-    LArMCParticleHelper::GetMCParticleToCaloHitMatches(pCaloHitList, mcToTargetMCMap, trueHitToTargetMCMap, targetMCToTrueHitListMap);
-
-    // Obtain vector: all or primary mc particles
-    MCParticleVector targetMCVector;
-    if(m_recoParameters.m_foldToPrimaries){ 
-      LArMCParticleHelper::GetPrimaryMCParticleList(pMCParticleList, targetMCVector);
-    } else {
-      std::copy(pMCParticleList->begin(), pMCParticleList->end(), std::back_inserter(targetMCVector));
-    }
-
-    //REMOVED WHETHER PARTICLE MATCHES SOME CRITERIA (e.g whether downstream of neutrino) - not needed for created neutrino events
-
-    // Remove hits that do not meet minimum hit count and share criteria
-    this->SelectParticlesByHitCount(targetMCVector, targetMCToTrueHitListMap, mcToTargetMCMap, mcToRecoHitsMap);
-
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-
-  void ParticleEfficiencyAlgorithm::SelectParticlesByHitCount(const MCParticleVector &candidateTargets, const LArMCParticleHelper::MCContributionMap &mcToTrueHitListMap, const LArMCParticleHelper::MCRelationMap &mcToTargetMCMap, LArMCParticleHelper::MCContributionMap &selectedMCParticlesToHitsMap)
-{
-    // Apply restrictions on the number of good hits associated with the MCParticles
-    for (const MCParticle * const pMCTarget : candidateTargets)
-    {
-        LArMCParticleHelper::MCContributionMap::const_iterator trueHitsIter = mcToTrueHitListMap.find(pMCTarget);
-        if (mcToTrueHitListMap.end() == trueHitsIter)
-            continue;
-
-        const CaloHitList &caloHitList(trueHitsIter->second);
-
-        // Remove shared hits where target particle deposits below threshold energy fraction
-        CaloHitList goodCaloHitList;
-        this->SelectGoodCaloHits(&caloHitList, mcToTargetMCMap, goodCaloHitList);
-
-        if (goodCaloHitList.size() < m_recoParameters.m_minPrimaryGoodHits)
-            continue;
-
-        unsigned int nGoodViews(0);
-        if (LArMonitoringHelper::CountHitsByType(TPC_VIEW_U, goodCaloHitList) >= m_recoParameters.m_minHitsForGoodView)
-            ++nGoodViews;
-
-        if (LArMonitoringHelper::CountHitsByType(TPC_VIEW_V, goodCaloHitList) >= m_recoParameters.m_minHitsForGoodView)
-            ++nGoodViews;
-
-        if (LArMonitoringHelper::CountHitsByType(TPC_VIEW_W, goodCaloHitList) >= m_recoParameters.m_minHitsForGoodView)
-            ++nGoodViews;
-
-        if (nGoodViews < m_recoParameters.m_minPrimaryGoodViews)
-            continue;
-
-        if (!selectedMCParticlesToHitsMap.insert(LArMCParticleHelper::MCContributionMap::value_type(pMCTarget, caloHitList)).second)
-            throw StatusCodeException(STATUS_CODE_ALREADY_PRESENT);
-    }
-}
-
-void ParticleEfficiencyAlgorithm::SelectGoodCaloHits(const CaloHitList *const pSelectedCaloHitList, const LArMCParticleHelper::MCRelationMap &mcToTargetMCMap, CaloHitList &selectedGoodCaloHitList)
-{
-
-    for (const CaloHit *const pCaloHit : *pSelectedCaloHitList)
-    {
-        MCParticleVector mcParticleVector;
-        for (const auto &mapEntry : pCaloHit->GetMCParticleWeightMap()) mcParticleVector.push_back(mapEntry.first);
-        std::sort(mcParticleVector.begin(), mcParticleVector.end(), PointerLessThan<MCParticle>());
-
-	// fold back weights to target MC particle (primary or not)
-	// keep for foldToPrimaries == false since will neglect hits belonging to MC particles
-	// that have been removed at an earlier stage 
-        MCParticleWeightMap weightMap;
-
-        for (const MCParticle *const pMCParticle : mcParticleVector)
-        {
-            const float weight(pCaloHit->GetMCParticleWeightMap().at(pMCParticle));
-            LArMCParticleHelper::MCRelationMap::const_iterator mcIter = mcToTargetMCMap.find(pMCParticle);
-
-            if (mcToTargetMCMap.end() != mcIter)
-                weightMap[mcIter->second] += weight;
-        }
-
-        MCParticleVector mcTargetVector;
-        for (const auto &mapEntry : weightMap) mcTargetVector.push_back(mapEntry.first);
-        std::sort(mcTargetVector.begin(), mcTargetVector.end(), PointerLessThan<MCParticle>());
-
-        const MCParticle *pBestTargetParticle(nullptr);
-        float bestTargetWeight(0.f), targetWeightSum(0.f);
-
-        for (const MCParticle *const pTargetMCParticle : mcTargetVector)
-        {
-            const float targetWeight(weightMap.at(pTargetMCParticle));
-            targetWeightSum += targetWeight;
-
-            if (targetWeight > bestTargetWeight)
-            {
-                bestTargetWeight = targetWeight;
-                pBestTargetParticle = pTargetMCParticle;
-            }
-        }
-
-        if (!pBestTargetParticle || (targetWeightSum < std::numeric_limits<float>::epsilon()) || ((bestTargetWeight / targetWeightSum) < m_recoParameters.m_minHitSharingFraction))
-            continue;
-
-        selectedGoodCaloHitList.push_back(pCaloHit);
-    }
-}
-   
-//------------------------------------------------------------------------------------------------------------------------------------------
-
-
-  void ParticleEfficiencyAlgorithm::GetMCToSelfMap(const MCParticleList *const pMCParticleList, LArMCParticleHelper::MCRelationMap &mcToSelfMap)
-{
-  for(const MCParticle *const pMCParticle : *pMCParticleList)
-  {
-    mcToSelfMap[pMCParticle] = pMCParticle;
-  }    
-
-}
-
-
-//------------------------------------------------------------------------------------------------------------------------------------------
 
   void ParticleEfficiencyAlgorithm::AddMatchesEntryToTree(const MCParticleVector &orderedTargetMCParticleVector, const LArMCParticleHelper::MCContributionMap &mcToRecoHitsMap, const LArMCParticleHelper::MCParticleToPfoHitSharingMap &mcParticleToPfoHitSharingMap, const LArMCParticleHelper::MCParticleToPfoCompletenessPurityMap &mcParticleToPfoCompletenessMap, const LArMCParticleHelper::MCParticleToPfoCompletenessPurityMap &mcParticleToPfoPurityMap) {
 
     for(const MCParticle *const pMCParticle : orderedTargetMCParticleVector) {
 
       //Fill reconstructable MC particle information
+      CartesianVector xUnitVector(1,0,0);
+      CartesianVector yUnitVector(0,1,0);
       CartesianVector zUnitVector(0,0,1);
+      float angleFromX = pMCParticle->GetMomentum().GetOpeningAngle(xUnitVector);
+      float angleFromY = pMCParticle->GetMomentum().GetOpeningAngle(yUnitVector);
       float angleFromZ = pMCParticle->GetMomentum().GetOpeningAngle(zUnitVector);
+      float theta0YZ;
+      float theta0XZ;
+
+      GetLArSoftAngles(pMCParticle->GetMomentum(), theta0XZ, theta0YZ);
 
       PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "EventNumber", m_eventNumber));
       PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "MCParticleID", pMCParticle->GetParticleId()));
       PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Energy", pMCParticle->GetEnergy()));
       PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Momentum", pMCParticle->GetMomentum().GetMagnitude()));
+      PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Hierarchy", LArMCParticleHelper::GetHierarchyTier(pMCParticle)));
+      PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "AngleFromX", angleFromX));
+      PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "AngleFromY", angleFromY));
       PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "AngleFromZ", angleFromZ));
+      PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Theta0YZ", theta0YZ));
+      PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Theta0XZ", theta0XZ));
       PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "TotHits", static_cast<int>(mcToRecoHitsMap.at(pMCParticle).size())));
 
       std::vector<int> sharedHitsVector;
       std::vector<double> completenessVector;
       std::vector<double> purityVector;
+
+      // If no matches made
+      if(mcParticleToPfoHitSharingMap.at(pMCParticle).empty()) {
+	sharedHitsVector.push_back(0);
+	completenessVector.push_back(0);
+	purityVector.push_back(0);
+      }
 
       for(auto pfoSharedHitPair : mcParticleToPfoHitSharingMap.at(pMCParticle)) {
 
@@ -310,19 +217,32 @@ void ParticleEfficiencyAlgorithm::SelectGoodCaloHits(const CaloHitList *const pS
     for(const MCParticle *const pMCParticle : orderedTargetMCParticleVector) {
 
       //Fill reconstructable MC particle information
+      CartesianVector xUnitVector(1,0,0);
+      CartesianVector yUnitVector(0,1,0);
       CartesianVector zUnitVector(0,0,1);
+      float angleFromX = pMCParticle->GetMomentum().GetOpeningAngle(xUnitVector);
+      float angleFromY = pMCParticle->GetMomentum().GetOpeningAngle(yUnitVector);
       float angleFromZ = pMCParticle->GetMomentum().GetOpeningAngle(zUnitVector);
+      float theta0YZ;
+      float theta0XZ;
+
+      GetLArSoftAngles(pMCParticle->GetMomentum(), theta0XZ, theta0YZ);
 
       PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "EventNumber", m_eventNumber));
       PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "MCParticleID", pMCParticle->GetParticleId()));
       PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Energy", pMCParticle->GetEnergy()));
       PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Momentum", pMCParticle->GetMomentum().GetMagnitude()));
+      PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Hierarchy", LArMCParticleHelper::GetHierarchyTier(pMCParticle)));
+      PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "AngleFromX", angleFromX));
+      PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "AngleFromY", angleFromY));
       PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "AngleFromZ", angleFromZ));
+      PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Theta0YZ", theta0YZ));
+      PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Theta0XZ", theta0XZ));
       PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "TotHits", static_cast<int>(mcToRecoHitsMap.at(pMCParticle).size())));
 
-      std::vector<int> sharedHitsVector;
-      std::vector<double> completenessVector;
-      std::vector<double> purityVector;
+      std::vector<int> sharedHitsVector({0});
+      std::vector<double> completenessVector({0});
+      std::vector<double> purityVector({0});
 
       PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "SharedHitsVector", &sharedHitsVector));
       PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "CompletenessVector", &completenessVector));
@@ -334,6 +254,95 @@ void ParticleEfficiencyAlgorithm::SelectGoodCaloHits(const CaloHitList *const pS
 
 
 //------------------------------------------------------------------------------------------------------------------------------------------
+
+  void ParticleEfficiencyAlgorithm::VisualizeReconstructableMCParticles(const MCParticleVector &orderedTargetMCParticleVector, const LArMCParticleHelper::MCContributionMap &mcToRecoHitsMap) {
+
+    // Visualize the target MC particles
+    PandoraMonitoringApi::Create(this->GetPandora());
+    PandoraMonitoringApi::SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_DEFAULT, -1.f, 1.f, 1.f);
+    srand(time(NULL));
+    for(const MCParticle *const pMCParticle : orderedTargetMCParticleVector) {
+      CaloHitList uHits;
+      CaloHitList vHits;
+      CaloHitList wHits;
+      for(const CaloHit *const caloHit : mcToRecoHitsMap.at(pMCParticle)) { 
+	if(caloHit->GetHitType() == TPC_VIEW_U) {
+	  uHits.push_back(caloHit);
+	} else if(caloHit->GetHitType() == TPC_VIEW_V) {
+	  vHits.push_back(caloHit);
+	} else {
+	  wHits.push_back(caloHit);
+	}
+      }
+      Color colour = static_cast<Color>((rand() % (Color::LIGHTYELLOW - 1)) + 1);
+      std::string name = "PDG: " + std::to_string(pMCParticle->GetParticleId()) + " Hierarchy Tier: " + std::to_string(LArMCParticleHelper::GetHierarchyTier(pMCParticle));
+      PandoraMonitoringApi::VisualizeCaloHits(this->GetPandora(), &uHits, name + " (" + std::to_string(uHits.size()) + " U HITS)", colour);
+      PandoraMonitoringApi::VisualizeCaloHits(this->GetPandora(), &vHits, name + " (" + std::to_string(vHits.size()) + " V HITS)", colour);
+      PandoraMonitoringApi::VisualizeCaloHits(this->GetPandora(), &wHits, name + " (" + std::to_string(wHits.size()) + " W HITS)", colour);
+
+      PandoraMonitoringApi::Pause(this->GetPandora());
+    }
+
+    PandoraMonitoringApi::ViewEvent(this->GetPandora());
+
+  }
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+
+  void ParticleEfficiencyAlgorithm::VisualizeReconstructedPfos(const PfoVector &orderedPfoVector, const LArMCParticleHelper::PfoContributionMap &pfoToRecoHitsMap) {
+
+    typedef std::map<const ParticleFlowObject*, int> PfoToIdMap; 
+
+    PfoToIdMap pfoToIdMap;
+    for(unsigned int id(0); id < orderedPfoVector.size(); ++id) {
+      pfoToIdMap[orderedPfoVector[id]] = (id + 1);
+    }
+    
+    // Visualize Pfos
+    PandoraMonitoringApi::Create(this->GetPandora());
+    PandoraMonitoringApi::SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_DEFAULT, -1.f, 1.f, 1.f);
+    srand(time(NULL));
+
+    for(const ParticleFlowObject *const pPfo: orderedPfoVector) {
+      CaloHitList uHits;
+      CaloHitList vHits;
+      CaloHitList wHits;
+      for(const CaloHit *const caloHit : pfoToRecoHitsMap.at(pPfo)) { 
+	if(caloHit->GetHitType() == TPC_VIEW_U) {
+	  uHits.push_back(caloHit);
+	} else if(caloHit->GetHitType() == TPC_VIEW_V) {
+	  vHits.push_back(caloHit);
+	} else {
+	  wHits.push_back(caloHit);
+	}
+      }
+      Color colour = static_cast<Color>((rand() % (Color::LIGHTYELLOW - 1)) + 1);
+      std::string name = "Id: " + std::to_string(pfoToIdMap.at(pPfo)) + " Hierarchy Tier: " + std::to_string(LArPfoHelper::GetHierarchyTier(pPfo));
+      PandoraMonitoringApi::VisualizeCaloHits(this->GetPandora(), &uHits, name + " (" + std::to_string(uHits.size()) + " U HITS)", colour);
+      PandoraMonitoringApi::VisualizeCaloHits(this->GetPandora(), &vHits, name + " (" + std::to_string(vHits.size()) + " V HITS)", colour);
+      PandoraMonitoringApi::VisualizeCaloHits(this->GetPandora(), &wHits, name + " (" + std::to_string(wHits.size()) + " W HITS)", colour);
+
+      PandoraMonitoringApi::Pause(this->GetPandora());
+    }
+
+    PandoraMonitoringApi::ViewEvent(this->GetPandora());
+  }
+
+
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+  void ParticleEfficiencyAlgorithm::GetLArSoftAngles(const CartesianVector &vector, float &theta0XZ, float &theta0YZ) {
+
+    theta0YZ = asin(vector.GetY()/vector.GetMagnitude());
+    theta0XZ = atan2(vector.GetX(), vector.GetZ());
+
+  }
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+
   StatusCode ParticleEfficiencyAlgorithm::ReadSettings(const TiXmlHandle xmlHandle) {
 
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle, "CaloHitListName", m_caloHitListName));
@@ -341,19 +350,7 @@ void ParticleEfficiencyAlgorithm::SelectGoodCaloHits(const CaloHitList *const pS
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle, "PfoListName", m_pfoListName));
 
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
-        "MinPrimaryGoodHits", m_recoParameters.m_minPrimaryGoodHits));
-
-    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
-        "MinHitsForGoodView", m_recoParameters.m_minHitsForGoodView));
-
-    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
-        "MinPrimaryGoodViews", m_recoParameters.m_minPrimaryGoodViews));
-
-    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
-        "MinHitSharingFraction", m_recoParameters.m_minHitSharingFraction));
-
-    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
-        "FoldToPrimaries", m_recoParameters.m_foldToPrimaries));
+        "FoldToPrimaries", m_foldToPrimaries));
 
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
         "WriteToTree", m_writeToTree));
@@ -363,6 +360,9 @@ void ParticleEfficiencyAlgorithm::SelectGoodCaloHits(const CaloHitList *const pS
 
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle,
         "FileName", m_fileName));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
+        "PrintToScreen", m_printToScreen));
 
   return STATUS_CODE_SUCCESS;
 

@@ -48,7 +48,6 @@
 #include "larpandoracontent/LArMonitoring/NeutrinoEventValidationAlgorithm.h"
 #include "larpandoracontent/LArMonitoring/MCParticleMonitoringAlgorithm.h"
 #include "larpandoracontent/LArMonitoring/VisualMonitoringAlgorithm.h"
-#include "larpandoracontent/LArMonitoring/PerformanceAssessmentAlgorithm.h"
 #include "larpandoracontent/LArMonitoring/ParticleEfficiencyAlgorithm.h"
 #include "larpandoracontent/LArMonitoring/PullDataAlgorithm.h"
 #include "larpandoracontent/LArMonitoring/PfoValidationAlgorithm.h"
@@ -187,8 +186,7 @@
     d("LArTestBeamEventValidation",             TestBeamEventValidationAlgorithm)                                               \
     d("LArTestBeamHierarchyEventValidation",    TestBeamHierarchyEventValidationAlgorithm)                                      \
     d("LArPfoValidation",                       PfoValidationAlgorithm)                                                         \
-    d("LArPullData",                       PullDataAlgorithm)                                                         \
-    d("LArPerformanceAssessment",               PerformanceAssessmentAlgorithm)                                                 \
+    d("LArPullData",                       PullDataAlgorithm)                                                                \
     d("LArParticleEfficiency",                  ParticleEfficiencyAlgorithm)                                                    \
     d("LArMCParticleMonitoring",                MCParticleMonitoringAlgorithm)                                                  \
     d("LArVisualMonitoring",                    VisualMonitoringAlgorithm)                                                      \

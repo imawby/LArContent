@@ -32,52 +32,32 @@ namespace lar_content {
      */
     ~ParticleEfficiencyAlgorithm();
 
-
-    /**
-     *  @brief   RecoParameters class
-     */
-    class RecoParameters
-    {
-    public:
-        /**
-         *  @brief  Constructor
-         */
-        RecoParameters();
-
-        unsigned int  m_minPrimaryGoodHits;       ///< the minimum number of primary good Hits
-        unsigned int  m_minHitsForGoodView;       ///< the minimum number of Hits for a good view
-        unsigned int  m_minPrimaryGoodViews;      ///< the minimum number of primary good views
-	bool          m_foldToPrimaries;          ///< whether to fold all hits to primary pfos and MC particles
-        float         m_minHitSharingFraction;    ///< the minimum Hit sharing fraction
-    };
-
   private:
 
     pandora::StatusCode Run();
 
-    void FillMCToRecoHitsMap(const pandora::MCParticleList *pMCParticleList, const pandora::CaloHitList *pCaloHitList, LArMCParticleHelper::MCContributionMap &mcToRecoHitsMap);
-
-    void SelectParticlesByHitCount(const pandora::MCParticleVector &candidateTargets, const LArMCParticleHelper::MCContributionMap &mcToTrueHitListMap, const LArMCParticleHelper::MCRelationMap &mcToTargetMCMap, LArMCParticleHelper::MCContributionMap &selectedMCParticlesToHitsMap);
-
-    void SelectGoodCaloHits(const pandora::CaloHitList *const pSelectedCaloHitList, const LArMCParticleHelper::MCRelationMap &mcToTargetMCMap, pandora::CaloHitList &selectedGoodCaloHitList);
-
-    void GetMCToSelfMap(const pandora::MCParticleList *const pMCParticleList, LArMCParticleHelper::MCRelationMap &mcToSelfMap);
-
     void AddMatchesEntryToTree(const pandora::MCParticleVector &orderedTargetMCParticleVector, const LArMCParticleHelper::MCContributionMap &mcToRecoHitsMap, const LArMCParticleHelper::MCParticleToPfoHitSharingMap &mcParticleToPfoHitSharingMap, const LArMCParticleHelper::MCParticleToPfoCompletenessPurityMap &mcParticleToPfoCompletenessMap, const LArMCParticleHelper::MCParticleToPfoCompletenessPurityMap &mcParticleToPfoPurityMap);
 
     void AddNoPfoEntryToTree(const pandora::MCParticleVector &orderedTargetMCParticleVector, const LArMCParticleHelper::MCContributionMap &mcToRecoHitsMap);
+ 
+    void VisualizeReconstructableMCParticles(const pandora::MCParticleVector &orderedTargetMCParticleVector, const LArMCParticleHelper::MCContributionMap &mcToRecoHitsMap);
+
+    void VisualizeReconstructedPfos(const pandora::PfoVector &orderedPfoVector, const LArMCParticleHelper::PfoContributionMap &pfoToRecoHitsMap);
+
+    void GetLArSoftAngles(const pandora::CartesianVector &vector, float &theta0XZ, float &theta0YZ);
 
     pandora::StatusCode ReadSettings(const pandora::TiXmlHandle xmlHandle);
 
     std::string  m_caloHitListName; // Name of input calo hit list
     std::string  m_pfoListName; // Name of input pfo list
 
-
-    RecoParameters m_recoParameters;
+    LArMCParticleHelper::PrimaryParameters m_parameters;
+    bool m_foldToPrimaries; ///< whether to fold all hits to primary pfos and MC particles
 
     bool m_writeToTree;
     std::string m_treeName;
     std::string m_fileName;
+    bool m_printToScreen;
 
     int m_eventNumber;
 
