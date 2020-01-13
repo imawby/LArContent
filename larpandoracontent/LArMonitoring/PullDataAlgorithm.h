@@ -11,6 +11,7 @@
 
 #include "Pandora/Algorithm.h"
 
+#include "larpandoracontent/LArHelpers/LArMCParticleHelper.h"
 
 namespace lar_content {
 
@@ -25,7 +26,8 @@ namespace lar_content {
 
     pandora::StatusCode Run();
     void GetLArSoftAngles(const pandora::CartesianVector &vector, float &theta0XZ, float &theta0YZ);
-    void WriteToMuonEventTree(const pandora::MCParticleList *pMCParticleList);
+    bool IsParticleReconstructable(const pandora::MCParticle *const pMCParticle, LArMCParticleHelper::MCContributionMap mcToRecoHitsMap);
+    void WriteToParticleEventTree(const pandora::MCParticleList *pMCParticleList, LArMCParticleHelper::MCContributionMap mcToRecoHitsMap);
     void WriteToMuonProtonEventTree(const pandora::MCParticleList *pMCParticleList);
     void WriteMCParticleToTree(const pandora::MCParticle *const pMCParticle);
     void WriteToMuonProtonEventFile(const pandora::MCParticleList *pMCParticleList);
@@ -40,6 +42,10 @@ namespace lar_content {
 
     bool m_writeToFile;
     std::string m_fileName;
+
+    int m_PDG;
+
+    LArMCParticleHelper::PrimaryParameters m_parameters;
 
   };
 
