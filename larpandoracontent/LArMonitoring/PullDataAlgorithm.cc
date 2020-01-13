@@ -16,7 +16,8 @@ namespace lar_content {
     m_treeName(),
     m_treeFileName(),
     m_writeToFile(false),
-    m_fileName()
+    m_fileName(),
+    m_PDG()
   {  
   }
 
@@ -39,34 +40,21 @@ namespace lar_content {
     const MCParticleList *pMCParticleList = nullptr;
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetCurrentList(*this, pMCParticleList));
 
+    const CaloHitList *pCaloHitList = nullptr;
+    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetCurrentList(*this, pCaloHitList));
+
+    // Get MC Particle to reconstructable hits map
+    LArMCParticleHelper::MCContributionMap mcToRecoHitsMap;
+    LArMCParticleHelper::SelectUnfoldedReconstructableMCParticles(pMCParticleList, pCaloHitList, m_parameters, mcToRecoHitsMap);
     
     if(m_writeToTree) {
-      //WriteToMuonEventTree(pMCParticleList);
-      WriteToMuonProtonEventTree(pMCParticleList);
+        WriteToParticleEventTree(pMCParticleList, mcToRecoHitsMap);
+      //WriteToMuonProtonEventTree(pMCParticleList);
     }  
 
     if(m_writeToFile) {
-      WriteToMuonProtonEventFile(pMCParticleList);
+      //WriteToMuonProtonEventFile(pMCParticleList);
     }
-
-    for(const MCParticle *const pMCParticle : *pMCParticleList) {
-
-      if(!((pMCParticle->GetParticleId() == 13) || (abs(pMCParticle->GetParticleId()) == 2212)))
-	continue;
-
-      std::cout << "ParticleID: " << pMCParticle->GetParticleId() << std::endl;
-      std::cout << "PX: " << pMCParticle->GetMomentum().GetX() << std::endl;
-      std::cout << "PY: " << pMCParticle->GetMomentum().GetY() << std::endl;
-      std::cout << "PZ: " << pMCParticle->GetMomentum().GetZ() << std::endl;
-      std::cout << "Energy: " << pMCParticle->GetEnergy() << std::endl;
-      std::cout << "Mass: " << std::endl;
-      std::cout << "X: " << pMCParticle->GetVertex().GetX() << std::endl;
-      std::cout << "Y: " << pMCParticle->GetVertex().GetY() << std::endl;
-      std::cout << "Z: " << pMCParticle->GetVertex().GetZ() << std::endl;
-
-    }
-
-
 
    return STATUS_CODE_SUCCESS;
 
@@ -83,7 +71,19 @@ namespace lar_content {
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-  void PullDataAlgorithm::WriteToMuonEventTree(const MCParticleList *pMCParticleList) {
+  bool PullDataAlgorithm::IsParticleReconstructable(const MCParticle *const pMCParticle, LArMCParticleHelper::MCContributionMap mcToRecoHitsMap) {
+
+    LArMCParticleHelper::MCContributionMap::iterator iter = mcToRecoHitsMap.find(pMCParticle);
+    if(iter == mcToRecoHitsMap.end()) {
+      return false; 
+    }
+
+      return true;
+  }
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+  void PullDataAlgorithm::WriteToParticleEventTree(const MCParticleList *pMCParticleList, LArMCParticleHelper::MCContributionMap mcToRecoHitsMap) {
 
     // Nuance Code for event
     const MCParticle *pMCNeutrino(nullptr);
@@ -105,8 +105,11 @@ namespace lar_content {
     for(const MCParticle *const pMCParticle : *pMCParticleList) {
 
       // For Muon distribution determination
-      if(pMCParticle->GetParticleId() != 13)
+      if(abs(pMCParticle->GetParticleId()) != m_PDG)
         continue;
+
+      if(!IsParticleReconstructable(pMCParticle, mcToRecoHitsMap)) 
+	continue;
 
       PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "InteractionType", static_cast<int>(interactionType)));
       PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "NuanceCode", static_cast<int>(nuanceCode)));
@@ -208,10 +211,6 @@ namespace lar_content {
 
     GetLArSoftAngles(pMCParticle->GetMomentum(), theta0XZ, theta0YZ);
 
-      std::cout << "MC Particle: " << pMCParticle->GetParticleId() << std::endl;
-      std::cout << "Theta0YZ: " << theta0YZ*180/M_PI << std::endl;
-
-
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "EventNumber", m_eventNumber));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "ParticleID", pMCParticle->GetParticleId()));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Momentum", pMCParticle->GetMomentum().GetMagnitude()));
@@ -220,11 +219,13 @@ namespace lar_content {
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "X", pMCParticle->GetVertex().GetX()));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Y", pMCParticle->GetVertex().GetY()));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Z", pMCParticle->GetVertex().GetZ()));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "PX", pMCParticle->GetMomentum().GetX()));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "PY", pMCParticle->GetMomentum().GetY()));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "PZ", pMCParticle->GetMomentum().GetZ()));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Theta0XZ", theta0XZ));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Theta0YZ", theta0YZ));
 
     return;
-
   } 
 
 
@@ -283,7 +284,7 @@ namespace lar_content {
    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle, "TreeFileName", m_treeFileName));
    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "WriteToFile", m_writeToFile));
    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle, "FileName", m_fileName));
-
+   PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle, "PDG", m_PDG));
    return STATUS_CODE_SUCCESS;
 
  }
@@ -292,6 +293,7 @@ namespace lar_content {
 
 
 /**
+
     for(const MCParticle *const pMCParticle : *pMCParticleList) {
 
       if(!((pMCParticle->GetParticleId() == 13) || (abs(pMCParticle->GetParticleId()) == 2212)))

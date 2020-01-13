@@ -547,7 +547,8 @@ void LArMCParticleHelper::SelectReconstructableTestBeamHierarchyMCParticles(cons
 void LArMCParticleHelper::GetUnfoldedPfoToReconstructable2DHitsMap(const PfoList &pfoList, const MCContributionMap &selectedMCParticleToHitsMap,
     PfoContributionMap &pfoToReconstructable2DHitsMap)
 {
-    for(const ParticleFlowObject *const pPfo : pfoList) {
+    for(const ParticleFlowObject *const pPfo : pfoList) 
+    {
         CaloHitList pfoHitList;
         LArMCParticleHelper::CollectReconstructable2DHits(PfoList{pPfo}, {selectedMCParticleToHitsMap}, pfoHitList);
 
