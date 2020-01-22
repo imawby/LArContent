@@ -43,9 +43,22 @@ namespace lar_content {
     const CaloHitList *pCaloHitList = nullptr;
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetCurrentList(*this, pCaloHitList));
 
+
+
+    // Interaction type for the event 
+    MCParticleVector primaryParticlesVector;
+    LArMCParticleHelper::GetPrimaryMCParticleList(pMCParticleList, primaryParticlesVector);
+    MCParticleList primaryParticlesList;
+    std::copy(primaryParticlesVector.begin(), primaryParticlesVector.end(), std::back_inserter(primaryParticlesList));
+    LArInteractionTypeHelper::InteractionType interactionType(LArInteractionTypeHelper::GetInteractionType(primaryParticlesList));
+
+    std::cout << "Interaction: " << LArInteractionTypeHelper::ToString(interactionType) << std::endl;
+
+    /*
     // Get MC Particle to reconstructable hits map
     LArMCParticleHelper::MCContributionMap mcToRecoHitsMap;
     LArMCParticleHelper::SelectUnfoldedReconstructableMCParticles(pMCParticleList, pCaloHitList, m_parameters, mcToRecoHitsMap);
+    
     
     if(m_writeToTree) {
         WriteToParticleEventTree(pMCParticleList, mcToRecoHitsMap);
@@ -55,7 +68,7 @@ namespace lar_content {
     if(m_writeToFile) {
       //WriteToMuonProtonEventFile(pMCParticleList);
     }
-
+    */
    return STATUS_CODE_SUCCESS;
 
   }
@@ -101,6 +114,7 @@ namespace lar_content {
     MCParticleList primaryParticlesList;
     std::copy(primaryParticlesVector.begin(), primaryParticlesVector.end(), std::back_inserter(primaryParticlesList));
     LArInteractionTypeHelper::InteractionType interactionType(LArInteractionTypeHelper::GetInteractionType(primaryParticlesList));
+
 
     for(const MCParticle *const pMCParticle : *pMCParticleList) {
 

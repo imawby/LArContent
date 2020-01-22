@@ -23,11 +23,16 @@ namespace lar_content {
   ParticleEfficiencyAlgorithm::ParticleEfficiencyAlgorithm() :
     m_caloHitListName(), 
     m_pfoListName(),
+    m_particlesInEvent(),
     m_foldToPrimaries(false), 
+    m_minCompleteness(0.7),
+    m_minPurity(0.7),
     m_writeToTree(false), 
     m_treeName(),
     m_fileName(), 
     m_printToScreen(false),
+    m_visualiseMCParticles(false),
+    m_visualisePfos(false),
     m_eventNumber(0)
   {
   }
@@ -39,6 +44,7 @@ namespace lar_content {
     if(m_writeToTree) {
       try {
         PANDORA_MONITORING_API(SaveTree(this->GetPandora(), m_treeName, m_fileName, "UPDATE"));
+	std::cout << "TREE SAVED" << std::endl;
       }
       catch (const StatusCodeException &) {
         std::cout << "UNABLE TO WRITE TREE" << std::endl; 
@@ -61,6 +67,10 @@ namespace lar_content {
     const CaloHitList *pCaloHitList = nullptr;
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetList(*this, m_caloHitListName, pCaloHitList));
 
+
+
+
+
     // MC PARTICLES
 
     // Get MC Particle to reconstructable hits map
@@ -71,9 +81,9 @@ namespace lar_content {
     MCParticleVector orderedTargetMCParticleVector;
     LArMonitoringHelper::GetOrderedMCParticleVector({mcToRecoHitsMap}, orderedTargetMCParticleVector);
 
-    // PRINT TO SCREEN
+    // VISUALISE ON SCREEN
     // Visualize the reconstructable MC particles and their hits
-    if(m_printToScreen) {
+    if(m_visualiseMCParticles) {
       std::cout << "MC PARTICLES AND THEIR RECONSTRUCTABLE HITS (ON DISPLAY) " << std::endl;
       VisualizeReconstructableMCParticles(orderedTargetMCParticleVector, mcToRecoHitsMap);
     }
@@ -88,7 +98,12 @@ namespace lar_content {
     // Handle case where no pfos are created
     if(pfoListStatus == STATUS_CODE_NOT_INITIALIZED){
       if(m_writeToTree) {
-        AddNoPfoEntryToTree(orderedTargetMCParticleVector, mcToRecoHitsMap);
+	if(m_particlesInEvent == 1) {
+	  FillTreeWithUnmatchedSingleParticleEvent(orderedTargetMCParticleVector, mcToRecoHitsMap);
+	}
+	if(m_particlesInEvent == 2) {
+	  FillTreeWithUnmatchedTwoParticleEvent(orderedTargetMCParticleVector, mcToRecoHitsMap);
+	}
       }
       return STATUS_CODE_NOT_INITIALIZED;
     } 
@@ -116,8 +131,9 @@ namespace lar_content {
     PfoVector orderedPfoVector;
     LArMonitoringHelper::GetOrderedPfoVector(pfoToRecoHitsMap, orderedPfoVector);
 
-    // PRINT TO SCREEN
-    if(m_printToScreen) {
+    // VISUALISE ON SCREEN
+    // Visualize the reconstructed pfos and their hits
+    if(m_visualisePfos) {
       std::cout << "RECONSTRUCTED PFOS AND THEIR RECONSTRUCTABLE HITS (ON DISPLAY) " << std::endl;
       VisualizeReconstructedPfos(orderedPfoVector, pfoToRecoHitsMap);
     }
@@ -137,10 +153,20 @@ namespace lar_content {
 
     // WRITE TO TREE
     if(m_writeToTree) {
-      //FillTreeWithEvent(orderedTargetMCParticleVector, mcToRecoHitsMap, mcParticleToPfoHitSharingMap, mcParticleToPfoCompletenessMap, mcParticleToPfoPurityMap);
-      FillTreeWithTwoParticleEvent(orderedTargetMCParticleVector, mcToRecoHitsMap, mcParticleToPfoHitSharingMap, mcParticleToPfoCompletenessMap, mcParticleToPfoPurityMap);
+      if(m_particlesInEvent == 1) {
+	FillTreeWithSingleParticleEvent(orderedTargetMCParticleVector, mcToRecoHitsMap, mcParticleToPfoHitSharingMap, mcParticleToPfoCompletenessMap, mcParticleToPfoPurityMap);
+      }
+      if(m_particlesInEvent == 2) {
+	FillTreeWithTwoParticleEvent(orderedTargetMCParticleVector, mcToRecoHitsMap, mcParticleToPfoHitSharingMap, mcParticleToPfoCompletenessMap, mcParticleToPfoPurityMap);
+      }
     }
 
+    // PRINT MATCHES INFO TO SCREEN
+
+    if(m_printToScreen) {
+      PrintMCParticleMatchesInfoToScreen(orderedTargetMCParticleVector, orderedPfoVector, mcToRecoHitsMap, mcParticleToPfoHitSharingMap, mcParticleToPfoCompletenessMap, mcParticleToPfoPurityMap);
+    }
+    
  
     return STATUS_CODE_SUCCESS;
 
@@ -149,9 +175,24 @@ namespace lar_content {
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-  void ParticleEfficiencyAlgorithm::FillTreeWithEvent(const MCParticleVector &orderedTargetMCParticleVector, const LArMCParticleHelper::MCContributionMap &mcToRecoHitsMap, const LArMCParticleHelper::MCParticleToPfoHitSharingMap &mcParticleToPfoHitSharingMap, const LArMCParticleHelper::MCParticleToPfoCompletenessPurityMap &mcParticleToPfoCompletenessMap, const LArMCParticleHelper::MCParticleToPfoCompletenessPurityMap &mcParticleToPfoPurityMap) {
+  void ParticleEfficiencyAlgorithm::FillTreeWithSingleParticleEvent(const MCParticleVector &orderedTargetMCParticleVector, const LArMCParticleHelper::MCContributionMap &mcToRecoHitsMap, const LArMCParticleHelper::MCParticleToPfoHitSharingMap &mcParticleToPfoHitSharingMap, const LArMCParticleHelper::MCParticleToPfoCompletenessPurityMap &mcParticleToPfoCompletenessMap, const LArMCParticleHelper::MCParticleToPfoCompletenessPurityMap &mcParticleToPfoPurityMap) {
+
+    MCParticleVector targetPrimaries;
 
     for(const MCParticle *const pMCParticle : orderedTargetMCParticleVector) {
+      if(LArMCParticleHelper::IsPrimary(pMCParticle))
+	targetPrimaries.push_back(pMCParticle);
+    }
+
+    if(targetPrimaries.size() != 1) {
+      if(targetPrimaries.size() > 1) {
+        std::cout << "WARNING: EVENT HAS MORE THAT 1 PRIMARY PARTICLE" << std::endl;
+      }
+      return;
+    }
+
+
+    for(const MCParticle *const pMCParticle : targetPrimaries) {
       AddMatchesEntryToTree(pMCParticle, mcToRecoHitsMap, mcParticleToPfoHitSharingMap, mcParticleToPfoCompletenessMap, mcParticleToPfoPurityMap);
     }
 
@@ -169,16 +210,20 @@ namespace lar_content {
 	targetPrimaries.push_back(pMCParticle);
     }
  
-    if(targetPrimaries.size() != 2)
+    if(targetPrimaries.size() != 2) {
+      if(targetPrimaries.size() > 2) {
+	std::cout << "WARNING: EVENT HAS MORE THAT 2 PRIMARY PARTICLES" << std::endl;
+      }
       return;
+    }
 
     float openingAngle = targetPrimaries[0]->GetMomentum().GetOpeningAngle(targetPrimaries[1]->GetMomentum());
-
+    
     for(const MCParticle *const pMCParticle : targetPrimaries) {
       PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "OpeningAngle", openingAngle));
       AddMatchesEntryToTree(pMCParticle, mcToRecoHitsMap, mcParticleToPfoHitSharingMap, mcParticleToPfoCompletenessMap, mcParticleToPfoPurityMap);
     }
-
+    
   }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -213,6 +258,16 @@ namespace lar_content {
       }
     }
 
+    int isReconstructed(0);
+    for(unsigned int i(0); i < completenessVector.size(); ++i) {
+      if((completenessVector[i] > m_minCompleteness) && (purityVector[i] > m_minPurity)) {
+	isReconstructed = 1;
+	break;
+      }
+    }
+
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "IsReconstructed", isReconstructed));
+
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "SharedHitsVector", &sharedHitsVector));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "CompletenessVector", &completenessVector));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "PurityVector", &purityVector));
@@ -223,21 +278,73 @@ namespace lar_content {
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-  void ParticleEfficiencyAlgorithm::AddNoPfoEntryToTree(const MCParticleVector &orderedTargetMCParticleVector, const LArMCParticleHelper::MCContributionMap &mcToRecoHitsMap) {
+  void ParticleEfficiencyAlgorithm::FillTreeWithUnmatchedSingleParticleEvent(const MCParticleVector &orderedTargetMCParticleVector, const LArMCParticleHelper::MCContributionMap &mcToRecoHitsMap) {
+
+    MCParticleVector targetPrimaries;
+
     for(const MCParticle *const pMCParticle : orderedTargetMCParticleVector) {
-
-      AddMCParticleDataToTree(pMCParticle, mcToRecoHitsMap);
-
-      std::vector<int> sharedHitsVector({0});
-      std::vector<double> completenessVector({0});
-      std::vector<double> purityVector({0});
-
-      PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "SharedHitsVector", &sharedHitsVector));
-      PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "CompletenessVector", &completenessVector));
-      PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "PurityVector", &purityVector));
-
-      PANDORA_MONITORING_API(FillTree(this->GetPandora(), m_treeName));
+      if(LArMCParticleHelper::IsPrimary(pMCParticle))
+	targetPrimaries.push_back(pMCParticle);
     }
+
+    if(targetPrimaries.size() != 1) {
+      if(targetPrimaries.size() > 1) {
+        std::cout << "WARNING: EVENT HAS MORE THAT 1 PRIMARY PARTICLE" << std::endl;
+      }
+      return;
+    }
+
+    for(const MCParticle *const pMCParticle : targetPrimaries) {
+        AddNoPfoEntryToTree(pMCParticle, mcToRecoHitsMap);
+    }
+
+  }
+
+
+//------------------------------------------------------------------------------------------------------------------------------------------ 
+
+  void ParticleEfficiencyAlgorithm::FillTreeWithUnmatchedTwoParticleEvent(const MCParticleVector &orderedTargetMCParticleVector, const LArMCParticleHelper::MCContributionMap &mcToRecoHitsMap) {
+
+    MCParticleVector targetPrimaries;
+
+    for(const MCParticle *const pMCParticle : orderedTargetMCParticleVector) {
+      if(LArMCParticleHelper::IsPrimary(pMCParticle))
+	targetPrimaries.push_back(pMCParticle);
+    }
+
+    if(targetPrimaries.size() != 2) {
+      if(targetPrimaries.size() > 2) {
+        std::cout << "WARNING: EVENT HAS MORE THAT 2 PRIMARY PARTICLES" << std::endl;
+      }
+      return;
+    }
+
+    float openingAngle = targetPrimaries[0]->GetMomentum().GetOpeningAngle(targetPrimaries[1]->GetMomentum());
+
+    for(const MCParticle *const pMCParticle : targetPrimaries) {
+      PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "OpeningAngle", openingAngle));
+      AddNoPfoEntryToTree(pMCParticle, mcToRecoHitsMap);
+    }
+
+  }
+
+
+//------------------------------------------------------------------------------------------------------------------------------------------ 
+
+  void ParticleEfficiencyAlgorithm::AddNoPfoEntryToTree(const MCParticle *const pMCParticle, const LArMCParticleHelper::MCContributionMap &mcToRecoHitsMap) {
+
+    AddMCParticleDataToTree(pMCParticle, mcToRecoHitsMap);
+
+    std::vector<int> sharedHitsVector({0});
+    std::vector<double> completenessVector({0});
+    std::vector<double> purityVector({0});
+
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "SharedHitsVector", &sharedHitsVector));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "CompletenessVector", &completenessVector));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "PurityVector", &purityVector));
+
+    PANDORA_MONITORING_API(FillTree(this->GetPandora(), m_treeName));
+    
   }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -253,6 +360,9 @@ namespace lar_content {
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "MCParticleID", pMCParticle->GetParticleId()));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Energy", pMCParticle->GetEnergy()));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Momentum", pMCParticle->GetMomentum().GetMagnitude()));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "X", pMCParticle->GetVertex().GetX()));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Y", pMCParticle->GetVertex().GetY()));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Z", pMCParticle->GetVertex().GetZ()));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Hierarchy", LArMCParticleHelper::GetHierarchyTier(pMCParticle)));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Theta0YZ", theta0YZ));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Theta0XZ", theta0XZ));
@@ -342,6 +452,89 @@ namespace lar_content {
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
+
+  void ParticleEfficiencyAlgorithm::PrintMCParticleMatchesInfoToScreen(const MCParticleVector &orderedTargetMCParticleVector, const PfoVector &orderedPfoVector, const LArMCParticleHelper::MCContributionMap &mcToRecoHitsMap, const LArMCParticleHelper::MCParticleToPfoHitSharingMap &mcParticleToPfoHitSharingMap, const LArMCParticleHelper::MCParticleToPfoCompletenessPurityMap &mcParticleToPfoCompletenessMap, const LArMCParticleHelper::MCParticleToPfoCompletenessPurityMap &mcParticleToPfoPurityMap) {
+  
+    // Label pfos
+    typedef std::map<const ParticleFlowObject*, int> PfoToIdMap;
+
+    PfoToIdMap pfoToIdMap;
+    for(unsigned int id(0); id < orderedPfoVector.size(); ++id) {
+      pfoToIdMap[orderedPfoVector[id]] = (id + 1);
+    }
+
+    unsigned int reconstructedMCParticles(0);
+
+    for(const MCParticle *const pMCParticle : orderedTargetMCParticleVector) {
+
+      // Get completeness and purity for all particles matched to a MC particle
+      LArMCParticleHelper::MCParticleToPfoCompletenessPurityMap::const_iterator completenessIter = mcParticleToPfoCompletenessMap.find(pMCParticle);
+      LArMCParticleHelper::MCParticleToPfoCompletenessPurityMap::const_iterator purityIter = mcParticleToPfoPurityMap.find(pMCParticle);
+
+      bool isReconstructed(false);
+
+      int uHits(0);
+      int vHits(0);
+      int wHits(0);
+      for(const CaloHit *const caloHit : mcToRecoHitsMap.at(pMCParticle)) { 
+	if(caloHit->GetHitType() == TPC_VIEW_U) {
+	  ++uHits;
+	} else if(caloHit->GetHitType() == TPC_VIEW_V) {
+	  ++vHits;
+	} else {
+	  ++wHits;
+	}
+      }
+
+      std::string mcString = "MC Particle: (PDG: " + std::to_string(pMCParticle->GetParticleId()) + " Hierarchy Tier: " + std::to_string(LArMCParticleHelper::GetHierarchyTier(pMCParticle)) + " uHits: " + std::to_string(uHits) + " vHits: " + std::to_string(vHits) + " wHits: " + std::to_string(wHits) + ")";
+      std::cout << mcString << std::endl;
+
+      std::cout << completenessIter->second.size() << " match(es) made: ";
+
+      if(!completenessIter->second.size()) {
+	std::cout << std::endl;
+	std::cout << "NOT RECONSTRUCTED" << std::endl;
+	continue;
+      }
+      
+      std::cout << "(Pfo Id, Shared Hits, Completeness, Purity)" << std::endl;
+
+      for(LArMCParticleHelper::PfoToSharedHitsVector::const_iterator iter(mcParticleToPfoHitSharingMap.at(pMCParticle).begin()); iter != mcParticleToPfoHitSharingMap.at(pMCParticle).end(); ++iter) {
+
+	std::cout << "(" << pfoToIdMap.at(iter->first) << ", " << iter->second.size();
+
+	// This step finds the purity and completeness for the same pfo, vectors are looped over incase lists are not in the same order
+        LArMCParticleHelper::PfoCompletenessPurityPair matchedPfoCompletenessPair;
+        LArMCParticleHelper::PfoCompletenessPurityPair matchedPfoPurityPair;
+        for(LArMCParticleHelper::PfoToCompletenessPurityVector::const_iterator pfoCompletenessPairIter(completenessIter->second.begin()); pfoCompletenessPairIter != completenessIter->second.end(); ++pfoCompletenessPairIter) {
+	  if(pfoToIdMap.at(pfoCompletenessPairIter->first) == pfoToIdMap.at(iter->first))   
+	    matchedPfoCompletenessPair = *pfoCompletenessPairIter;
+	}
+        for(LArMCParticleHelper::PfoToCompletenessPurityVector::const_iterator pfoPurityPairIter(purityIter->second.begin()); pfoPurityPairIter != purityIter->second.end(); ++pfoPurityPairIter) {
+	  if(pfoToIdMap.at(pfoPurityPairIter->first) == pfoToIdMap.at(iter->first)) 
+	    matchedPfoPurityPair = *pfoPurityPairIter;
+	}
+	std::cout << ", " << matchedPfoCompletenessPair.second;
+	std::cout << ", " << matchedPfoPurityPair.second << ")" << std::endl;
+
+	if((matchedPfoCompletenessPair.second > 0.7) && (matchedPfoPurityPair.second > 0.7)) {
+	  isReconstructed = true;
+	  reconstructedMCParticles++;
+	}
+      
+      }
+
+      isReconstructed ? std::cout << "RECONSTRUCTED" << std::endl : std::cout << "NOT RECONSTRUCTED" << std::endl;
+	
+    }  
+
+      std::cout << "Reconstruction Efficiency: " << static_cast<double>(reconstructedMCParticles*100)/static_cast<double>(orderedTargetMCParticleVector.size()) << "%" << std::endl;
+
+  }
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+
   void ParticleEfficiencyAlgorithm::GetLArSoftAngles(const CartesianVector &vector, float &theta0XZ, float &theta0YZ) {
 
     theta0YZ = asin(vector.GetY()/vector.GetMagnitude());
@@ -351,7 +544,24 @@ namespace lar_content {
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
+  void ParticleEfficiencyAlgorithm::GetDeltaLArSoftAngles(const MCParticle *const particle1, const MCParticle *const particle2, float &deltaTheta0XZ, float &deltaTheta0YZ) {
 
+    float particle1Theta0XZ;
+    float particle1Theta0YZ;
+
+    float particle2Theta0XZ;
+    float particle2Theta0YZ;
+
+    GetLArSoftAngles(particle1->GetMomentum(), particle1Theta0XZ, particle1Theta0YZ);
+    GetLArSoftAngles(particle2->GetMomentum(), particle2Theta0XZ, particle2Theta0YZ);
+
+    deltaTheta0XZ = fabs(particle1Theta0XZ - particle2Theta0XZ);
+    deltaTheta0YZ = fabs(particle1Theta0YZ - particle2Theta0YZ);
+
+  }
+
+
+//------------------------------------------------------------------------------------------------------------------------------------------
 //------------------------------------------------------------------------------------------------------------------------------------------
 
   StatusCode ParticleEfficiencyAlgorithm::ReadSettings(const TiXmlHandle xmlHandle) {
@@ -360,8 +570,16 @@ namespace lar_content {
 
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle, "PfoListName", m_pfoListName));
 
+    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle, "ParticlesInEvent", m_particlesInEvent));
+
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
         "FoldToPrimaries", m_foldToPrimaries));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
+        "MinCompleteness", m_minCompleteness));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
+        "MinPurity", m_minPurity));
 
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
         "WriteToTree", m_writeToTree));
@@ -374,6 +592,12 @@ namespace lar_content {
 
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
         "PrintToScreen", m_printToScreen));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
+        "VisualiseMCParticles", m_visualiseMCParticles));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
+        "VisualisePfos", m_visualisePfos));
 
   return STATUS_CODE_SUCCESS;
 

@@ -33,7 +33,8 @@ VisualMonitoringAlgorithm::VisualMonitoringAlgorithm() :
     m_energyScaleThresholdE(1.f),
     m_scalingFactor(1.f),
     m_showPfoVertices(true),
-    m_showPfoHierarchy(true)
+    m_showPfoHierarchy(true),
+    m_algorithmPositionString()
 {
 }
 
@@ -41,6 +42,12 @@ VisualMonitoringAlgorithm::VisualMonitoringAlgorithm() :
 
 StatusCode VisualMonitoringAlgorithm::Run()
 {
+
+  if(!m_algorithmPositionString.empty()) 
+    {
+      std::cout << "\033[31m" << "Visual Monitoring Algorithm Position: " << "\033[33m"  <<m_algorithmPositionString << "\033[0m"  << std::endl;
+    }
+
     PANDORA_MONITORING_API(SetEveDisplayParameters(this->GetPandora(), m_showDetector, (m_detectorView.find("xz") != std::string::npos) ? DETECTOR_VIEW_XZ :
         (m_detectorView.find("xy") != std::string::npos) ? DETECTOR_VIEW_XY : DETECTOR_VIEW_DEFAULT, m_transparencyThresholdE, m_energyScaleThresholdE, m_scalingFactor));
 
@@ -430,6 +437,9 @@ StatusCode VisualMonitoringAlgorithm::ReadSettings(const TiXmlHandle xmlHandle)
 
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadVectorOfValues(xmlHandle,
         "SuppressMCParticles", m_suppressMCParticles));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
+        "AlgorithmPositionString", m_algorithmPositionString));
 
     for (StringVector::iterator iter = m_suppressMCParticles.begin(), iterEnd = m_suppressMCParticles.end(); iter != iterEnd; ++iter)
     {
