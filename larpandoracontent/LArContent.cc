@@ -55,6 +55,7 @@
 #include "larpandoracontent/LArMonitoring/TestBeamEventValidationAlgorithm.h"
 #include "larpandoracontent/LArMonitoring/TestBeamHierarchyEventValidationAlgorithm.h"
 #include "larpandoracontent/LArMonitoring/TransverseTensorVisualizationTool.h"
+#include "larpandoracontent/LArMonitoring/IsobelTensorTool.h"
 
 #include "larpandoracontent/LArPersistency/EventReadingAlgorithm.h"
 #include "larpandoracontent/LArPersistency/EventWritingAlgorithm.h"
@@ -168,6 +169,7 @@
 #include "larpandoracontent/LArTwoDReco/LArClusterSplitting/VertexSplittingAlgorithm.h"
 
 #include "larpandoracontent/LArTwoDReco/TwoDParticleCreationAlgorithm.h"
+#include "larpandoracontent/LArTwoDReco/HitWidthClusterMergingAlgorithm.h"
 
 #include "larpandoracontent/LArUtility/ListChangingAlgorithm.h"
 #include "larpandoracontent/LArUtility/ListDeletionAlgorithm.h"
@@ -180,8 +182,9 @@
 #include "larpandoracontent/LArVertex/MvaVertexSelectionAlgorithm.h"
 
 #include "larpandoracontent/LArContent.h"
-
+ 
 #define LAR_ALGORITHM_LIST(d)                                                                                                   \
+    d("LArHitWidthClusterMerging",              HitWidthClusterMergingAlgorithm)                                                \
     d("LArNeutrinoEventValidation",             NeutrinoEventValidationAlgorithm)                                               \
     d("LArTestBeamEventValidation",             TestBeamEventValidationAlgorithm)                                               \
     d("LArTestBeamHierarchyEventValidation",    TestBeamHierarchyEventValidationAlgorithm)                                      \
@@ -275,7 +278,9 @@
     d("LArBdtVertexSelection",                  BdtVertexSelectionAlgorithm)                                                    \
     d("LArSvmVertexSelection",                  SvmVertexSelectionAlgorithm)
 
+
 #define LAR_ALGORITHM_TOOL_LIST(d)                                                                                              \
+    d("LArIsobelTensorTool",                    IsobelTensorTool)                                                               \
     d("LArBdtBeamParticleId",                   BdtBeamParticleIdTool)                                                          \
     d("LArBeamParticleId",                      BeamParticleIdTool)                                                             \
     d("LArCosmicRayTagging",                    CosmicRayTaggingTool)                                                           \

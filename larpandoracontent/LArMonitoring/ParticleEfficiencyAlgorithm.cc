@@ -258,6 +258,7 @@ namespace lar_content {
       }
     }
 
+    //THIS DOESN'T WORK
     int isReconstructed(0);
     for(unsigned int i(0); i < completenessVector.size(); ++i) {
       if((completenessVector[i] > m_minCompleteness) && (purityVector[i] > m_minPurity)) {
@@ -486,14 +487,18 @@ namespace lar_content {
 	}
       }
 
-      std::string mcString = "MC Particle: (PDG: " + std::to_string(pMCParticle->GetParticleId()) + " Hierarchy Tier: " + std::to_string(LArMCParticleHelper::GetHierarchyTier(pMCParticle)) + " uHits: " + std::to_string(uHits) + " vHits: " + std::to_string(vHits) + " wHits: " + std::to_string(wHits) + ")";
+      float theta0XZ;
+      float theta0YZ;
+      GetLArSoftAngles(pMCParticle->GetMomentum(), theta0XZ, theta0YZ);
+
+      std::string mcString = "MC Particle: (PDG: " + std::to_string(pMCParticle->GetParticleId()) + " Hierarchy Tier: " + std::to_string(LArMCParticleHelper::GetHierarchyTier(pMCParticle)) + " uHits: " + std::to_string(uHits) + " vHits: " + std::to_string(vHits) + " wHits: " + std::to_string(wHits) + ")" + "\n" + "Theta0XZ: " + std::to_string(theta0XZ*180/M_PI) + " Theta0YZ: " + std::to_string(theta0YZ*180/M_PI);
       std::cout << mcString << std::endl;
 
       std::cout << completenessIter->second.size() << " match(es) made: ";
 
       if(!completenessIter->second.size()) {
 	std::cout << std::endl;
-	std::cout << "NOT RECONSTRUCTED" << std::endl;
+	std::cout << "\033[31m" << "NOT RECONSTRUCTED" << "\033[0m" << std::endl;
 	continue;
       }
       
@@ -524,7 +529,7 @@ namespace lar_content {
       
       }
 
-      isReconstructed ? std::cout << "RECONSTRUCTED" << std::endl : std::cout << "NOT RECONSTRUCTED" << std::endl;
+      isReconstructed ? std::cout <<  "\033[32m" << "RECONSTRUCTED" << "\033[0m" << std::endl : std::cout << "\033[31m" << "NOT RECONSTRUCTED" << "\033[0m" << std::endl;
 	
     }  
 
