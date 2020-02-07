@@ -12,13 +12,23 @@
 
 namespace lar_content
 {
-
+  /*
+class compare{
+  public:
+      bool operator()(pandora::CartesianVector &lhs, pandora::CartesianVector &rhs) {
+      return lhs.GetX() > rhs.GetX();
+      }
+};
+  */
 /**
  *  @brief  LArClusterHelper class
  */
 class LArClusterHelper
 {
 public:
+
+  //typedef std::multimap<pandora::CartesianVector, float, compare> PositionToWeightMap;
+
     /**
      *  @brief  Get the hit type associated with a two dimensional cluster
      *
