@@ -18,28 +18,168 @@ namespace lar_content
 {
 
 HitWidthClusterMergingAlgorithm::HitWidthClusterMergingAlgorithm() :
-  m_minClusterHits(),
-  m_maxXMergeDistance(2.f),
-  m_maxZMergeDistance(5.f)
+  m_clusterListName(),
+  m_minClusterWeight(0),  //ATTN - THIS HAS BEEN SET IN THE MAC XML FILE
+  m_maxXMergeDistance(0), //ATTN - THIS HAS BEEN SET IN THE MAC XML FILE
+  m_maxZMergeDistance(0),  //ATTN - THIS HAS BEEN SET IN THE MAC XML FILE
+  m_maxMergeCosOpeningAngle(0) //ATTN - THIS HAS BEEN TUNED IN THE MAC XML FILE
 {
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
+  /*
+StatusCode HitWidthClusterMergingAlgorithm::Run()
+{
+
+    const ClusterList *pClusterList = NULL;
+    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetList(*this, m_clusterListName, pClusterList));
+
+    ClusterVector clusterVector;
+    GetListOfCleanClusters(pClusterList, clusterVector);
+
+   
+    PandoraMonitoringApi::Create(this->GetPandora());
+    PandoraMonitoringApi::SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_XZ, -1.f, -1.f, 1.f);
+
+    ClusterList consideredClusters(clusterVector.begin(), clusterVector.end());
+    
+    PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &consideredClusters, "Considered Clusters", BLACK);
+    PandoraMonitoringApi::Pause(this->GetPandora());
+
+    ClusterAssociationMap aMap;
+    this->TestPopulateClusterAssociationMap(clusterVector, aMap);
+
+    return STATUS_CODE_SUCCESS;
+    
+}
+  
+  */
+void HitWidthClusterMergingAlgorithm::TestPopulateClusterAssociationMap(const ClusterVector &clusterVector, ClusterAssociationMap &clusterAssociationMap) const
+{
+
+    // ATTN This method assumes that clusters have been sorted by x position (low x -> high x)
+    for (ClusterVector::const_iterator iterCurrentCluster = clusterVector.begin(); iterCurrentCluster != clusterVector.end(); ++iterCurrentCluster)
+    {
+
+        const Cluster *const pCurrentCluster = *iterCurrentCluster;
+
+        ClusterList currentClusterList;
+        currentClusterList.push_back(pCurrentCluster);
+        PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &currentClusterList, "CURRENT", BLUE);
+
+        CartesianVector currentLowerXEdge(0,0,0);
+        CartesianVector currentUpperXEdge(0,0,0);
+            
+        GetExtremalCoordinates(pCurrentCluster, currentLowerXEdge, currentUpperXEdge);
+	
+        CartesianVector mergeXDist(currentUpperXEdge.GetX() + m_maxXMergeDistance, 0, currentUpperXEdge.GetZ() - m_maxZMergeDistance);
+        CartesianVector mergeZDist1(currentUpperXEdge.GetX(), 0, currentUpperXEdge.GetZ() + m_maxZMergeDistance);
+        CartesianVector mergeZDist2(currentUpperXEdge.GetX(), 0, currentUpperXEdge.GetZ() - m_maxZMergeDistance);
+        CartesianVector farPoint(currentUpperXEdge.GetX() + m_maxXMergeDistance, 0, currentUpperXEdge.GetZ() + m_maxZMergeDistance);
+
+        PandoraMonitoringApi::AddLineToVisualization(this->GetPandora(), &mergeZDist2, &mergeZDist1, "1", RED, 2, 2);
+        PandoraMonitoringApi::AddLineToVisualization(this->GetPandora(), &mergeZDist2, &mergeXDist, "2", RED, 2, 2);
+        PandoraMonitoringApi::AddLineToVisualization(this->GetPandora(), &farPoint, &mergeZDist1, "3", RED, 2, 2);
+        PandoraMonitoringApi::AddLineToVisualization(this->GetPandora(), &farPoint, &mergeXDist, "4", RED, 2, 2);
+
+	PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &currentUpperXEdge, "Upper Coordinate", BLUE, 2);
+	
+        for (ClusterVector::const_iterator iterTestCluster = iterCurrentCluster; iterTestCluster != clusterVector.end(); ++iterTestCluster)
+        {
+            const Cluster *const pTestCluster = *iterTestCluster;
+	    
+            if (iterCurrentCluster == iterTestCluster)
+                continue;
+	    
+            if (!this->TestAreClustersAssociated(pCurrentCluster, pTestCluster))
+	        continue;
+
+            clusterAssociationMap[pCurrentCluster].m_forwardAssociations.insert(pTestCluster);
+            clusterAssociationMap[pTestCluster].m_backwardAssociations.insert(pCurrentCluster);
+        }
+
+	PandoraMonitoringApi::ViewEvent(this->GetPandora()); 
+	
+    }
+}
+
+
+
+  bool HitWidthClusterMergingAlgorithm::TestAreClustersAssociated(const Cluster *const pCurrentCluster, const Cluster *const pTestCluster) const
+{
+
+    //assumed that moving to higher x (when tied moving to higher z)
+    CartesianVector currentLowerXEdge(0,0,0);
+    CartesianVector currentUpperXEdge(0,0,0);
+    
+    CartesianVector testLowerXEdge(0,0,0);
+    CartesianVector testUpperXEdge(0,0,0);
+
+    GetExtremalCoordinates(pCurrentCluster, currentLowerXEdge, currentUpperXEdge);
+    GetExtremalCoordinates(pTestCluster, testLowerXEdge, testUpperXEdge);
+
+    ClusterList testClusterList;
+    testClusterList.push_back(pTestCluster);
+
+    
+    CartesianVector currentClusterDirection(0, 0, 0);
+    CartesianVector testClusterDirection(0, 0, 0);
+
+    GetClusterDirection(pCurrentCluster, currentClusterDirection);
+    GetClusterDirection(pTestCluster, testClusterDirection);
+    
+    std::string stringTag = "TEST - " + std::to_string(fabs(currentClusterDirection.GetCosOpeningAngle(testClusterDirection)));
+
+    if(testLowerXEdge.GetX() > (currentUpperXEdge.GetX() + m_maxXMergeDistance)) {  //|| testLowerXEdge.GetX() < (currentUpperXEdge.GetX() - m_maxXMergeDistance)) {
+      PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &testClusterList, "TEST - Outside X", RED);
+      PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &testLowerXEdge, "TEST", RED, 2);
+      return false;
+    }
+
+    if(testLowerXEdge.GetZ() > (currentUpperXEdge.GetZ() + m_maxZMergeDistance) || testLowerXEdge.GetZ() < (currentUpperXEdge.GetZ() - m_maxZMergeDistance)) {
+      PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &testClusterList, "TEST - Outside Z", RED);
+      PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &testLowerXEdge, "TEST", RED, 2);
+      return false;
+    }
+
+    if(fabs(currentClusterDirection.GetCosOpeningAngle(testClusterDirection)) < m_maxMergeCosOpeningAngle) {
+      PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &testClusterList, stringTag, RED);
+      PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &testLowerXEdge, "TEST", RED, 2);
+      return false;
+    }
+    
+    PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &testClusterList, stringTag, GREEN);
+    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &testLowerXEdge, "TEST", GREEN, 2);
+    return true;
+
+}
+
+  
+/*
 StatusCode HitWidthClusterMergingAlgorithm::Run()
 {
   
     const ClusterList *pClusterList = NULL;
-    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetList(*this, "ClustersV", pClusterList));
+    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetList(*this, m_clusterListName, pClusterList));
 
     ClusterVector clusterVector;
     GetListOfCleanClusters(pClusterList, clusterVector);
-    
+
+   
     PandoraMonitoringApi::Create(this->GetPandora());
     PandoraMonitoringApi::SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_XZ, -1.f, -1.f, 1.f);
-    
-    
 
+    ClusterList consideredClusters(clusterVector.begin(), clusterVector.end());
+    
+    PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &consideredClusters, "Considered Clusters", BLACK);
+    PandoraMonitoringApi::Pause(this->GetPandora());
+
+
+    
+    ClusterAssociationMap aMap;
+    this->PopulateClusterAssociationMap(clusterVector, aMap);
+    
     for(const Cluster *const pCluster : clusterVector) 
     {
       
@@ -55,30 +195,10 @@ StatusCode HitWidthClusterMergingAlgorithm::Run()
       //CartesianVector clusterFitZIntercept(0, 0, clusterFitIntercept.GetZ() - clusterFitGradient*clusterFitIntercept.GetX());
       //CartesianVector clusterFitEndpoint(-400, 0, clusterFitGradient*(-400) + clusterFitZIntercept.GetZ());
 
-      ClusterList singleCluster;
-      singleCluster.push_back(pCluster);
-
-      PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &singleCluster, "A Cluster", BLACK);
       
       //std::cout << "Intercept: "  << clusterFitIntercept << std::endl;
       //std::cout << "Endpoint: " << clusterDirection << std::endl;
       
-      CartesianVector lowerXCoordinate(0, 0, 0);
-      CartesianVector higherXCoordinate(0, 0, 0);
-      this->GetExtremalCoordinates(pCluster, lowerXCoordinate, higherXCoordinate);
-
-      CartesianVector mergeXDist(higherXCoordinate.GetX() + m_maxXMergeDistance, 0, higherXCoordinate.GetZ());
-      CartesianVector mergeZDist1(higherXCoordinate.GetX(), 0, higherXCoordinate.GetZ() + m_maxZMergeDistance);
-      CartesianVector mergeZDist2(higherXCoordinate.GetX(), 0, higherXCoordinate.GetZ() - m_maxZMergeDistance);
-      CartesianVector farPoint(higherXCoordinate.GetX() + m_maxXMergeDistance, 0, higherXCoordinate.GetZ() + m_maxZMergeDistance);
-
-      PandoraMonitoringApi::AddLineToVisualization(this->GetPandora(), &higherXCoordinate, &mergeXDist, "1", RED, 2, 2);
-      PandoraMonitoringApi::AddLineToVisualization(this->GetPandora(), &higherXCoordinate, &mergeZDist, "2", RED, 2, 2);
-      PandoraMonitoringApi::AddLineToVisualization(this->GetPandora(), &farPoint, &mergeXDist, "3", RED, 2, 2);
-      PandoraMonitoringApi::AddLineToVisualization(this->GetPandora(), &farPoint, &mergeZDist, "4", RED, 2, 2);
-
-      //PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &lowerXCoordinate, "Inner Coordinate", RED, 2);
-      //PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &higherXCoordinate, "Outer Coordinate", BLUE, 2);
       
       //float gradient(0);
       //float intercept(0);
@@ -94,10 +214,25 @@ StatusCode HitWidthClusterMergingAlgorithm::Run()
       //PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &singleCluster, "A Cluster", BLACK);
       //std::cout << "ChiSquared: " << chiSquared << std::endl;
       //PandoraMonitoringApi::Pause(this->GetPandora());
+
+      //CartesianVector LSClusterFitDirection(0,0,0);
+      //float LSIntercept(0);
+      //GetClusterDirection(pCluster, LSClusterFitDirection);
+      //GetClusterZIntercept(pCluster, LSIntercept);
+
+      //float clusterFitGradient = (LSClusterFitDirection.GetZ()/LSClusterFitDirection.GetX());
+      //CartesianVector LSStartPoint(0, 0, LSIntercept);
+      //CartesianVector LSEndPoint(-400, 0, clusterFitGradient*(-400) + LSIntercept);
+
+      //PandoraMonitoringApi::AddLineToVisualization(this->GetPandora(), &LSStartPoint, &LSEndPoint, "CHECK", RED, 2, 2);
+
+      //PandoraMonitoringApi::Pause(this->GetPandora());
       
     }
+    
+    
       
-    /*
+    
     for(ClusterVector::const_iterator currentIter = clusterVector.begin(); currentIter != clusterVector.end(); ++currentIter) {
 
       const Cluster *const currentCluster(*currentIter);
@@ -118,25 +253,28 @@ StatusCode HitWidthClusterMergingAlgorithm::Run()
           ClusterList testClusterList;
           testClusterList.push_back(testCluster);
 
-          bool areAssociated(this->AreClustersAssociated(currentCluster, testCluster));
+          //bool areAssociated(this->AreClustersAssociated(currentCluster, testCluster));
+	  bool isExtremalCluster(this->IsExtremalCluster(true, currentCluster, testCluster));
+	  
+	  //areAssociated? PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &testClusterList, "Test Cluster", DARKGREEN) : PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &testClusterList, "Test Cluster", DARKRED);
 
-	  areAssociated? PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &testClusterList, "Test Cluster", DARKGREEN) : PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &testClusterList, "Test Cluster", DARKRED);
+	  isExtremalCluster? PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &testClusterList, "Test Cluster", DARKGREEN) : PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &testClusterList, "Test Cluster", DARKRED);
 
       }
 
       PandoraMonitoringApi::Pause(this->GetPandora());
     }
-    */
+   
 
-    PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), pClusterList, "All Clusters", BLACK);
-    PandoraMonitoringApi::Pause(this->GetPandora());
+    //PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), pClusterList, "All Clusters", BLACK);
+    //PandoraMonitoringApi::Pause(this->GetPandora());
+
 
 
     return STATUS_CODE_SUCCESS;
   
 }
-
-
+*/
 
 void HitWidthClusterMergingAlgorithm::GetListOfCleanClusters(const ClusterList *const pClusterList, ClusterVector &clusterVector) const
 {
@@ -145,19 +283,14 @@ void HitWidthClusterMergingAlgorithm::GetListOfCleanClusters(const ClusterList *
 
     for (const Cluster *const pCluster : *pClusterList)
     {
-        // Ignore clusters with one hit with width < 0.5
-        // As lines cannot be fitted to single points
-        if(pCluster->GetNCaloHits() == 1) {
-            const CaloHit *const pCaloHit = *(pCluster->GetOrderedCaloHitList().begin()->second->begin());
-	    if(pCaloHit->GetCellSize1() < 0.5)
-	        continue;
-        }
-
+	if(GetTotalClusterWeight(pCluster) < m_minClusterWeight)
+	  continue;
+      
         clusterVector.push_back(pCluster);
     }
 
-    //ORDER BY MIN X
-    std::sort(clusterVector.begin(), clusterVector.end(), SortByX);
+    //ORDER BY MAX EXTREMAL X COORDINATE
+    std::sort(clusterVector.begin(), clusterVector.end(), SortByMaxX);
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -168,8 +301,30 @@ void HitWidthClusterMergingAlgorithm::PopulateClusterAssociationMap(const Cluste
     // ATTN This method assumes that clusters have been sorted by x position (low x -> high x)
     for (ClusterVector::const_iterator iterCurrentCluster = clusterVector.begin(); iterCurrentCluster != clusterVector.end(); ++iterCurrentCluster)
     {
+
         const Cluster *const pCurrentCluster = *iterCurrentCluster;
 
+        //ClusterList currentClusterList;
+        //currentClusterList.push_back(pCurrentCluster);
+        //PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &currentClusterList, "CURRENT", BLUE);
+
+        CartesianVector currentLowerXEdge(0,0,0);
+        CartesianVector currentUpperXEdge(0,0,0);
+            
+        GetExtremalCoordinates(pCurrentCluster, currentLowerXEdge, currentUpperXEdge);
+	
+        //CartesianVector mergeXDist(currentUpperXEdge.GetX() + m_maxXMergeDistance, 0, currentUpperXEdge.GetZ() - m_maxZMergeDistance);
+        //CartesianVector mergeZDist1(currentUpperXEdge.GetX(), 0, currentUpperXEdge.GetZ() + m_maxZMergeDistance);
+        //CartesianVector mergeZDist2(currentUpperXEdge.GetX(), 0, currentUpperXEdge.GetZ() - m_maxZMergeDistance);
+        //CartesianVector farPoint(currentUpperXEdge.GetX() + m_maxXMergeDistance, 0, currentUpperXEdge.GetZ() + m_maxZMergeDistance);
+
+        //PandoraMonitoringApi::AddLineToVisualization(this->GetPandora(), &mergeZDist2, &mergeZDist1, "1", RED, 2, 2);
+        //PandoraMonitoringApi::AddLineToVisualization(this->GetPandora(), &mergeZDist2, &mergeXDist, "2", RED, 2, 2);
+        //PandoraMonitoringApi::AddLineToVisualization(this->GetPandora(), &farPoint, &mergeZDist1, "3", RED, 2, 2);
+        //PandoraMonitoringApi::AddLineToVisualization(this->GetPandora(), &farPoint, &mergeXDist, "4", RED, 2, 2);
+
+	//PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &currentUpperXEdge, "Upper Coordinate", BLUE, 2);
+	
         for (ClusterVector::const_iterator iterTestCluster = iterCurrentCluster; iterTestCluster != clusterVector.end(); ++iterTestCluster)
         {
             const Cluster *const pTestCluster = *iterTestCluster;
@@ -178,11 +333,14 @@ void HitWidthClusterMergingAlgorithm::PopulateClusterAssociationMap(const Cluste
                 continue;
 	    
             if (!this->AreClustersAssociated(pCurrentCluster, pTestCluster))
-                continue;
+	        continue;
 
             clusterAssociationMap[pCurrentCluster].m_forwardAssociations.insert(pTestCluster);
             clusterAssociationMap[pTestCluster].m_backwardAssociations.insert(pCurrentCluster);
         }
+
+	//PandoraMonitoringApi::ViewEvent(this->GetPandora()); 
+	
     }
 }
 
@@ -192,10 +350,10 @@ bool HitWidthClusterMergingAlgorithm::IsExtremalCluster(const bool isForward, co
 {
   
     float currentMinX(0), currentMaxX(0);
-    this->GetExtremalCoordinatesX(pCurrentCluster, currentMinX, currentMaxX);
+    GetExtremalCoordinatesX(pCurrentCluster, currentMinX, currentMaxX);
 
     float testMinX(0.f), testMaxX(0.f);
-    this->GetExtremalCoordinatesX(pTestCluster, testMinX, testMaxX);
+    GetExtremalCoordinatesX(pTestCluster, testMinX, testMaxX);
 
     if (isForward)
     {
@@ -215,6 +373,7 @@ bool HitWidthClusterMergingAlgorithm::IsExtremalCluster(const bool isForward, co
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
+
   bool HitWidthClusterMergingAlgorithm::AreClustersAssociated(const Cluster *const pCurrentCluster, const Cluster *const pTestCluster) const
 {
 
@@ -225,27 +384,82 @@ bool HitWidthClusterMergingAlgorithm::IsExtremalCluster(const bool isForward, co
     CartesianVector testLowerXEdge(0,0,0);
     CartesianVector testUpperXEdge(0,0,0);
 
-    this->GetExtremalCoordinates(pCurrentCluster, currentLowerXEdge, currentUpperXEdge);
-    this->GetExtremalCoordinates(pTestCluster, testLowerXEdge, testUpperXEdge);
+    GetExtremalCoordinates(pCurrentCluster, currentLowerXEdge, currentUpperXEdge);
+    GetExtremalCoordinates(pTestCluster, testLowerXEdge, testUpperXEdge);
 
-    if(testLowerXEdge.GetX() > (currentUpperXEdge.GetX() + m_maxXMergeDistance)) 
+    //ClusterList testClusterList;
+    //testClusterList.push_back(pTestCluster);
+
+    
+    CartesianVector currentClusterDirection(0, 0, 0);
+    CartesianVector testClusterDirection(0, 0, 0);
+
+    GetClusterDirection(pCurrentCluster, currentClusterDirection);
+    GetClusterDirection(pTestCluster, testClusterDirection);
+    
+    //std::string stringTag = "TEST - " + std::to_string(fabs(currentClusterDirection.GetCosOpeningAngle(testClusterDirection)));
+
+    if(testLowerXEdge.GetX() > (currentUpperXEdge.GetX() + m_maxXMergeDistance)) {  //|| testLowerXEdge.GetX() < (currentUpperXEdge.GetX() - m_maxXMergeDistance)) {
+      //PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &testClusterList, "TEST - Outside X", RED);
+      //PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &testLowerXEdge, "TEST", RED, 2);
       return false;
+    }
 
-    if(testLowerXEdge.GetZ() > (currentUpperXEdge.GetZ() + m_maxZMergeDistance) || testLowerXEdge.GetZ() < (currentUpperXEdge.GetZ() - m_maxZMergeDistance))
+    if(testLowerXEdge.GetZ() > (currentUpperXEdge.GetZ() + m_maxZMergeDistance) || testLowerXEdge.GetZ() < (currentUpperXEdge.GetZ() - m_maxZMergeDistance)) {
+      //PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &testClusterList, "TEST - Outside Z", RED);
+      //PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &testLowerXEdge, "TEST", RED, 2);
       return false;
+    }
 
+    if(fabs(currentClusterDirection.GetCosOpeningAngle(testClusterDirection)) < m_maxMergeCosOpeningAngle) {
+      //PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &testClusterList, stringTag, RED);
+      //PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &testLowerXEdge, "TEST", RED, 2);
+      return false;
+    }
+    
+    //PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &testClusterList, stringTag, GREEN);
+    //PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &testLowerXEdge, "TEST", GREEN, 2);
     return true;
 
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
+void HitWidthClusterMergingAlgorithm::GetClusterDirection(const Cluster *const pCluster, CartesianVector &direction) const 
+{
+
+    float gradient(0);
+    float intercept(0);
+    float chiSquared(0);
+    
+    GetWeightedGradient(pCluster, gradient, intercept, chiSquared);
+
+    float directionX = pow(1 + pow(gradient, 2), -0.5);
+    float directionZ = gradient * directionX;
+    
+    direction = CartesianVector(directionX, 0, directionZ);
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void HitWidthClusterMergingAlgorithm::GetClusterZIntercept(const Cluster *const pCluster, float &intercept) const
+{
+    float gradient(0);
+    float chiSquared(0);
+    
+    GetWeightedGradient(pCluster, gradient, intercept, chiSquared);
+
+    return;
+
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+
 void HitWidthClusterMergingAlgorithm::GetWeightedGradient(const Cluster *const pCluster, float &gradient, float &intercept, float &chiSquared) const
 {
 
     OrderedCaloHitList orderedCaloHitList = pCluster->GetOrderedCaloHitList();
-
-    std::cout << "Number of CaloHits: " << pCluster->GetNCaloHits() << std::endl; 
 
     float weightSum(0);
     float weightedXSum(0);
@@ -260,7 +474,6 @@ void HitWidthClusterMergingAlgorithm::GetWeightedGradient(const Cluster *const p
 	    const CaloHit *const hit = (*hitIter);
 
 	    float hitWidth = hit->GetCellSize1();
-	    std::cout << "Hit Width: " << hitWidth << std::endl;
 
 	    float hitWeight = hitWidth;
 
@@ -300,7 +513,6 @@ void HitWidthClusterMergingAlgorithm::GetWeightedGradient(const Cluster *const p
 	    const CaloHit *const hit = (*hitIter);
 
 	    float hitWidth = hit->GetCellSize1();
-	    std::cout << "Hit Width: " << hitWidth << std::endl;
 
 	    float hitWeight = hitWidth;
 
@@ -338,14 +550,17 @@ void HitWidthClusterMergingAlgorithm::GetWeightedGradient(const Cluster *const p
   
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void HitWidthClusterMergingAlgorithm::GetExtremalCoordinates(const Cluster *const pCluster, CartesianVector &lowerXCoordinate, CartesianVector &higherXCoordinate) const
+//SHOULD REALLY BE IN A HELPER CLASS
+void HitWidthClusterMergingAlgorithm::GetExtremalCoordinates(const Cluster *const pCluster, CartesianVector &lowerXCoordinate, CartesianVector &higherXCoordinate)
 {
     return GetExtremalCoordinates(pCluster->GetOrderedCaloHitList(), lowerXCoordinate, higherXCoordinate);
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void HitWidthClusterMergingAlgorithm::GetExtremalCoordinates(const OrderedCaloHitList &orderedCaloHitList, CartesianVector &lowerXCoordinate, CartesianVector &higherXCoordinate) const
+
+//SHOULD REALLY BE IN A HELPER CLASS
+void HitWidthClusterMergingAlgorithm::GetExtremalCoordinates(const OrderedCaloHitList &orderedCaloHitList, CartesianVector &lowerXCoordinate, CartesianVector &higherXCoordinate)
 {
     if (orderedCaloHitList.empty())
         throw StatusCodeException(STATUS_CODE_NOT_FOUND);
@@ -380,7 +595,8 @@ void HitWidthClusterMergingAlgorithm::GetExtremalCoordinates(const OrderedCaloHi
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void HitWidthClusterMergingAlgorithm::GetExtremalCoordinates(const CartesianPointVector &coordinateVector, CartesianVector &lowerXCoordinate, CartesianVector &higherXCoordinate) const
+//SHOULD REALLY BE IN A HELPER CLASS
+void HitWidthClusterMergingAlgorithm::GetExtremalCoordinates(const CartesianPointVector &coordinateVector, CartesianVector &lowerXCoordinate, CartesianVector &higherXCoordinate)
 {
     if (coordinateVector.empty())
         throw StatusCodeException(STATUS_CODE_NOT_FOUND);
@@ -487,8 +703,8 @@ void HitWidthClusterMergingAlgorithm::GetExtremalCoordinates(const CartesianPoin
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 
-
-void HitWidthClusterMergingAlgorithm::GetExtremalCoordinatesX(const Cluster *const pCluster, float &minX, float &maxX) const
+//SHOULD REALLY BE IN A HELPER CLASS
+void HitWidthClusterMergingAlgorithm::GetExtremalCoordinatesX(const Cluster *const pCluster, float &minX, float &maxX)
 {
 
     minX = +std::numeric_limits<float>::max();
@@ -542,7 +758,6 @@ float HitWidthClusterMergingAlgorithm::GetMinX(const Cluster *const pCluster)
 
     float minX(+std::numeric_limits<float>::max());
 
-    //Get lhs/rhs cluster calo hits
     const OrderedCaloHitList *hits(&pCluster->GetOrderedCaloHitList());
 
     // find min x coordinate for each cluster
@@ -562,56 +777,64 @@ float HitWidthClusterMergingAlgorithm::GetMinX(const Cluster *const pCluster)
             minX = std::min(lowHitEdge + constituentHitWidth/2, minX);
 	}
     }
-
     return minX;
-
 }
-
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-/*
-  void HitWidthClusterMergingAlgorithm::GetPositionToWeightMap(const Cluster *const pCluster, LArClusterHelper::PositionToWeightMap &positionToWeightMap)
+bool HitWidthClusterMergingAlgorithm::SortByMaxX(const Cluster *const pLhs, const Cluster *const pRhs)
 {
 
-    OrderedCaloHitList orderedCaloHitList = pCluster->GetOrderedCaloHitList();
+    CartesianVector lhsLowerXEdge(0,0,0);
+    CartesianVector lhsUpperXEdge(0,0,0);
 
-    for(OrderedCaloHitList::const_iterator iter = orderedCaloHitList.begin(); iter !=  orderedCaloHitList.end(); ++iter) 
+    CartesianVector rhsLowerXEdge(0,0,0);
+    CartesianVector rhsUpperXEdge(0,0,0);
+
+    GetExtremalCoordinates(pLhs, lhsLowerXEdge, lhsUpperXEdge);
+    GetExtremalCoordinates(pRhs, rhsLowerXEdge, rhsUpperXEdge);
+  
+    return (lhsUpperXEdge.GetX() < rhsUpperXEdge.GetX());
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+float HitWidthClusterMergingAlgorithm::GetTotalClusterWeight(const Cluster *const pCluster)
+{
+  
+    const OrderedCaloHitList &orderedCaloHitList(pCluster->GetOrderedCaloHitList());
+
+    float hitWeight(0);
+    
+    for (OrderedCaloHitList::const_iterator iter = orderedCaloHitList.begin(); iter != orderedCaloHitList.end(); ++iter)
     {
-        for(CaloHitList::const_iterator hitIter = iter->second->begin(); hitIter != iter->second->end(); ++hitIter) 
+        for (CaloHitList::const_iterator hitIter = iter->second->begin(); hitIter != iter->second->end(); ++hitIter)
         {
 	    const CaloHit *const hit = (*hitIter);
-
-	    const float hitWidth = hit->GetCellSize1();
-	    const float hitWeight = hitWidth;
-
-            const unsigned int numberOfConstituentHits = floor(hitWidth/hit->GetCellSize0()) + 1;
-            const float constituentHitWidth = hitWidth/static_cast<float>(numberOfConstituentHits);
-	    float constituentHitWeight = hitWeight/static_cast<float>(numberOfConstituentHits);
-
-	    float xPositionAlongHit(hit->GetPositionVector().GetX() - (hitWidth/2));
-	    for(unsigned int i(0); i < numberOfConstituentHits; ++i) 
-	    {
-                i == 0 ? xPositionAlongHit += constituentHitWidth/2 : xPositionAlongHit += constituentHitWidth;
-		
-                positionToWeightMap.insert(std::pair<CartesianVector, float>(CartesianVector(xPositionAlongHit, 0, hit->GetPositionVector().GetZ()), constituentHitWeight));
-	    }
-	}
+	    hitWeight += hit->GetCellSize1();
+        }
     }
-    return;
+
+    return hitWeight;
+
 }
-*/
+
 
 StatusCode HitWidthClusterMergingAlgorithm::ReadSettings(const TiXmlHandle xmlHandle)
 {
  
-    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle, "MinClusterHits", m_minClusterHits));
+    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle, "MinClusterWeight", m_minClusterWeight));
 
+    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle, "ClusterListName", m_clusterListName));
+    
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
         "MaxXMergeDistance", m_maxXMergeDistance));
 
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
         "MaxZMergeDistance", m_maxZMergeDistance));
+
+        PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
+        "MaxMergeCosOpeningAngle", m_maxMergeCosOpeningAngle));
 
     return STATUS_CODE_SUCCESS;
 }
