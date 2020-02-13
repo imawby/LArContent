@@ -17,10 +17,11 @@
 namespace lar_content
 {
 
+
 /**
  *  @brief HitWidthClusterMergingAlgorithm class
  */
-class HitWidthClusterMergingAlgorithm : public ClusterAssociationAlgorithm
+  class HitWidthClusterMergingAlgorithm : public pandora::Algorithm//public ClusterAssociationAlgorithm
 {
 
 public:
@@ -28,35 +29,82 @@ public:
     /**
      *  @brief  Default constructor
      */
-  HitWidthClusterMergingAlgorithm();
+    HitWidthClusterMergingAlgorithm();
+
+
+    class ClusterFit
+    {
+    public:
+      /**
+      * @brief  Default constructor
+      */
+      ClusterFit(const pandora::Cluster *const pCluster);
+
+      pandora::CartesianVector m_lowerXExtrema;
+      pandora::CartesianVector m_higherXExtrema;
+      
+      struct ClusterPositionSort{
+	  ClusterPositionSort(const pandora::CartesianVector referencePoint) : m_referencePoint(referencePoint) {}
+          bool operator() (const pandora::CartesianVector &lhs, const pandora::CartesianVector &rhs) {
+              return (m_referencePoint.GetDistanceSquared(lhs) < m_referencePoint.GetDistanceSquared(rhs));
+	  } 
+	  const pandora::CartesianVector m_referencePoint;
+      };
+
+
+      typedef std::multimap<pandora::CartesianVector, float, ClusterPositionSort> ClusterPositionToWeightMap; 
+      
+
+      unsigned int m_numCaloHits;
+      float m_totalWeight;
+
+      ClusterPositionSort m_currentClusterSort;
+      ClusterPositionSort m_testClusterSort;
+
+
+      ClusterPositionToWeightMap m_currentClusterPositionToWeightMap;
+      ClusterPositionToWeightMap m_testClusterPositionToWeightMap;
+
+
+    };
+
+
+
 
 
 private:
-
-  //pandora::StatusCode Run();
   
-  void TestGetListOfCleanClusters(const pandora::ClusterList *const pClusterList, pandora::ClusterVector &clusterVector) const;
+  //void GetWeightedSubGradient(const pandora::Cluster *const pCluster, bool isTransverse, bool isCurrent, unsigned int numFittingPoints, pandora::CartesianVector &direction, float &chiSquared) const;
 
-  void TestPopulateClusterAssociationMap(const pandora::ClusterVector &clusterVector, ClusterAssociationMap &clusterAssociationMap) const;
 
-  bool TestAreClustersAssociated(const pandora::Cluster *const pCurrentCluster, const pandora::Cluster *const pTestCluster) const;
+
+  pandora::StatusCode Run();
+  
+  //void TestGetListOfCleanClusters(const pandora::ClusterList *const pClusterList, pandora::ClusterVector &clusterVector) const;
+
+  //void TestPopulateClusterAssociationMap(const pandora::ClusterVector &clusterVector, ClusterAssociationMap &clusterAssociationMap) const;
+
+  //bool TestAreClustersAssociated(const pandora::Cluster *const pCurrentCluster, const pandora::Cluster *const pTestCluster) const;
   
   void GetListOfCleanClusters(const pandora::ClusterList *const pClusterList, pandora::ClusterVector &clusterVector) const;
 
-  void PopulateClusterAssociationMap(const pandora::ClusterVector &clusterVector, ClusterAssociationMap &clusterAssociationMap) const;
+  //void PopulateClusterAssociationMap(const pandora::ClusterVector &clusterVector, ClusterAssociationMap &clusterAssociationMap) const;
 
-  bool IsExtremalCluster(const bool isForward, const pandora::Cluster *const pCurrentCluster,  const pandora::Cluster *const pTestCluster) const;
+  //bool IsExtremalCluster(const bool isForward, const pandora::Cluster *const pCurrentCluster,  const pandora::Cluster *const pTestCluster) const;
 
-  bool AreClustersAssociated(const pandora::Cluster *const pCurrentCluster, const pandora::Cluster *const pTestCluster) const;
+  //bool AreClustersAssociated(const pandora::Cluster *const pCurrentCluster, const pandora::Cluster *const pTestCluster) const;
 
-  void GetWeightedGradient(const pandora::Cluster *const pCluster, float &gradient, float &intercept, float &chiSquared) const;
+  //void GetWeightedGradient(const pandora::Cluster *const pCluster, bool isTransverse, pandora::CartesianVector &direction, pandora::CartesianVector &intercept, float &chiSquared) const;
 
-  void GetClusterDirection(const pandora::Cluster *const pCluster, pandora::CartesianVector &direction) const;
+  //pandora::CartesianVector GetClusterDirection(const pandora::Cluster *const pCluster) const;
 
-  void GetClusterZIntercept(const pandora::Cluster *const pCluster, float &intercept) const;
+  //pandora::CartesianVector GetClusterZIntercept(const pandora::Cluster *const pCluster) const;
  
   
   //THESE REALLY BELONG IN THE HELPER CLASS
+
+  static pandora::CartesianVector GetExtremalCoordinatesLowerX(const pandora::Cluster *const pCluster);
+  static pandora::CartesianVector GetExtremalCoordinatesHigherX(const pandora::Cluster *const pCluster) ;
   
   static void GetExtremalCoordinates(const pandora::Cluster *const pCluster, pandora::CartesianVector &lowerXCoordinate, pandora::CartesianVector &higherXCoordinate);
 
@@ -84,6 +132,8 @@ private:
   float m_maxXMergeDistance; //Distance either side of point
   float m_maxZMergeDistance; //Distance either side of point
   float m_maxMergeCosOpeningAngle; 
+
+  //CartesianVector m_sortReferencePoint;
 
 };
 

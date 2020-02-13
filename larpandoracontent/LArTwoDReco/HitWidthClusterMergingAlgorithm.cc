@@ -17,6 +17,57 @@ using namespace pandora;
 namespace lar_content
 {
 
+
+  HitWidthClusterMergingAlgorithm::ClusterFit::ClusterFit(const pandora::Cluster *const pCluster) :
+    m_lowerXExtrema(GetExtremalCoordinatesLowerX(pCluster)), 
+    m_higherXExtrema(GetExtremalCoordinatesHigherX(pCluster)), 
+    m_numCaloHits(pCluster->GetNCaloHits()), 
+    m_totalWeight(GetTotalClusterWeight(pCluster)),
+    m_currentClusterSort(ClusterPositionSort(m_higherXExtrema)),
+    m_testClusterSort(ClusterPositionSort(m_lowerXExtrema)),
+    m_currentClusterPositionToWeightMap(m_currentClusterSort), 
+    m_testClusterPositionToWeightMap(m_testClusterSort)
+{
+    
+      GetExtremalCoordinates(pCluster, m_lowerXExtrema, m_higherXExtrema);
+
+      OrderedCaloHitList orderedCaloHitList = pCluster->GetOrderedCaloHitList();
+
+      for(OrderedCaloHitList::const_iterator iter = orderedCaloHitList.begin(); iter !=  orderedCaloHitList.end(); ++iter) 
+      {
+          for(CaloHitList::const_iterator hitIter = iter->second->begin(); hitIter != iter->second->end(); ++hitIter) 
+          {
+	      const CaloHit *const hit = (*hitIter);
+
+	      float hitWidth = hit->GetCellSize1();
+	      //std::cout << "Width: " << hit->GetCellSize1() << std::endl;
+	      //float hitWeight = 1;
+	      float hitWeight = hitWidth;
+
+	      //unsigned int numberOfConstituentHits = 1;
+              unsigned int numberOfConstituentHits = floor(hitWidth/hit->GetCellSize0()) + 1;
+              float constituentHitWidth = hitWidth/numberOfConstituentHits;
+	      float constituentHitWeight = hitWeight/numberOfConstituentHits;
+
+	      //std::cout << "Total hit weight: " << hitWeight << std::endl; 
+	      //std::cout << "Number of constituents: " << numberOfConstituentHits << std::endl;
+	      //std::cout << "Constituent hit weight: " << constituentHitWeight << std::endl;
+
+	      //std::cout << "Hit center: " << hit->GetPositionVector().GetX() << ", " << hit->GetPositionVector().GetY() << ", " << hit->GetPositionVector().GetZ() << std::endl;
+
+	      float xPositionAlongHit(hit->GetPositionVector().GetX() - (hitWidth/2));
+	      for(unsigned int i(0); i < numberOfConstituentHits; ++i) 
+	      {
+                  i == 0 ? xPositionAlongHit += constituentHitWidth/2 : xPositionAlongHit += constituentHitWidth;
+		  m_currentClusterPositionToWeightMap.insert(std::pair(CartesianVector(xPositionAlongHit, 0, hit->GetPositionVector().GetZ()), constituentHitWeight));
+		  m_testClusterPositionToWeightMap.insert(std::pair(CartesianVector(xPositionAlongHit, 0, hit->GetPositionVector().GetZ()), constituentHitWeight));
+	      }
+	  }
+      }
+  }
+
+
+
 HitWidthClusterMergingAlgorithm::HitWidthClusterMergingAlgorithm() :
   m_clusterListName(),
   m_minClusterWeight(0),  //ATTN - THIS HAS BEEN SET IN THE MAC XML FILE
@@ -28,7 +79,48 @@ HitWidthClusterMergingAlgorithm::HitWidthClusterMergingAlgorithm() :
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-  /*
+  StatusCode HitWidthClusterMergingAlgorithm::Run(){
+
+    const ClusterList *pClusterList = NULL;
+    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetList(*this, m_clusterListName, pClusterList));
+
+    ClusterVector clusterVector;
+    GetListOfCleanClusters(pClusterList, clusterVector);
+
+
+    for(const Cluster *const pCluster : clusterVector){
+
+      ClusterFit clusterFit(pCluster);
+
+      PandoraMonitoringApi::Create(this->GetPandora());
+      PandoraMonitoringApi::SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_XZ, -1.f, -1.f, 1.f);
+
+      ClusterList aCluster;
+      aCluster.push_back(pCluster);
+
+      PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &aCluster, "A Cluster", BLACK);
+
+      for(auto iter = clusterFit.m_currentClusterPositionToWeightMap.begin(); iter != clusterFit.m_currentClusterPositionToWeightMap.end(); ++iter) {
+
+	const CartesianVector pos = iter->first;
+
+	PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &pos, "POINT", RED, 2);
+	PandoraMonitoringApi::Pause(this->GetPandora());
+
+      }
+
+      PandoraMonitoringApi::Pause(this->GetPandora());
+
+    }
+
+
+
+    return STATUS_CODE_SUCCESS;
+
+  } 
+
+
+/*
 StatusCode HitWidthClusterMergingAlgorithm::Run()
 {
 
@@ -37,24 +129,52 @@ StatusCode HitWidthClusterMergingAlgorithm::Run()
 
     ClusterVector clusterVector;
     GetListOfCleanClusters(pClusterList, clusterVector);
-
-   
+    
     PandoraMonitoringApi::Create(this->GetPandora());
     PandoraMonitoringApi::SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_XZ, -1.f, -1.f, 1.f);
 
     ClusterList consideredClusters(clusterVector.begin(), clusterVector.end());
     
     PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &consideredClusters, "Considered Clusters", BLACK);
-    PandoraMonitoringApi::Pause(this->GetPandora());
 
-    ClusterAssociationMap aMap;
-    this->TestPopulateClusterAssociationMap(clusterVector, aMap);
+    
+    //for(const Cluster *const pCluster : clusterVector) {
+
+      //if(pCluster->GetNCaloHits() != 1) 
+	//continue;
+
+      //const CaloHit *const pCaloHit(pCluster->GetOrderedCaloHitList().begin()->second->front());
+
+      //CaloHitList aCluster;
+      //aCluster.push_back(pCaloHit);
+
+      //PandoraMonitoringApi::VisualizeCaloHits(this->GetPandora(), &aCluster, "Single Hit Calo Hit", PINK);
+
+      //CartesianVector direction(GetClusterDirection(pCluster));
+      //std::cout << "Direction: " << direction << std::endl;
+
+      //PandoraMonitoringApi::Pause(this->GetPandora());
+
+
+    //}
+    
+      //ClusterList aCluster;
+      //aCluster.push_back(pCluster);
+      //PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &aCluster, "A Cluster", BLACK);
+      //GetWeightedGradient(pCluster, gradient, intercept, chiSquared);
+
+
+
+
+      ClusterAssociationMap aMap;
+      this->TestPopulateClusterAssociationMap(clusterVector, aMap);
 
     return STATUS_CODE_SUCCESS;
     
 }
-  
-  */
+
+*/
+/*
 void HitWidthClusterMergingAlgorithm::TestPopulateClusterAssociationMap(const ClusterVector &clusterVector, ClusterAssociationMap &clusterAssociationMap) const
 {
 
@@ -104,8 +224,8 @@ void HitWidthClusterMergingAlgorithm::TestPopulateClusterAssociationMap(const Cl
     }
 }
 
-
-
+*/
+/*
   bool HitWidthClusterMergingAlgorithm::TestAreClustersAssociated(const Cluster *const pCurrentCluster, const Cluster *const pTestCluster) const
 {
 
@@ -118,45 +238,50 @@ void HitWidthClusterMergingAlgorithm::TestPopulateClusterAssociationMap(const Cl
 
     GetExtremalCoordinates(pCurrentCluster, currentLowerXEdge, currentUpperXEdge);
     GetExtremalCoordinates(pTestCluster, testLowerXEdge, testUpperXEdge);
-
+    
     ClusterList testClusterList;
     testClusterList.push_back(pTestCluster);
-
     
-    CartesianVector currentClusterDirection(0, 0, 0);
-    CartesianVector testClusterDirection(0, 0, 0);
-
-    GetClusterDirection(pCurrentCluster, currentClusterDirection);
-    GetClusterDirection(pTestCluster, testClusterDirection);
     
-    std::string stringTag = "TEST - " + std::to_string(fabs(currentClusterDirection.GetCosOpeningAngle(testClusterDirection)));
+    CartesianVector currentClusterDirection(GetClusterDirection(pCurrentCluster));
+    CartesianVector testClusterDirection(GetClusterDirection(pTestCluster));
+    
+    std::string stringTag = "TEST: " + std::to_string(std::fabs(currentClusterDirection.GetCosOpeningAngle(testClusterDirection)));
+
+    //std::cout << "Angle: " << std::fabs(currentClusterDirection.GetCosOpeningAngle(testClusterDirection)) << std::endl;
 
     if(testLowerXEdge.GetX() > (currentUpperXEdge.GetX() + m_maxXMergeDistance)) {  //|| testLowerXEdge.GetX() < (currentUpperXEdge.GetX() - m_maxXMergeDistance)) {
       PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &testClusterList, "TEST - Outside X", RED);
       PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &testLowerXEdge, "TEST", RED, 2);
+      //PandoraMonitoringApi::Pause(this->GetPandora());
       return false;
     }
 
     if(testLowerXEdge.GetZ() > (currentUpperXEdge.GetZ() + m_maxZMergeDistance) || testLowerXEdge.GetZ() < (currentUpperXEdge.GetZ() - m_maxZMergeDistance)) {
       PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &testClusterList, "TEST - Outside Z", RED);
       PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &testLowerXEdge, "TEST", RED, 2);
+      //PandoraMonitoringApi::Pause(this->GetPandora());
       return false;
     }
 
-    if(fabs(currentClusterDirection.GetCosOpeningAngle(testClusterDirection)) < m_maxMergeCosOpeningAngle) {
+    if(std::fabs(currentClusterDirection.GetCosOpeningAngle(testClusterDirection)) < m_maxMergeCosOpeningAngle) {
       PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &testClusterList, stringTag, RED);
       PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &testLowerXEdge, "TEST", RED, 2);
+      //PandoraMonitoringApi::Pause(this->GetPandora());
       return false;
     }
     
     PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &testClusterList, stringTag, GREEN);
     PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &testLowerXEdge, "TEST", GREEN, 2);
-    return true;
+    
+    //PandoraMonitoringApi::Pause(this->GetPandora());
 
+    return true;
+    
 }
 
-  
-/*
+*/
+  /*
 StatusCode HitWidthClusterMergingAlgorithm::Run()
 {
   
@@ -169,69 +294,28 @@ StatusCode HitWidthClusterMergingAlgorithm::Run()
    
     PandoraMonitoringApi::Create(this->GetPandora());
     PandoraMonitoringApi::SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_XZ, -1.f, -1.f, 1.f);
-
+    
     ClusterList consideredClusters(clusterVector.begin(), clusterVector.end());
     
     PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &consideredClusters, "Considered Clusters", BLACK);
     PandoraMonitoringApi::Pause(this->GetPandora());
-
-
     
-    ClusterAssociationMap aMap;
-    this->PopulateClusterAssociationMap(clusterVector, aMap);
+    
+    //ClusterAssociationMap aMap;
+    //this->PopulateClusterAssociationMap(clusterVector, aMap);
     
     for(const Cluster *const pCluster : clusterVector) 
     {
-      
-      if (pCluster->GetNCaloHits() < m_minClusterHits)
-	 continue;
+      if(pCluster->GetNCaloHits() < 3)
+	continue;
         
-      //ClusterFitResult clusterFit;
-      //ClusterFitHelper::FitFullCluster(pCluster, clusterFit);
+      CartesianVector jam(GetClusterDirection(pCluster));
+      std::cout << jam << std::endl;
 
-      //CartesianVector clusterFitDirection = clusterFit.GetDirection();
-      //CartesianVector clusterFitIntercept = clusterFit.GetIntercept();
-      //float clusterFitGradient = (clusterFitDirection.GetZ()/clusterFitDirection.GetX());
-      //CartesianVector clusterFitZIntercept(0, 0, clusterFitIntercept.GetZ() - clusterFitGradient*clusterFitIntercept.GetX());
-      //CartesianVector clusterFitEndpoint(-400, 0, clusterFitGradient*(-400) + clusterFitZIntercept.GetZ());
-
-      
-      //std::cout << "Intercept: "  << clusterFitIntercept << std::endl;
-      //std::cout << "Endpoint: " << clusterDirection << std::endl;
-      
-      
-      //float gradient(0);
-      //float intercept(0);
-      //float chiSquared(0);
-
-      //GetWeightedGradient(pCluster, gradient, intercept, chiSquared);
-      //CartesianVector interceptPoint(0, 0, intercept);
-      //CartesianVector endpoint(-400, 0, gradient*(-400) + intercept);
-      
-
-      //PandoraMonitoringApi::AddLineToVisualization(this->GetPandora(), &clusterFitZIntercept, &clusterFitEndpoint, "Cluster Helper Fit", RED, 2, 2);
-      //PandoraMonitoringApi::AddLineToVisualization(this->GetPandora(), &interceptPoint, &endpoint, "Least Squares Fit", BLUE, 2, 2);
-      //PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &singleCluster, "A Cluster", BLACK);
-      //std::cout << "ChiSquared: " << chiSquared << std::endl;
-      //PandoraMonitoringApi::Pause(this->GetPandora());
-
-      //CartesianVector LSClusterFitDirection(0,0,0);
-      //float LSIntercept(0);
-      //GetClusterDirection(pCluster, LSClusterFitDirection);
-      //GetClusterZIntercept(pCluster, LSIntercept);
-
-      //float clusterFitGradient = (LSClusterFitDirection.GetZ()/LSClusterFitDirection.GetX());
-      //CartesianVector LSStartPoint(0, 0, LSIntercept);
-      //CartesianVector LSEndPoint(-400, 0, clusterFitGradient*(-400) + LSIntercept);
-
-      //PandoraMonitoringApi::AddLineToVisualization(this->GetPandora(), &LSStartPoint, &LSEndPoint, "CHECK", RED, 2, 2);
-
-      //PandoraMonitoringApi::Pause(this->GetPandora());
-      
     }
     
     
-      
+    
     
     for(ClusterVector::const_iterator currentIter = clusterVector.begin(); currentIter != clusterVector.end(); ++currentIter) {
 
@@ -269,12 +353,12 @@ StatusCode HitWidthClusterMergingAlgorithm::Run()
     //PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), pClusterList, "All Clusters", BLACK);
     //PandoraMonitoringApi::Pause(this->GetPandora());
 
-
+    
 
     return STATUS_CODE_SUCCESS;
   
 }
-*/
+  */
 
 void HitWidthClusterMergingAlgorithm::GetListOfCleanClusters(const ClusterList *const pClusterList, ClusterVector &clusterVector) const
 {
@@ -283,8 +367,8 @@ void HitWidthClusterMergingAlgorithm::GetListOfCleanClusters(const ClusterList *
 
     for (const Cluster *const pCluster : *pClusterList)
     {
-	if(GetTotalClusterWeight(pCluster) < m_minClusterWeight)
-	  continue;
+        if(GetTotalClusterWeight(pCluster) < m_minClusterWeight)
+            continue;
       
         clusterVector.push_back(pCluster);
     }
@@ -295,35 +379,15 @@ void HitWidthClusterMergingAlgorithm::GetListOfCleanClusters(const ClusterList *
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
+/*
+
 void HitWidthClusterMergingAlgorithm::PopulateClusterAssociationMap(const ClusterVector &clusterVector, ClusterAssociationMap &clusterAssociationMap) const
 {
 
     // ATTN This method assumes that clusters have been sorted by x position (low x -> high x)
     for (ClusterVector::const_iterator iterCurrentCluster = clusterVector.begin(); iterCurrentCluster != clusterVector.end(); ++iterCurrentCluster)
     {
-
         const Cluster *const pCurrentCluster = *iterCurrentCluster;
-
-        //ClusterList currentClusterList;
-        //currentClusterList.push_back(pCurrentCluster);
-        //PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &currentClusterList, "CURRENT", BLUE);
-
-        CartesianVector currentLowerXEdge(0,0,0);
-        CartesianVector currentUpperXEdge(0,0,0);
-            
-        GetExtremalCoordinates(pCurrentCluster, currentLowerXEdge, currentUpperXEdge);
-	
-        //CartesianVector mergeXDist(currentUpperXEdge.GetX() + m_maxXMergeDistance, 0, currentUpperXEdge.GetZ() - m_maxZMergeDistance);
-        //CartesianVector mergeZDist1(currentUpperXEdge.GetX(), 0, currentUpperXEdge.GetZ() + m_maxZMergeDistance);
-        //CartesianVector mergeZDist2(currentUpperXEdge.GetX(), 0, currentUpperXEdge.GetZ() - m_maxZMergeDistance);
-        //CartesianVector farPoint(currentUpperXEdge.GetX() + m_maxXMergeDistance, 0, currentUpperXEdge.GetZ() + m_maxZMergeDistance);
-
-        //PandoraMonitoringApi::AddLineToVisualization(this->GetPandora(), &mergeZDist2, &mergeZDist1, "1", RED, 2, 2);
-        //PandoraMonitoringApi::AddLineToVisualization(this->GetPandora(), &mergeZDist2, &mergeXDist, "2", RED, 2, 2);
-        //PandoraMonitoringApi::AddLineToVisualization(this->GetPandora(), &farPoint, &mergeZDist1, "3", RED, 2, 2);
-        //PandoraMonitoringApi::AddLineToVisualization(this->GetPandora(), &farPoint, &mergeXDist, "4", RED, 2, 2);
-
-	//PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &currentUpperXEdge, "Upper Coordinate", BLUE, 2);
 	
         for (ClusterVector::const_iterator iterTestCluster = iterCurrentCluster; iterTestCluster != clusterVector.end(); ++iterTestCluster)
         {
@@ -338,14 +402,11 @@ void HitWidthClusterMergingAlgorithm::PopulateClusterAssociationMap(const Cluste
             clusterAssociationMap[pCurrentCluster].m_forwardAssociations.insert(pTestCluster);
             clusterAssociationMap[pTestCluster].m_backwardAssociations.insert(pCurrentCluster);
         }
-
-	//PandoraMonitoringApi::ViewEvent(this->GetPandora()); 
-	
     }
 }
-
+*/
 //------------------------------------------------------------------------------------------------------------------------------------------
-
+/*
 bool HitWidthClusterMergingAlgorithm::IsExtremalCluster(const bool isForward, const Cluster *const pCurrentCluster,  const Cluster *const pTestCluster) const
 {
   
@@ -370,10 +431,10 @@ bool HitWidthClusterMergingAlgorithm::IsExtremalCluster(const bool isForward, co
 
 }
 
-
+*/
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-
+/*
   bool HitWidthClusterMergingAlgorithm::AreClustersAssociated(const Cluster *const pCurrentCluster, const Cluster *const pTestCluster) const
 {
 
@@ -391,13 +452,10 @@ bool HitWidthClusterMergingAlgorithm::IsExtremalCluster(const bool isForward, co
     //testClusterList.push_back(pTestCluster);
 
     
-    CartesianVector currentClusterDirection(0, 0, 0);
-    CartesianVector testClusterDirection(0, 0, 0);
-
-    GetClusterDirection(pCurrentCluster, currentClusterDirection);
-    GetClusterDirection(pTestCluster, testClusterDirection);
+    CartesianVector currentClusterDirection(GetClusterDirection(pCurrentCluster));
+    CartesianVector testClusterDirection(GetClusterDirection(pTestCluster));
     
-    //std::string stringTag = "TEST - " + std::to_string(fabs(currentClusterDirection.GetCosOpeningAngle(testClusterDirection)));
+    std::string stringTag = "TEST - " + std::to_string(fabs(currentClusterDirection.GetCosOpeningAngle(testClusterDirection)));
 
     if(testLowerXEdge.GetX() > (currentUpperXEdge.GetX() + m_maxXMergeDistance)) {  //|| testLowerXEdge.GetX() < (currentUpperXEdge.GetX() - m_maxXMergeDistance)) {
       //PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &testClusterList, "TEST - Outside X", RED);
@@ -422,42 +480,115 @@ bool HitWidthClusterMergingAlgorithm::IsExtremalCluster(const bool isForward, co
     return true;
 
 }
-
+*/
 //------------------------------------------------------------------------------------------------------------------------------------------
-
-void HitWidthClusterMergingAlgorithm::GetClusterDirection(const Cluster *const pCluster, CartesianVector &direction) const 
+/*
+CartesianVector HitWidthClusterMergingAlgorithm::GetClusterDirection(const Cluster *const pCluster) const 
 {
 
-    float gradient(0);
-    float intercept(0);
-    float chiSquared(0);
-    
-    GetWeightedGradient(pCluster, gradient, intercept, chiSquared);
+    CartesianVector LSTransverseClusterFitDirection(0,0,0);
+    CartesianVector LSTransverseIntercept(0,0,0);
+    float LSTransverseChiSquared(0);
+    CartesianVector LSLongitudinalClusterFitDirection(0,0,0);
+    CartesianVector LSLongitudinalIntercept(0,0,0);
+    float LSLongitudinalChiSquared(0);
+    GetWeightedGradient(pCluster, true, LSTransverseClusterFitDirection, LSTransverseIntercept, LSTransverseChiSquared);
 
-    float directionX = pow(1 + pow(gradient, 2), -0.5);
-    float directionZ = gradient * directionX;
+    if(pCluster->GetNCaloHits() == 1)
+        return LSTransverseClusterFitDirection;
     
-    direction = CartesianVector(directionX, 0, directionZ);
+    GetWeightedGradient(pCluster, false, LSLongitudinalClusterFitDirection, LSLongitudinalIntercept, LSLongitudinalChiSquared);
+    
+
+    
+    //CODE TO DRAW EACH OF THE FITS FOR THE CLUSTER
+
+    ClusterList singleCluster;
+    singleCluster.push_back(pCluster);
+    PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &singleCluster, "Cluster", BLACK);
+
+    ClusterFitResult clusterFit;
+    ClusterFitHelper::FitFullCluster(pCluster, clusterFit);
+
+    CartesianVector clusterFitDirection = clusterFit.GetDirection();
+    CartesianVector clusterFitIntercept = clusterFit.GetIntercept();
+
+    float clusterFitGradient = (clusterFitDirection.GetZ()/clusterFitDirection.GetX());
+    CartesianVector clusterFitZIntercept(0, 0, clusterFitIntercept.GetZ() - clusterFitGradient*clusterFitIntercept.GetX());
+    CartesianVector clusterFitEndpoint(-400, 0, clusterFitGradient*(-400) + clusterFitZIntercept.GetZ());
+    PandoraMonitoringApi::AddLineToVisualization(this->GetPandora(), &clusterFitZIntercept, &clusterFitEndpoint, "Cluster Helper Fit", RED, 2, 2);
+
+    std::cout << "Transverse Chi Squared: " << LSTransverseChiSquared << std::endl;
+    std::cout << "Longitudinal Chi Squared: " << LSLongitudinalChiSquared << std::endl;
+
+    if(LSTransverseChiSquared < LSLongitudinalChiSquared) {
+        float clusterTransverseFitGradient = (LSTransverseClusterFitDirection.GetZ()/LSTransverseClusterFitDirection.GetX());
+        CartesianVector LSTransverseStartPoint(LSTransverseIntercept);
+        CartesianVector LSTransverseEndPoint(-400, 0, clusterTransverseFitGradient*(-400) + LSTransverseIntercept.GetZ());
+        PandoraMonitoringApi::AddLineToVisualization(this->GetPandora(), &LSTransverseStartPoint, &LSTransverseEndPoint, "Transverse", BLUE, 2, 2);
+    } else {
+        float clusterLongitudinalFitGradient = (LSLongitudinalClusterFitDirection.GetZ()/LSLongitudinalClusterFitDirection.GetX());
+        CartesianVector LSLongitudinalStartPoint(LSLongitudinalIntercept);
+        CartesianVector LSLongitudinalEndPoint(-400, 0, clusterLongitudinalFitGradient*(-400) + LSLongitudinalIntercept.GetZ());
+        PandoraMonitoringApi::AddLineToVisualization(this->GetPandora(), &LSLongitudinalStartPoint, &LSLongitudinalEndPoint, "Longitudinal", DARKGREEN, 2, 2);
+    }
+
+    PandoraMonitoringApi::Pause(this->GetPandora());
+    
+
+    //std::cout << "Transverse Chi: " << LSTransverseChiSquared << std::endl;
+    //std::cout << "Longitudinal Chi: " << LSLongitudinalChiSquared << std::endl;
+  
+    if(LSTransverseChiSquared < LSLongitudinalChiSquared)
+      return LSTransverseClusterFitDirection;
+
+    return LSLongitudinalClusterFitDirection;
+
 }
-
+  */
 //------------------------------------------------------------------------------------------------------------------------------------------
-
-void HitWidthClusterMergingAlgorithm::GetClusterZIntercept(const Cluster *const pCluster, float &intercept) const
+/*
+CartesianVector HitWidthClusterMergingAlgorithm::GetClusterZIntercept(const Cluster *const pCluster) const
 {
-    float gradient(0);
-    float chiSquared(0);
-    
-    GetWeightedGradient(pCluster, gradient, intercept, chiSquared);
 
-    return;
+    CartesianVector LSTransverseClusterFitDirection(0,0,0);
+    CartesianVector LSTransverseIntercept(0,0,0);
+    float LSTransverseChiSquared(0);
+    CartesianVector LSLongitudinalClusterFitDirection(0,0,0);
+    CartesianVector LSLongitudinalIntercept(0,0,0);
+    float LSLongitudinalChiSquared(0);
+    GetWeightedGradient(pCluster, true, LSTransverseClusterFitDirection, LSTransverseIntercept, LSTransverseChiSquared);
+    GetWeightedGradient(pCluster, false, LSLongitudinalClusterFitDirection, LSLongitudinalIntercept, LSLongitudinalChiSquared);
+
+    if(LSTransverseChiSquared < LSLongitudinalChiSquared)
+      return LSTransverseIntercept;
+
+    return LSLongitudinalIntercept;
 
 }
-
+*/
 //------------------------------------------------------------------------------------------------------------------------------------------
+/*
 
-
-void HitWidthClusterMergingAlgorithm::GetWeightedGradient(const Cluster *const pCluster, float &gradient, float &intercept, float &chiSquared) const
+  void HitWidthClusterMergingAlgorithm::GetWeightedGradient(const Cluster *const pCluster, bool isTransverse, CartesianVector &direction, CartesianVector &intercept, float &chiSquared) const
 {
+
+    if(!isTransverse && pCluster->GetNCaloHits() == 1) 
+    {
+      std::cout << "WARNING - CANNOT MAKE LONGITUDINAL FIT TO SINGLE HIT CLUSTER" << std::endl;
+      return;
+    }
+
+    if(pCluster->GetNCaloHits() == 1) 
+    {
+
+      const CaloHit *const pCaloHit(pCluster->GetOrderedCaloHitList().begin()->second->front());
+
+      direction = CartesianVector(1, 0, 0);
+      intercept = CartesianVector(0, 0, pCaloHit->GetPositionVector().GetZ());
+      chiSquared = 0;
+      return;
+    }
 
     OrderedCaloHitList orderedCaloHitList = pCluster->GetOrderedCaloHitList();
 
@@ -470,11 +601,12 @@ void HitWidthClusterMergingAlgorithm::GetWeightedGradient(const Cluster *const p
     {
         for(CaloHitList::const_iterator hitIter = iter->second->begin(); hitIter != iter->second->end(); ++hitIter) 
         {
-
 	    const CaloHit *const hit = (*hitIter);
 
 	    float hitWidth = hit->GetCellSize1();
-
+	    //float hitWidth = 0.5;
+	    //std::cout << "Width: " << hit->GetCellSize1() << std::endl;
+	    //float hitWeight = 1;
 	    float hitWeight = hitWidth;
 
 	    //unsigned int numberOfConstituentHits = 1;
@@ -482,15 +614,17 @@ void HitWidthClusterMergingAlgorithm::GetWeightedGradient(const Cluster *const p
             float constituentHitWidth = hitWidth/numberOfConstituentHits;
 	    float constituentHitWeight = hitWeight/numberOfConstituentHits;
 
+	    //std::cout << "Total hit weight: " << hitWeight << std::endl; 
+	    //std::cout << "Number of constituents: " << numberOfConstituentHits << std::endl;
+	    //std::cout << "Constituent hit weight: " << constituentHitWeight << std::endl;
+
+	    //std::cout << "Hit center: " << hit->GetPositionVector().GetX() << ", " << hit->GetPositionVector().GetY() << ", " << hit->GetPositionVector().GetZ() << std::endl;
+
 	    float xPositionAlongHit(hit->GetPositionVector().GetX() - (hitWidth/2));
 	    for(unsigned int i(0); i < numberOfConstituentHits; ++i) 
 	    {
                 i == 0 ? xPositionAlongHit += constituentHitWidth/2 : xPositionAlongHit += constituentHitWidth;
-		
 		weightedXSum += xPositionAlongHit*constituentHitWeight;
-
-		//CartesianVector positionVector(xPositionAlongHit, 0, hit->GetPositionVector().GetZ());
-                //PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &positionVector, "Constituent Hit Centre", DARKGREEN, 2);
 	    }
 
 	    weightedZSum += hit->GetPositionVector().GetZ() * hitWeight;
@@ -501,19 +635,131 @@ void HitWidthClusterMergingAlgorithm::GetWeightedGradient(const Cluster *const p
     float weightedXMean(weightedXSum/weightSum);
     float weightedZMean(weightedZSum/weightSum); 
 
+    //std::cout << "WeightedX Mean: " << weightedXMean << std::endl;
+    //std::cout << "WeightedZ Mean: " << weightedZMean << std::endl;
 
     float numerator(0);
     float denominator(0);
+    float chi(0);
 
     for(OrderedCaloHitList::const_iterator iter = orderedCaloHitList.begin(); iter !=  orderedCaloHitList.end(); ++iter) 
     {
         for(CaloHitList::const_iterator hitIter = iter->second->begin(); hitIter != iter->second->end(); ++hitIter) 
         {
-
 	    const CaloHit *const hit = (*hitIter);
 
 	    float hitWidth = hit->GetCellSize1();
+	    //float hitWidth = 0.5;
+	    //float hitWeight = 1;
+	    float hitWeight = hitWidth;
 
+	    //unsigned int numberOfConstituentHits = 1;
+	    unsigned int numberOfConstituentHits = floor(hitWidth/hit->GetCellSize0()) + 1;
+            float constituentHitWidth = hitWidth/numberOfConstituentHits;
+	    float constituentHitWeight = hitWeight/numberOfConstituentHits;
+
+	    //std::cout << "Total hit weight: " << hitWeight << std::endl; 
+	    //std::cout << "Number of constituents: " << numberOfConstituentHits << std::endl;
+	    //std::cout << "Constituent hit weight: " << constituentHitWeight << std::endl;
+            //std::cout << "Hit center: " << hit->GetPositionVector().GetX() << ", " << hit->GetPositionVector().GetY() << ", " << hit->GetPositionVector().GetZ() << std::endl;
+	    
+	    float xPositionAlongHit(hit->GetPositionVector().GetX() - (hitWidth/2));
+	    for(unsigned int i(0); i < numberOfConstituentHits; ++i) 
+	    {
+                i == 0 ? xPositionAlongHit += constituentHitWidth/2 : xPositionAlongHit += constituentHitWidth;
+		numerator += constituentHitWeight*(xPositionAlongHit - weightedXMean)*(hit->GetPositionVector().GetZ() - weightedZMean);
+		isTransverse ? denominator += constituentHitWeight*pow(xPositionAlongHit - weightedXMean, 2) : denominator += constituentHitWeight*pow(hit->GetPositionVector().GetZ() - weightedZMean, 2);
+	    }
+	}
+    }
+
+    float gradient = numerator/denominator;
+    isTransverse ? intercept.SetValues(0, 0, weightedZMean - gradient*weightedXMean) : intercept.SetValues(weightedXMean - gradient*weightedZMean, 0, 0);
+
+    //std::cout << "Gradient: " << gradient << std::endl;
+    //std::cout << "Intercept: " << intercept << std::endl;
+
+   for(OrderedCaloHitList::const_iterator iter = orderedCaloHitList.begin(); iter !=  orderedCaloHitList.end(); ++iter) 
+    {
+        for(CaloHitList::const_iterator hitIter = iter->second->begin(); hitIter != iter->second->end(); ++hitIter) 
+        {
+	    const CaloHit *const hit = (*hitIter);
+
+	    float hitWidth = hit->GetCellSize1();
+	    //float hitWidth = 0.5;
+	    //float hitWeight = 1;
+	    float hitWeight = hitWidth;
+
+	    //unsigned int numberOfConstituentHits = 1;
+	    unsigned int numberOfConstituentHits = floor(hitWidth/hit->GetCellSize0()) + 1;
+            float constituentHitWidth = hitWidth/numberOfConstituentHits;
+	    float constituentHitWeight = hitWeight/numberOfConstituentHits;
+	    
+	    float xPositionAlongHit(hit->GetPositionVector().GetX() - (hitWidth/2));
+	    for(unsigned int i(0); i < numberOfConstituentHits; ++i) 
+	    {
+                i == 0 ? xPositionAlongHit += constituentHitWidth/2 : xPositionAlongHit += constituentHitWidth;
+		isTransverse ? chi += constituentHitWeight*pow(hit->GetPositionVector().GetZ() - intercept.GetZ() - gradient*xPositionAlongHit , 2) : chi += constituentHitWeight*pow(xPositionAlongHit - intercept.GetX() - gradient*hit->GetPositionVector().GetZ(), 2);
+	    }
+	}
+    }
+
+   //std::cout << "Gradient: " << gradient << std::endl;
+   //std::cout << "intercept: " << intercept << std::endl;
+   
+   isTransverse? direction = CartesianVector(1.0, 0, gradient).GetUnitVector() : direction = CartesianVector(gradient, 0, 1.0).GetUnitVector();
+
+   if(!isTransverse)
+     intercept.SetValues(0, 0, -intercept.GetX()/gradient);
+
+   chiSquared = chi;
+
+
+    return;
+
+}
+*/
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+/*
+
+  void HitWidthClusterMergingAlgorithm::GetWeightedSubGradient(const Cluster *const pCluster, bool isTransverse, bool isCurrent, unsigned int numFittingPoints, CartesianVector &direction, float &chiSquared) const
+{
+
+    if(!isTransverse && pCluster->GetNCaloHits() == 1) 
+    {
+      std::cout << "WARNING - CANNOT MAKE LONGITUDINAL FIT TO SINGLE HIT CLUSTER" << std::endl;
+      return;
+    }
+
+    if(pCluster->GetNCaloHits() == 1) 
+    {
+      const CaloHit *const pCaloHit(pCluster->GetOrderedCaloHitList().begin()->second->front());
+
+      direction = CartesianVector(1, 0, 0);
+      chiSquared = 0;
+      return;
+    }
+
+    OrderedCaloHitList orderedCaloHitList = pCluster->GetOrderedCaloHitList();
+    CartesianVector lowerXExtrema(0, 0, 0);
+    CartesianVector higherXExrema(0, 0, 0);
+
+    GetExtremalCoordinates(pCluster, lowerXExtrema, higherXExrema);
+
+    isCurrent ? m_sortReferencePoint =  higherXExrema: m_sortReferencePoint = lowerXExtrema;
+
+    PositionToWeightMap clusterSubHits;
+
+    for(OrderedCaloHitList::const_iterator iter = orderedCaloHitList.begin(); iter !=  orderedCaloHitList.end(); ++iter) 
+    {
+        for(CaloHitList::const_iterator hitIter = iter->second->begin(); hitIter != iter->second->end(); ++hitIter) 
+        {
+	    const CaloHit *const hit = (*hitIter);
+
+	    float hitWidth = hit->GetCellSize1();
+	    //std::cout << "Width: " << hit->GetCellSize1() << std::endl;
+	    //float hitWeight = 1;
 	    float hitWeight = hitWidth;
 
 	    //unsigned int numberOfConstituentHits = 1;
@@ -521,33 +767,184 @@ void HitWidthClusterMergingAlgorithm::GetWeightedGradient(const Cluster *const p
             float constituentHitWidth = hitWidth/numberOfConstituentHits;
 	    float constituentHitWeight = hitWeight/numberOfConstituentHits;
 
+	    //std::cout << "Total hit weight: " << hitWeight << std::endl; 
+	    //std::cout << "Number of constituents: " << numberOfConstituentHits << std::endl;
+	    //std::cout << "Constituent hit weight: " << constituentHitWeight << std::endl;
+
+	    //std::cout << "Hit center: " << hit->GetPositionVector().GetX() << ", " << hit->GetPositionVector().GetY() << ", " << hit->GetPositionVector().GetZ() << std::endl;
+
 	    float xPositionAlongHit(hit->GetPositionVector().GetX() - (hitWidth/2));
 	    for(unsigned int i(0); i < numberOfConstituentHits; ++i) 
 	    {
                 i == 0 ? xPositionAlongHit += constituentHitWidth/2 : xPositionAlongHit += constituentHitWidth;
-		
-		numerator += constituentHitWeight*(xPositionAlongHit - weightedXMean)*(hit->GetPositionVector().GetZ() - weightedZMean);
-		denominator += constituentHitWeight*pow(xPositionAlongHit - weightedXMean, 2); 
-
-		//CartesianVector positionVector(xPositionAlongHit, 0, hit->GetPositionVector().GetZ());
-                //PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &positionVector, "Constituent Hit Centre", DARKGREEN, 2);
+		clusterSubHitPositions.insert(std::pair(CartesianVector(xPositionAlongHit, 0, hit.GetZ()), constituentHitWeight));
 	    }
+
 	}
-
-	gradient = numerator/denominator;
-        intercept = weightedZMean - gradient*weightedXMean;
-
     }
 
 
-    chiSquared = 0;
+    /
+    float weightSum(0);
+    float weightedXSum(0);
+    float weightedZSum(0);
+
+    // Loop through hits in cluster to find the weighted x sum and weighted z sum of hits
+    for(OrderedCaloHitList::const_iterator iter = orderedCaloHitList.begin(); iter !=  orderedCaloHitList.end(); ++iter) 
+    {
+        for(CaloHitList::const_iterator hitIter = iter->second->begin(); hitIter != iter->second->end(); ++hitIter) 
+        {
+	    const CaloHit *const hit = (*hitIter);
+
+	    float hitWidth = hit->GetCellSize1();
+	    //float hitWidth = 0.5;
+	    //std::cout << "Width: " << hit->GetCellSize1() << std::endl;
+	    //float hitWeight = 1;
+	    float hitWeight = hitWidth;
+
+	    //unsigned int numberOfConstituentHits = 1;
+            unsigned int numberOfConstituentHits = floor(hitWidth/hit->GetCellSize0()) + 1;
+            float constituentHitWidth = hitWidth/numberOfConstituentHits;
+	    float constituentHitWeight = hitWeight/numberOfConstituentHits;
+
+	    //std::cout << "Total hit weight: " << hitWeight << std::endl; 
+	    //std::cout << "Number of constituents: " << numberOfConstituentHits << std::endl;
+	    //std::cout << "Constituent hit weight: " << constituentHitWeight << std::endl;
+
+	    //std::cout << "Hit center: " << hit->GetPositionVector().GetX() << ", " << hit->GetPositionVector().GetY() << ", " << hit->GetPositionVector().GetZ() << std::endl;
+
+	    float xPositionAlongHit(hit->GetPositionVector().GetX() - (hitWidth/2));
+	    for(unsigned int i(0); i < numberOfConstituentHits; ++i) 
+	    {
+                i == 0 ? xPositionAlongHit += constituentHitWidth/2 : xPositionAlongHit += constituentHitWidth;
+		weightedXSum += xPositionAlongHit*constituentHitWeight;
+	    }
+
+	    weightedZSum += hit->GetPositionVector().GetZ() * hitWeight;
+	    weightSum += hitWeight;
+	}
+    }
+
+    float weightedXMean(weightedXSum/weightSum);
+    float weightedZMean(weightedZSum/weightSum); 
+
+    //std::cout << "WeightedX Mean: " << weightedXMean << std::endl;
+    //std::cout << "WeightedZ Mean: " << weightedZMean << std::endl;
+
+    float numerator(0);
+    float denominator(0);
+    float chi(0);
+
+    for(OrderedCaloHitList::const_iterator iter = orderedCaloHitList.begin(); iter !=  orderedCaloHitList.end(); ++iter) 
+    {
+        for(CaloHitList::const_iterator hitIter = iter->second->begin(); hitIter != iter->second->end(); ++hitIter) 
+        {
+	    const CaloHit *const hit = (*hitIter);
+
+	    float hitWidth = hit->GetCellSize1();
+	    //float hitWidth = 0.5;
+	    //float hitWeight = 1;
+	    float hitWeight = hitWidth;
+
+	    //unsigned int numberOfConstituentHits = 1;
+	    unsigned int numberOfConstituentHits = floor(hitWidth/hit->GetCellSize0()) + 1;
+            float constituentHitWidth = hitWidth/numberOfConstituentHits;
+	    float constituentHitWeight = hitWeight/numberOfConstituentHits;
+
+	    //std::cout << "Total hit weight: " << hitWeight << std::endl; 
+	    //std::cout << "Number of constituents: " << numberOfConstituentHits << std::endl;
+	    //std::cout << "Constituent hit weight: " << constituentHitWeight << std::endl;
+            //std::cout << "Hit center: " << hit->GetPositionVector().GetX() << ", " << hit->GetPositionVector().GetY() << ", " << hit->GetPositionVector().GetZ() << std::endl;
+	    
+	    float xPositionAlongHit(hit->GetPositionVector().GetX() - (hitWidth/2));
+	    for(unsigned int i(0); i < numberOfConstituentHits; ++i) 
+	    {
+                i == 0 ? xPositionAlongHit += constituentHitWidth/2 : xPositionAlongHit += constituentHitWidth;
+		numerator += constituentHitWeight*(xPositionAlongHit - weightedXMean)*(hit->GetPositionVector().GetZ() - weightedZMean);
+		isTransverse ? denominator += constituentHitWeight*pow(xPositionAlongHit - weightedXMean, 2) : denominator += constituentHitWeight*pow(hit->GetPositionVector().GetZ() - weightedZMean, 2);
+	    }
+	}
+    }
+
+    float gradient = numerator/denominator;
+    isTransverse ? intercept.SetValues(0, 0, weightedZMean - gradient*weightedXMean) : intercept.SetValues(weightedXMean - gradient*weightedZMean, 0, 0);
+
+    //std::cout << "Gradient: " << gradient << std::endl;
+    //std::cout << "Intercept: " << intercept << std::endl;
+
+   for(OrderedCaloHitList::const_iterator iter = orderedCaloHitList.begin(); iter !=  orderedCaloHitList.end(); ++iter) 
+    {
+        for(CaloHitList::const_iterator hitIter = iter->second->begin(); hitIter != iter->second->end(); ++hitIter) 
+        {
+	    const CaloHit *const hit = (*hitIter);
+
+	    float hitWidth = hit->GetCellSize1();
+	    //float hitWidth = 0.5;
+	    //float hitWeight = 1;
+	    float hitWeight = hitWidth;
+
+	    //unsigned int numberOfConstituentHits = 1;
+	    unsigned int numberOfConstituentHits = floor(hitWidth/hit->GetCellSize0()) + 1;
+            float constituentHitWidth = hitWidth/numberOfConstituentHits;
+	    float constituentHitWeight = hitWeight/numberOfConstituentHits;
+	    
+	    float xPositionAlongHit(hit->GetPositionVector().GetX() - (hitWidth/2));
+	    for(unsigned int i(0); i < numberOfConstituentHits; ++i) 
+	    {
+                i == 0 ? xPositionAlongHit += constituentHitWidth/2 : xPositionAlongHit += constituentHitWidth;
+		isTransverse ? chi += constituentHitWeight*pow(hit->GetPositionVector().GetZ() - intercept.GetZ() - gradient*xPositionAlongHit , 2) : chi += constituentHitWeight*pow(xPositionAlongHit - intercept.GetX() - gradient*hit->GetPositionVector().GetZ(), 2);
+	    }
+	}
+    }
+
+   //std::cout << "Gradient: " << gradient << std::endl;
+   //std::cout << "intercept: " << intercept << std::endl;
+   
+   isTransverse? direction = CartesianVector(1.0, 0, gradient).GetUnitVector() : direction = CartesianVector(gradient, 0, 1.0).GetUnitVector();
+
+   if(!isTransverse)
+     intercept.SetValues(0, 0, -intercept.GetX()/gradient);
+
+   chiSquared = chi;
+
 
     return;
 
 }
 
-
+*/
   
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+CartesianVector HitWidthClusterMergingAlgorithm::GetExtremalCoordinatesLowerX(const Cluster *const pCluster) 
+{
+
+
+  CartesianVector lowerXCoordinate(0,0,0);
+  CartesianVector higherXCoordinate(0,0,0);
+
+  GetExtremalCoordinates(pCluster, lowerXCoordinate, higherXCoordinate);
+
+  return lowerXCoordinate;
+
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+CartesianVector HitWidthClusterMergingAlgorithm::GetExtremalCoordinatesHigherX(const Cluster *const pCluster) 
+{
+
+
+  CartesianVector lowerXCoordinate(0,0,0);
+  CartesianVector higherXCoordinate(0,0,0);
+
+  GetExtremalCoordinates(pCluster, lowerXCoordinate, higherXCoordinate);
+
+  return higherXCoordinate;
+
+}
+
+
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 //SHOULD REALLY BE IN A HELPER CLASS
@@ -594,6 +991,8 @@ void HitWidthClusterMergingAlgorithm::GetExtremalCoordinates(const OrderedCaloHi
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
+
+
 
 //SHOULD REALLY BE IN A HELPER CLASS
 void HitWidthClusterMergingAlgorithm::GetExtremalCoordinates(const CartesianPointVector &coordinateVector, CartesianVector &lowerXCoordinate, CartesianVector &higherXCoordinate)
@@ -804,7 +1203,7 @@ float HitWidthClusterMergingAlgorithm::GetTotalClusterWeight(const Cluster *cons
   
     const OrderedCaloHitList &orderedCaloHitList(pCluster->GetOrderedCaloHitList());
 
-    float hitWeight(0);
+    float hitWeight(0.0);
     
     for (OrderedCaloHitList::const_iterator iter = orderedCaloHitList.begin(); iter != orderedCaloHitList.end(); ++iter)
     {
@@ -842,75 +1241,3 @@ StatusCode HitWidthClusterMergingAlgorithm::ReadSettings(const TiXmlHandle xmlHa
 } // namespace lar_content
 
 
-
-
-/*
-
-
-
-   for(OrderedCaloHitList::const_iterator iter = orderedCaloHitList.begin(); iter !=  orderedCaloHitList.end(); ++iter) 
-    {
-        for(CaloHitList::const_iterator hitIter = iter->second->begin(); hitIter != iter->second->end(); ++hitIter) 
-        {
-
-	    float hitWidth = (*hitIter)->GetCellSize1();
-	    float hitWeight = hitWidth;
-
-	    std::cout << "Hit Width: " << hitWidth << std::endl;
-	    std::cout << "CellSize0: " << (*hitIter)->GetCellSize0() << std::endl;
-
-            widthSum += hitWidth;
-
-            sumX += ((*hitIter)->GetPositionVector().GetX() - (hitWidth/2))*(hitWeight/3);
-	    sumX += ((*hitIter)->GetPositionVector().GetX())*(hitWeight/3);
-            sumX += ((*hitIter)->GetPositionVector().GetX() + (hitWidth/2))*(hitWeight/3);
-
-            sumZ += ((*hitIter)->GetPositionVector().GetZ())*hitWeight;
-	}
-    }
-
-    float meanX(sumX/widthSum);
-    float meanZ(sumZ/widthSum);
-
-    float numerator(0);
-    float denominator(0);
-
-    for(OrderedCaloHitList::const_iterator iter = orderedCaloHitList.begin(); iter !=  orderedCaloHitList.end(); ++iter) 
-    {
-        for(CaloHitList::const_iterator hitIter = iter->second->begin(); hitIter != iter->second->end(); ++hitIter) 
-        {
-	    float hitWidth = (*hitIter)->GetCellSize1();
-            float hitWeight = hitWidth;
-
-	    numerator += (((*hitIter)->GetPositionVector().GetX() - (hitWidth/2)) - meanX) * ((*hitIter)->GetPositionVector().GetZ() - meanZ) * (hitWeight/3);
-	    numerator += (((*hitIter)->GetPositionVector().GetX() + (hitWidth/2)) - meanX) * ((*hitIter)->GetPositionVector().GetZ() - meanZ) * (hitWeight/3);
-	    numerator += (((*hitIter)->GetPositionVector().GetX()) - meanX) * ((*hitIter)->GetPositionVector().GetZ() - meanZ) * (hitWeight/3);
-
-	    denominator += (hitWeight/3)*pow((*hitIter)->GetPositionVector().GetX() - meanX, 2);
-	    denominator += (hitWeight/3)*pow((*hitIter)->GetPositionVector().GetX() - (hitWidth/2) - meanX, 2);
-	    denominator += (hitWeight/3)*pow((*hitIter)->GetPositionVector().GetX() + (hitWidth/2) - meanX, 2);
-	}
-    }
-
-    gradient = numerator/denominator;
-
-    intercept = meanZ - gradient*meanX;
-
-
-    for(OrderedCaloHitList::const_iterator iter = orderedCaloHitList.begin(); iter !=  orderedCaloHitList.end(); ++iter) 
-    {
-        for(CaloHitList::const_iterator hitIter = iter->second->begin(); hitIter != iter->second->end(); ++hitIter) 
-        {
-	    float hitWidth = (*hitIter)->GetCellSize1();
-            float hitWeight = hitWidth;
-
-	    chiSquared += (hitWeight/3) * pow((*hitIter)->GetPositionVector().GetZ() - intercept - gradient*((*hitIter)->GetPositionVector().GetX() + hitWidth/2), 2);
-	    chiSquared += (hitWeight/3) * pow((*hitIter)->GetPositionVector().GetZ() - intercept - gradient*((*hitIter)->GetPositionVector().GetX() - hitWidth/2), 2);
-	    chiSquared += (hitWeight/3) * pow((*hitIter)->GetPositionVector().GetZ() - intercept - gradient*((*hitIter)->GetPositionVector().GetX()), 2);
-
-	}
-    }
-
-
-
- */
