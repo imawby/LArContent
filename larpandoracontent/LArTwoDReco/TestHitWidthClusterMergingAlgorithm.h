@@ -1,13 +1,13 @@
 /**
- *  @file   HitWidthClusterMergingAlgorithm.h
+ *  @file   TestHitWidthClusterMergingAlgorithm.h
  *
  *  @brief  Header file for the hit width cluster merging algorithm class.
  *
  *  $Log: $
  */
 
-#ifndef LAR_HIT_WIDTH_CLUSTER_MERGING_ALGORITHM_H
-#define LAR_HIT_WIDTH_CLUSTER_MERGING_ALGORITHM_H 1
+#ifndef LAR_TEST_HIT_WIDTH_CLUSTER_MERGING_ALGORITHM_H
+#define LAR_TEST_HIT_WIDTH_CLUSTER_MERGING_ALGORITHM_H 1
 
 #include "Pandora/Algorithm.h"
 
@@ -19,9 +19,9 @@ namespace lar_content
 
 
 /**
- *  @brief HitWidthClusterMergingAlgorithm class
+ *  @brief TestHitWidthClusterMergingAlgorithm class
  */
-  class HitWidthClusterMergingAlgorithm : public ClusterAssociationAlgorithm
+  class TestHitWidthClusterMergingAlgorithm : public ClusterAssociationAlgorithm
 {
 
 public:
@@ -29,7 +29,7 @@ public:
     /**
      *  @brief  Default constructor
      */
-    HitWidthClusterMergingAlgorithm();
+    TestHitWidthClusterMergingAlgorithm();
 
 
     class ClusterFitParameters
@@ -70,6 +70,8 @@ public:
 
     };
 
+
+
     typedef std::unordered_map<const pandora::Cluster*, const ClusterFitParameters> ClusterToFitParametersMap;
 
 private:
@@ -77,7 +79,7 @@ private:
   //void GetWeightedSubGradient(const pandora::Cluster *const pCluster, bool isTransverse, bool isCurrent, unsigned int numFittingPoints, pandora::CartesianVector &direction, float &chiSquared) const;
 
 
-  //pandora::StatusCode Run();
+  pandora::StatusCode Run();
   
   void TestPopulateClusterAssociationMap(const pandora::ClusterVector &clusterVector, ClusterAssociationMap &clusterAssociationMap) const;
 
@@ -96,14 +98,7 @@ private:
   pandora::CartesianVector GetClusterDirection(const ClusterFitParameters::ClusterPositionToWeightMap &clusterPositionToWeightMap, unsigned int clusterCaloHits) const;
 
   pandora::CartesianVector GetClusterZIntercept(const ClusterFitParameters::ClusterPositionToWeightMap &clusterPositionToWeightMap, unsigned int clusterCaloHits) const;
-
-  void GetWeightedSubGradient(const ClusterFitParameters::ClusterPositionToWeightMap &clusterPositionToWeightMap, bool isTransverse, pandora::CartesianVector &direction, pandora::CartesianVector &intercept, float &chiSquared, float clusterCaloHits) const;
-
-  pandora::CartesianVector GetClusterEndDirection(const ClusterFitParameters::ClusterPositionToWeightMap &clusterPositionToWeightMap, unsigned int clusterCaloHits) const;
-
-  pandora::CartesianVector GetClusterEndZIntercept(const ClusterFitParameters::ClusterPositionToWeightMap &clusterPositionToWeightMap, unsigned int clusterCaloHits) const;
-  
-  void FillPositionToWeightMap(const pandora::Cluster *const pCluster, ClusterFitParameters::ClusterPositionToWeightMap &clusterPositionToWeightMap) const;
+ 
   
   //THESE REALLY BELONG IN THE HELPER CLASS
 
@@ -138,10 +133,10 @@ private:
 
   float m_fittingSampleWeight;
 
-  ClusterToFitParametersMap m_clusterToFitParametersMap;
+
 
 };
 
 } //namespace lar_content
 
-#endif //LAR_HIT_WIDTH_CLUSTER_MERGING_ALGORITHM_H
+#endif //LAR_TEST_HIT_WIDTH_CLUSTER_MERGING_ALGORITHM_H

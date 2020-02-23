@@ -170,6 +170,7 @@
 
 #include "larpandoracontent/LArTwoDReco/TwoDParticleCreationAlgorithm.h"
 #include "larpandoracontent/LArTwoDReco/HitWidthClusterMergingAlgorithm.h"
+#include "larpandoracontent/LArTwoDReco/TestHitWidthClusterMergingAlgorithm.h"
 
 #include "larpandoracontent/LArUtility/ListChangingAlgorithm.h"
 #include "larpandoracontent/LArUtility/ListDeletionAlgorithm.h"
@@ -185,6 +186,7 @@
  
 #define LAR_ALGORITHM_LIST(d)                                                                                                   \
     d("LArHitWidthClusterMerging",              HitWidthClusterMergingAlgorithm)                                                \
+    d("LArTestHitWidthClusterMerging",              TestHitWidthClusterMergingAlgorithm)                                                \
     d("LArNeutrinoEventValidation",             NeutrinoEventValidationAlgorithm)                                               \
     d("LArTestBeamEventValidation",             TestBeamEventValidationAlgorithm)                                               \
     d("LArTestBeamHierarchyEventValidation",    TestBeamHierarchyEventValidationAlgorithm)                                      \

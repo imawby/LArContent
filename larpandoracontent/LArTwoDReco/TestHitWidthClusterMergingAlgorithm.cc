@@ -8,7 +8,7 @@
 
 #include "Pandora/AlgorithmHeaders.h"
 
-#include "larpandoracontent/LArTwoDReco/HitWidthClusterMergingAlgorithm.h"
+#include "larpandoracontent/LArTwoDReco/TestHitWidthClusterMergingAlgorithm.h"
 #include "larpandoracontent/LArHelpers/LArClusterHelper.h"
 #include "Helpers/ClusterFitHelper.h"
 
@@ -17,7 +17,7 @@ using namespace pandora;
 namespace lar_content
 {
 
-  HitWidthClusterMergingAlgorithm::ClusterFitParameters::ClusterFitParameters(const pandora::Cluster *const pCluster) :
+  TestHitWidthClusterMergingAlgorithm::ClusterFitParameters::ClusterFitParameters(const pandora::Cluster *const pCluster) :
     m_numCaloHits(pCluster->GetNCaloHits()), 
     m_totalWeight(GetTotalClusterWeight(pCluster)),
     m_lowerXExtrema(GetExtremalCoordinatesLowerX(pCluster)), //sadly this means that the cluster break up has to be repeated
@@ -56,20 +56,187 @@ namespace lar_content
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-HitWidthClusterMergingAlgorithm::HitWidthClusterMergingAlgorithm() :
+TestHitWidthClusterMergingAlgorithm::TestHitWidthClusterMergingAlgorithm() :
   m_clusterListName(),
   m_minClusterWeight(0),        //ATTN - THIS HAS PROBABLY BEEN TUNED IN THE XML FILE
   m_maxXMergeDistance(0),       //ATTN - THIS HAS PROBABLY BEEN TUNED IN THE XML FILE
   m_maxZMergeDistance(0),       //ATTN - THIS HAS PROBABLY BEEN TUNED IN THE XML FILE
   m_maxMergeCosOpeningAngle(0), //ATTN - THIS HAS PROBABLY BEEN TUNED IN THE XML FILE
-  m_fittingSampleWeight(100),       //ATTN - THIS HAS PROBABLY BEEN TUNED IN THE XML FILE
-  m_clusterToFitParametersMap()
+  m_fittingSampleWeight(100)       //ATTN - THIS HAS PROBABLY BEEN TUNED IN THE XML FILE
 {
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
+/*
+  StatusCode TestHitWidthClusterMergingAlgorithm::Run(){
 
-void HitWidthClusterMergingAlgorithm::TestPopulateClusterAssociationMap(const ClusterVector &clusterVector, ClusterAssociationMap &clusterAssociationMap) const
+    const ClusterList *pClusterList = NULL;
+    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetList(*this, m_clusterListName, pClusterList));
+
+    ClusterVector clusterVector;
+    GetListOfCleanClusters(pClusterList, clusterVector);
+
+    
+    // Fill cluster fit map 
+    ClusterToFitParametersMap clusterToFitParametersMap;
+
+    for(const Cluster *const pCluster : clusterVector) 
+    {
+      clusterToFitParametersMap.insert(std::pair(pCluster, ClusterFitParameters(pCluster)));
+    }
+
+
+    PandoraMonitoringApi::Create(this->GetPandora());
+    PandoraMonitoringApi::SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_XZ, -1.f, -1.f, 1.f);
+
+    for(auto entry: clusterToFitParametersMap){
+
+      ClusterList aCluster;
+      aCluster.push_back(entry.first);
+
+      PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &aCluster, "A Cluster", BLACK);
+
+      std::cout << "Current: " << std::endl;
+
+      for(auto iter = entry.second.m_currentClusterPositionToWeightMap.begin(); iter != entry.second.m_currentClusterPositionToWeightMap.end(); ++iter) {
+
+	const CartesianVector pos = iter->first;
+
+	PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &pos, "POINT", RED, 2);
+	PandoraMonitoringApi::Pause(this->GetPandora());
+
+      }
+
+      PandoraMonitoringApi::Pause(this->GetPandora());
+
+
+      std::cout << "Test: " << std::endl;
+
+      for(auto iter = entry.second.m_testClusterPositionToWeightMap.begin(); iter != entry.second.m_testClusterPositionToWeightMap.end(); ++iter) {
+
+	const CartesianVector pos = iter->first;
+
+	PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &pos, "POINT", BLUE, 2);
+	PandoraMonitoringApi::Pause(this->GetPandora());
+
+      }
+
+      PandoraMonitoringApi::Pause(this->GetPandora());
+
+    }
+
+
+   
+    return STATUS_CODE_SUCCESS;
+
+  } 
+*/
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+/*
+StatusCode TestHitWidthClusterMergingAlgorithm::Run()
+{
+
+    const ClusterList *pClusterList = NULL;
+    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetList(*this, m_clusterListName, pClusterList));
+
+    ClusterVector clusterVector;
+    GetListOfCleanClusters(pClusterList, clusterVector);
+    
+    PandoraMonitoringApi::Create(this->GetPandora());
+    PandoraMonitoringApi::SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_XZ, -1.f, -1.f, 1.f);
+
+    //ClusterList consideredClusters(clusterVector.begin(), clusterVector.end());
+    //PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &consideredClusters, "Considered Clusters", BLACK);
+
+    // Fill cluster fit map 
+    ClusterToFitParametersMap clusterToFitParametersMap;
+    for(const Cluster *const pCluster : clusterVector) 
+    {
+        if(!clusterToFitParametersMap.insert(std::pair(pCluster, ClusterFitParameters(pCluster))).second) {
+	    std::cout << "Cluster fit not added to map!" << std::endl;
+	    throw;
+	}
+    }
+
+
+
+    for(ClusterVector::const_iterator iterCurrentCluster = clusterVector.begin(); iterCurrentCluster != clusterVector.end(); ++iterCurrentCluster)
+    {
+      
+      const Cluster *const pCurrentCluster = *iterCurrentCluster;
+      const ClusterFitParameters currentFitParameters(clusterToFitParametersMap.at(pCurrentCluster));
+	
+     ClusterList currentCluster;
+     currentCluster.push_back(pCurrentCluster);
+     PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &currentCluster, "Current Cluster", BLACK);
+
+     const CartesianVector currentClusterDirection = GetClusterDirection(currentFitParameters.m_currentClusterPositionToWeightMap, currentFitParameters.m_numCaloHits);
+
+      for (ClusterVector::const_iterator iterTestCluster = iterCurrentCluster; iterTestCluster != clusterVector.end(); ++iterTestCluster)
+      {
+	    
+           if (iterCurrentCluster == iterTestCluster)
+               continue;
+
+
+	   const Cluster *const pTestCluster = *iterTestCluster;
+           const ClusterFitParameters testFitParameters = clusterToFitParametersMap.at(pTestCluster);
+
+           ClusterList testCluster;
+           testCluster.push_back(pTestCluster);
+           PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &testCluster, "Test Cluster", BLUE);
+	         
+           const CartesianVector testClusterDirection = GetClusterDirection(testFitParameters.m_testClusterPositionToWeightMap, testFitParameters.m_numCaloHits);
+
+
+	   std::cout << "Opening Angle: " << std::fabs(currentClusterDirection.GetCosOpeningAngle(testClusterDirection)) << std::endl;
+
+	   PandoraMonitoringApi::Pause(this->GetPandora());
+
+        }
+
+      std::cout << "ALL CLUSTERS VIEWED" << std::endl;
+      PandoraMonitoringApi::ViewEvent(this->GetPandora());
+
+    }
+
+
+    return STATUS_CODE_SUCCESS;
+    
+}
+*/
+
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+StatusCode TestHitWidthClusterMergingAlgorithm::Run()
+{
+
+    const ClusterList *pClusterList = NULL;
+    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetList(*this, m_clusterListName, pClusterList));
+
+    ClusterVector clusterVector;
+    GetListOfCleanClusters(pClusterList, clusterVector);
+    
+    PandoraMonitoringApi::Create(this->GetPandora());
+    PandoraMonitoringApi::SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_XZ, -1.f, -1.f, 1.f);
+
+    //ClusterList consideredClusters(clusterVector.begin(), clusterVector.end());
+    //PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &consideredClusters, "Considered Clusters", BLACK);
+
+    ClusterAssociationMap aMap;
+    this->TestPopulateClusterAssociationMap(clusterVector, aMap);
+
+    return STATUS_CODE_SUCCESS;
+    
+}
+
+
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void TestHitWidthClusterMergingAlgorithm::TestPopulateClusterAssociationMap(const ClusterVector &clusterVector, ClusterAssociationMap &clusterAssociationMap) const
 {    
 
     // Fill cluster fit map 
@@ -135,11 +302,11 @@ void HitWidthClusterMergingAlgorithm::TestPopulateClusterAssociationMap(const Cl
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-  bool HitWidthClusterMergingAlgorithm::TestAreClustersAssociated(const ClusterFitParameters &currentFitParameters, const ClusterFitParameters &testFitParameters, const Cluster *const pCluster) const
+  bool TestHitWidthClusterMergingAlgorithm::TestAreClustersAssociated(const ClusterFitParameters &currentFitParameters, const ClusterFitParameters &testFitParameters, const Cluster *const pCluster) const
 {
 
-    CartesianVector currentClusterDirection(GetClusterEndDirection(currentFitParameters.m_currentClusterPositionToWeightMap, currentFitParameters.m_numCaloHits));
-    CartesianVector testClusterDirection(GetClusterEndDirection(testFitParameters.m_testClusterPositionToWeightMap, testFitParameters.m_numCaloHits));
+    CartesianVector currentClusterDirection(GetClusterDirection(currentFitParameters.m_currentClusterPositionToWeightMap, currentFitParameters.m_numCaloHits));
+    CartesianVector testClusterDirection(GetClusterDirection(testFitParameters.m_testClusterPositionToWeightMap, testFitParameters.m_numCaloHits));
     
     std::string stringTag = "TEST: " + std::to_string(std::fabs(currentClusterDirection.GetCosOpeningAngle(testClusterDirection)));
 
@@ -192,23 +359,16 @@ void HitWidthClusterMergingAlgorithm::TestPopulateClusterAssociationMap(const Cl
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void HitWidthClusterMergingAlgorithm::GetListOfCleanClusters(const ClusterList *const pClusterList, ClusterVector &clusterVector) const
+void TestHitWidthClusterMergingAlgorithm::GetListOfCleanClusters(const ClusterList *const pClusterList, ClusterVector &clusterVector) const
 {
-    //ignore clusters that aren't transverse??
-    CartesianVector origin(0,0,0);
-    ClusterFitParameters::ClusterPositionSort distanceToOriginSort(origin);
+
+  //ignore clusters that aren't transverse??
 
     for (const Cluster *const pCluster : *pClusterList)
     {
         if(GetTotalClusterWeight(pCluster) < m_minClusterWeight)
             continue;
-
-        //ignore clusters that aren't transverse??
-        //ClusterFitParameters::ClusterPositionToWeightMap constituentHitsToWeightMap(distanceToOriginSort);
-        //FillPositionToWeightMap(pCluster, constituentHitsToWeightMap);
-
-        //GetClusterDirection(constituentHitsToWeightMap, pCluster->GetNCaloHits());
-
+      
         clusterVector.push_back(pCluster);
     }
 
@@ -219,7 +379,7 @@ void HitWidthClusterMergingAlgorithm::GetListOfCleanClusters(const ClusterList *
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 
-void HitWidthClusterMergingAlgorithm::PopulateClusterAssociationMap(const ClusterVector &clusterVector, ClusterAssociationMap &clusterAssociationMap) const
+void TestHitWidthClusterMergingAlgorithm::PopulateClusterAssociationMap(const ClusterVector &clusterVector, ClusterAssociationMap &clusterAssociationMap) const
 {
 
     // Fill cluster fit map 
@@ -261,11 +421,11 @@ void HitWidthClusterMergingAlgorithm::PopulateClusterAssociationMap(const Cluste
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 
-  bool HitWidthClusterMergingAlgorithm::AreClustersAssociated(const ClusterFitParameters &currentFitParameters, const ClusterFitParameters &testFitParameters) const
+  bool TestHitWidthClusterMergingAlgorithm::AreClustersAssociated(const ClusterFitParameters &currentFitParameters, const ClusterFitParameters &testFitParameters) const
 {
 
-    CartesianVector currentClusterDirection(GetClusterEndDirection(currentFitParameters.m_currentClusterPositionToWeightMap, currentFitParameters.m_numCaloHits));
-    CartesianVector testClusterDirection(GetClusterEndDirection(testFitParameters.m_testClusterPositionToWeightMap, testFitParameters.m_numCaloHits));
+    CartesianVector currentClusterDirection(GetClusterDirection(currentFitParameters.m_currentClusterPositionToWeightMap, currentFitParameters.m_numCaloHits));
+    CartesianVector testClusterDirection(GetClusterDirection(testFitParameters.m_testClusterPositionToWeightMap, currentFitParameters.m_numCaloHits));
     
 
     if(testFitParameters.m_lowerXExtrema.GetX() > (currentFitParameters.m_higherXExtrema.GetX() + m_maxXMergeDistance)) {  
@@ -297,7 +457,7 @@ void HitWidthClusterMergingAlgorithm::PopulateClusterAssociationMap(const Cluste
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-bool HitWidthClusterMergingAlgorithm::IsExtremalCluster(const bool isForward, const Cluster *const pCurrentCluster,  const Cluster *const pTestCluster) const
+bool TestHitWidthClusterMergingAlgorithm::IsExtremalCluster(const bool isForward, const Cluster *const pCurrentCluster,  const Cluster *const pTestCluster) const
 {
   
   //NEED TO IMPLEMENT USING THE MAP INSTEAD
@@ -327,7 +487,7 @@ bool HitWidthClusterMergingAlgorithm::IsExtremalCluster(const bool isForward, co
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 
-  CartesianVector HitWidthClusterMergingAlgorithm::GetClusterEndDirection(const ClusterFitParameters::ClusterPositionToWeightMap &clusterPositionToWeightMap, unsigned int clusterCaloHits) const 
+  CartesianVector TestHitWidthClusterMergingAlgorithm::GetClusterDirection(const ClusterFitParameters::ClusterPositionToWeightMap &clusterPositionToWeightMap, unsigned int clusterCaloHits) const 
 {
 
     if(clusterCaloHits == 1) {
@@ -343,8 +503,8 @@ bool HitWidthClusterMergingAlgorithm::IsExtremalCluster(const bool isForward, co
     CartesianVector LSLongitudinalIntercept(0,0,0);
     float LSLongitudinalChiSquared(0);
     
-    GetWeightedSubGradient(clusterPositionToWeightMap, true, LSTransverseClusterFitDirection, LSTransverseIntercept, LSTransverseChiSquared, clusterCaloHits);    
-    GetWeightedSubGradient(clusterPositionToWeightMap, false, LSLongitudinalClusterFitDirection, LSLongitudinalIntercept, LSLongitudinalChiSquared, clusterCaloHits);
+    GetWeightedGradient(clusterPositionToWeightMap, true, LSTransverseClusterFitDirection, LSTransverseIntercept, LSTransverseChiSquared, clusterCaloHits);    
+    GetWeightedGradient(clusterPositionToWeightMap, false, LSLongitudinalClusterFitDirection, LSLongitudinalIntercept, LSLongitudinalChiSquared, clusterCaloHits);
 
     
     //CODE TO DRAW EACH OF THE FITS FOR THE CLUSTER
@@ -376,7 +536,7 @@ bool HitWidthClusterMergingAlgorithm::IsExtremalCluster(const bool isForward, co
   
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-CartesianVector HitWidthClusterMergingAlgorithm::GetClusterEndZIntercept(const ClusterFitParameters::ClusterPositionToWeightMap &clusterPositionToWeightMap, unsigned int clusterCaloHits) const
+CartesianVector TestHitWidthClusterMergingAlgorithm::GetClusterZIntercept(const ClusterFitParameters::ClusterPositionToWeightMap &clusterPositionToWeightMap, unsigned int clusterCaloHits) const
 {
 
     if(clusterCaloHits == 1) {
@@ -392,8 +552,8 @@ CartesianVector HitWidthClusterMergingAlgorithm::GetClusterEndZIntercept(const C
     CartesianVector LSLongitudinalIntercept(0,0,0);
     float LSLongitudinalChiSquared(0);
 
-    GetWeightedSubGradient(clusterPositionToWeightMap, true, LSTransverseClusterFitDirection, LSTransverseIntercept, LSTransverseChiSquared, clusterCaloHits);
-    GetWeightedSubGradient(clusterPositionToWeightMap, false, LSLongitudinalClusterFitDirection, LSLongitudinalIntercept, LSLongitudinalChiSquared, clusterCaloHits);
+    GetWeightedGradient(clusterPositionToWeightMap, true, LSTransverseClusterFitDirection, LSTransverseIntercept, LSTransverseChiSquared, clusterCaloHits);
+    GetWeightedGradient(clusterPositionToWeightMap, false, LSLongitudinalClusterFitDirection, LSLongitudinalIntercept, LSLongitudinalChiSquared, clusterCaloHits);
 
     if(LSTransverseChiSquared < LSLongitudinalChiSquared)
       return LSTransverseIntercept;
@@ -405,7 +565,7 @@ CartesianVector HitWidthClusterMergingAlgorithm::GetClusterEndZIntercept(const C
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 
-  void HitWidthClusterMergingAlgorithm::GetWeightedSubGradient(const ClusterFitParameters::ClusterPositionToWeightMap &clusterPositionToWeightMap, bool isTransverse, CartesianVector &direction, CartesianVector &intercept, float &chiSquared, float clusterCaloHits) const
+  void TestHitWidthClusterMergingAlgorithm::GetWeightedGradient(const ClusterFitParameters::ClusterPositionToWeightMap &clusterPositionToWeightMap, bool isTransverse, CartesianVector &direction, CartesianVector &intercept, float &chiSquared, float clusterCaloHits) const
 {
 
   //std::cout << "Number of calo hits: " << clusterCaloHits << std::endl;
@@ -540,166 +700,204 @@ CartesianVector HitWidthClusterMergingAlgorithm::GetClusterEndZIntercept(const C
 
 }
 
-//------------------------------------------------------------------------------------------------------------------------------------------
-
-  CartesianVector HitWidthClusterMergingAlgorithm::GetClusterDirection(const ClusterFitParameters::ClusterPositionToWeightMap &clusterPositionToWeightMap, unsigned int clusterCaloHits) const 
-{
-
-    // If has single hit, put cluster direction in the direction of x
-    if(clusterCaloHits == 1) {
-      return CartesianVector(1, 0, 0);
-    }
-   
-    CartesianVector LSTransverseClusterFitDirection(0,0,0);
-    CartesianVector LSTransverseIntercept(0,0,0);
-    float LSTransverseChiSquared(0);
-
-    CartesianVector LSLongitudinalClusterFitDirection(0,0,0);
-    CartesianVector LSLongitudinalIntercept(0,0,0);
-    float LSLongitudinalChiSquared(0);
-    
-    GetWeightedGradient(clusterPositionToWeightMap, true, LSTransverseClusterFitDirection, LSTransverseIntercept, LSTransverseChiSquared, clusterCaloHits);    
-    GetWeightedGradient(clusterPositionToWeightMap, false, LSLongitudinalClusterFitDirection, LSLongitudinalIntercept, LSLongitudinalChiSquared, clusterCaloHits);
-    
-    if(LSTransverseChiSquared < LSLongitudinalChiSquared)
-      return LSTransverseClusterFitDirection;
-
-    return LSLongitudinalClusterFitDirection;
-
-}
-  
-//------------------------------------------------------------------------------------------------------------------------------------------
-
-CartesianVector HitWidthClusterMergingAlgorithm::GetClusterZIntercept(const ClusterFitParameters::ClusterPositionToWeightMap &clusterPositionToWeightMap, unsigned int clusterCaloHits) const
-{
-
-    if(clusterCaloHits == 1) {
-      return CartesianVector(0, 0, clusterPositionToWeightMap.begin()->first.GetZ());
-    }      
-
-    CartesianVector LSTransverseClusterFitDirection(0,0,0);
-    CartesianVector LSTransverseIntercept(0,0,0);
-    float LSTransverseChiSquared(0);
-
-    CartesianVector LSLongitudinalClusterFitDirection(0,0,0);
-    CartesianVector LSLongitudinalIntercept(0,0,0);
-    float LSLongitudinalChiSquared(0);
-
-    GetWeightedGradient(clusterPositionToWeightMap, true, LSTransverseClusterFitDirection, LSTransverseIntercept, LSTransverseChiSquared, clusterCaloHits);
-    GetWeightedGradient(clusterPositionToWeightMap, false, LSLongitudinalClusterFitDirection, LSLongitudinalIntercept, LSLongitudinalChiSquared, clusterCaloHits);
-
-    if(LSTransverseChiSquared < LSLongitudinalChiSquared)
-      return LSTransverseIntercept;
-
-    return LSLongitudinalIntercept;
-
-}
 
 //------------------------------------------------------------------------------------------------------------------------------------------
+/*
 
-
-  void HitWidthClusterMergingAlgorithm::GetWeightedGradient(const ClusterFitParameters::ClusterPositionToWeightMap &clusterPositionToWeightMap, bool isTransverse, CartesianVector &direction, CartesianVector &intercept, float &chiSquared, float clusterCaloHits) const
+  void TestHitWidthClusterMergingAlgorithm::GetWeightedSubGradient(const Cluster *const pCluster, bool isTransverse, bool isCurrent, unsigned int numFittingPoints, CartesianVector &direction, float &chiSquared) const
 {
 
-    if(!isTransverse && clusterCaloHits == 1) 
+    if(!isTransverse && pCluster->GetNCaloHits() == 1) 
     {
-      std::cout << "WARNING - CANNOT MAKE LONGITUDINAL FIT TO SINGLE HIT CLUSTER, RETURNED" << std::endl;
-      throw;
+      std::cout << "WARNING - CANNOT MAKE LONGITUDINAL FIT TO SINGLE HIT CLUSTER" << std::endl;
+      return;
     }
 
+    if(pCluster->GetNCaloHits() == 1) 
+    {
+      const CaloHit *const pCaloHit(pCluster->GetOrderedCaloHitList().begin()->second->front());
+
+      direction = CartesianVector(1, 0, 0);
+      chiSquared = 0;
+      return;
+    }
+
+    OrderedCaloHitList orderedCaloHitList = pCluster->GetOrderedCaloHitList();
+    CartesianVector lowerXExtrema(0, 0, 0);
+    CartesianVector higherXExrema(0, 0, 0);
+
+    GetExtremalCoordinates(pCluster, lowerXExtrema, higherXExrema);
+
+    isCurrent ? m_sortReferencePoint =  higherXExrema: m_sortReferencePoint = lowerXExtrema;
+
+    PositionToWeightMap clusterSubHits;
+
+    for(OrderedCaloHitList::const_iterator iter = orderedCaloHitList.begin(); iter !=  orderedCaloHitList.end(); ++iter) 
+    {
+        for(CaloHitList::const_iterator hitIter = iter->second->begin(); hitIter != iter->second->end(); ++hitIter) 
+        {
+	    const CaloHit *const hit = (*hitIter);
+
+	    float hitWidth = hit->GetCellSize1();
+	    //std::cout << "Width: " << hit->GetCellSize1() << std::endl;
+	    //float hitWeight = 1;
+	    float hitWeight = hitWidth;
+
+	    //unsigned int numberOfConstituentHits = 1;
+            unsigned int numberOfConstituentHits = floor(hitWidth/hit->GetCellSize0()) + 1;
+            float constituentHitWidth = hitWidth/numberOfConstituentHits;
+	    float constituentHitWeight = hitWeight/numberOfConstituentHits;
+
+	    //std::cout << "Total hit weight: " << hitWeight << std::endl; 
+	    //std::cout << "Number of constituents: " << numberOfConstituentHits << std::endl;
+	    //std::cout << "Constituent hit weight: " << constituentHitWeight << std::endl;
+
+	    //std::cout << "Hit center: " << hit->GetPositionVector().GetX() << ", " << hit->GetPositionVector().GetY() << ", " << hit->GetPositionVector().GetZ() << std::endl;
+
+	    float xPositionAlongHit(hit->GetPositionVector().GetX() - (hitWidth/2));
+	    for(unsigned int i(0); i < numberOfConstituentHits; ++i) 
+	    {
+                i == 0 ? xPositionAlongHit += constituentHitWidth/2 : xPositionAlongHit += constituentHitWidth;
+		clusterSubHitPositions.insert(std::pair(CartesianVector(xPositionAlongHit, 0, hit.GetZ()), constituentHitWeight));
+	    }
+
+	}
+    }
+
+
+    /
     float weightSum(0);
     float weightedXSum(0);
     float weightedZSum(0);
 
-    bool isXConstant(true);
-    bool isZConstant(true);
-
-    for(ClusterFitParameters::ClusterPositionToWeightMap::const_iterator iter = clusterPositionToWeightMap.begin(); iter != clusterPositionToWeightMap.end(); ++iter) 
+    // Loop through hits in cluster to find the weighted x sum and weighted z sum of hits
+    for(OrderedCaloHitList::const_iterator iter = orderedCaloHitList.begin(); iter !=  orderedCaloHitList.end(); ++iter) 
     {
+        for(CaloHitList::const_iterator hitIter = iter->second->begin(); hitIter != iter->second->end(); ++hitIter) 
+        {
+	    const CaloHit *const hit = (*hitIter);
 
-        const CartesianVector hitPosition = iter->first;
-	const float hitWeight = iter->second;
+	    float hitWidth = hit->GetCellSize1();
+	    //float hitWidth = 0.5;
+	    //std::cout << "Width: " << hit->GetCellSize1() << std::endl;
+	    //float hitWeight = 1;
+	    float hitWeight = hitWidth;
 
-	if(std::fabs(clusterPositionToWeightMap.begin()->first.GetX() - hitPosition.GetX()) > std::numeric_limits<float>::epsilon())
-	  isXConstant = false;
+	    //unsigned int numberOfConstituentHits = 1;
+            unsigned int numberOfConstituentHits = floor(hitWidth/hit->GetCellSize0()) + 1;
+            float constituentHitWidth = hitWidth/numberOfConstituentHits;
+	    float constituentHitWeight = hitWeight/numberOfConstituentHits;
 
-	if(std::fabs(clusterPositionToWeightMap.begin()->first.GetZ() - hitPosition.GetZ()) > std::numeric_limits<float>::epsilon())
-	  isZConstant = false;
+	    //std::cout << "Total hit weight: " << hitWeight << std::endl; 
+	    //std::cout << "Number of constituents: " << numberOfConstituentHits << std::endl;
+	    //std::cout << "Constituent hit weight: " << constituentHitWeight << std::endl;
 
-	weightSum += hitWeight;
-        weightedXSum += hitPosition.GetX() * hitWeight;
-	weightedZSum += hitPosition.GetZ() * hitWeight;
+	    //std::cout << "Hit center: " << hit->GetPositionVector().GetX() << ", " << hit->GetPositionVector().GetY() << ", " << hit->GetPositionVector().GetZ() << std::endl;
 
-    }
+	    float xPositionAlongHit(hit->GetPositionVector().GetX() - (hitWidth/2));
+	    for(unsigned int i(0); i < numberOfConstituentHits; ++i) 
+	    {
+                i == 0 ? xPositionAlongHit += constituentHitWidth/2 : xPositionAlongHit += constituentHitWidth;
+		weightedXSum += xPositionAlongHit*constituentHitWeight;
+	    }
 
-    // TO FIT A STRAIGHT LINE TO CLUSTERS WITH CONSTANT X OR Z
-    if(isXConstant) 
-    {
-      //std::cout << "CONSTANT X" << std::endl;
-      direction = CartesianVector(0, 0, 1);
-      intercept = CartesianVector(0, 0, -std::numeric_limits<float>::max());
-      chiSquared = 0;
-      return;
-    }
-
-    if(isZConstant) 
-    {
-      //std::cout << "CONSTANT Z" << std::endl;
-      direction = CartesianVector(1, 0, 0);
-      intercept = CartesianVector(0, 0, clusterPositionToWeightMap.begin()->first.GetZ());
-      chiSquared = 0;
-      return;
+	    weightedZSum += hit->GetPositionVector().GetZ() * hitWeight;
+	    weightSum += hitWeight;
+	}
     }
 
     float weightedXMean(weightedXSum/weightSum);
     float weightedZMean(weightedZSum/weightSum); 
 
+    //std::cout << "WeightedX Mean: " << weightedXMean << std::endl;
+    //std::cout << "WeightedZ Mean: " << weightedZMean << std::endl;
+
     float numerator(0);
     float denominator(0);
     float chi(0);
 
-    for(ClusterFitParameters::ClusterPositionToWeightMap::const_iterator iter = clusterPositionToWeightMap.begin(); iter != clusterPositionToWeightMap.end(); ++iter) 
+    for(OrderedCaloHitList::const_iterator iter = orderedCaloHitList.begin(); iter !=  orderedCaloHitList.end(); ++iter) 
     {
-        const CartesianVector hitPosition = iter->first;
-	const float hitWeight = iter->second;
+        for(CaloHitList::const_iterator hitIter = iter->second->begin(); hitIter != iter->second->end(); ++hitIter) 
+        {
+	    const CaloHit *const hit = (*hitIter);
 
-	numerator += hitWeight * (hitPosition.GetX() - weightedXMean) * (hitPosition.GetZ() - weightedZMean);
-	isTransverse ? denominator += hitWeight * pow(hitPosition.GetX() - weightedXMean, 2) : denominator += hitWeight * pow(hitPosition.GetZ() - weightedZMean, 2);
+	    float hitWidth = hit->GetCellSize1();
+	    //float hitWidth = 0.5;
+	    //float hitWeight = 1;
+	    float hitWeight = hitWidth;
 
+	    //unsigned int numberOfConstituentHits = 1;
+	    unsigned int numberOfConstituentHits = floor(hitWidth/hit->GetCellSize0()) + 1;
+            float constituentHitWidth = hitWidth/numberOfConstituentHits;
+	    float constituentHitWeight = hitWeight/numberOfConstituentHits;
+
+	    //std::cout << "Total hit weight: " << hitWeight << std::endl; 
+	    //std::cout << "Number of constituents: " << numberOfConstituentHits << std::endl;
+	    //std::cout << "Constituent hit weight: " << constituentHitWeight << std::endl;
+            //std::cout << "Hit center: " << hit->GetPositionVector().GetX() << ", " << hit->GetPositionVector().GetY() << ", " << hit->GetPositionVector().GetZ() << std::endl;
+	    
+	    float xPositionAlongHit(hit->GetPositionVector().GetX() - (hitWidth/2));
+	    for(unsigned int i(0); i < numberOfConstituentHits; ++i) 
+	    {
+                i == 0 ? xPositionAlongHit += constituentHitWidth/2 : xPositionAlongHit += constituentHitWidth;
+		numerator += constituentHitWeight*(xPositionAlongHit - weightedXMean)*(hit->GetPositionVector().GetZ() - weightedZMean);
+		isTransverse ? denominator += constituentHitWeight*pow(xPositionAlongHit - weightedXMean, 2) : denominator += constituentHitWeight*pow(hit->GetPositionVector().GetZ() - weightedZMean, 2);
+	    }
+	}
     }
 
     float gradient = numerator/denominator;
-    isTransverse ? intercept.SetValues(0, 0, weightedZMean - gradient * weightedXMean) : intercept.SetValues(weightedXMean - gradient * weightedZMean, 0, 0);
+    isTransverse ? intercept.SetValues(0, 0, weightedZMean - gradient*weightedXMean) : intercept.SetValues(weightedXMean - gradient*weightedZMean, 0, 0);
 
+    //std::cout << "Gradient: " << gradient << std::endl;
+    //std::cout << "Intercept: " << intercept << std::endl;
 
-    for(ClusterFitParameters::ClusterPositionToWeightMap::const_iterator iter = clusterPositionToWeightMap.begin(); iter != clusterPositionToWeightMap.end(); ++iter) 
+   for(OrderedCaloHitList::const_iterator iter = orderedCaloHitList.begin(); iter !=  orderedCaloHitList.end(); ++iter) 
     {
+        for(CaloHitList::const_iterator hitIter = iter->second->begin(); hitIter != iter->second->end(); ++hitIter) 
+        {
+	    const CaloHit *const hit = (*hitIter);
 
-        const CartesianVector hitPosition = iter->first;
-	const float hitWeight = iter->second;
+	    float hitWidth = hit->GetCellSize1();
+	    //float hitWidth = 0.5;
+	    //float hitWeight = 1;
+	    float hitWeight = hitWidth;
 
-
-	isTransverse ? chi += hitWeight*pow(hitPosition.GetZ() - intercept.GetZ() - gradient*hitPosition.GetX(), 2) : chi += hitWeight * pow(hitPosition.GetX() - intercept.GetX() - gradient * hitPosition.GetZ(), 2);
-
+	    //unsigned int numberOfConstituentHits = 1;
+	    unsigned int numberOfConstituentHits = floor(hitWidth/hit->GetCellSize0()) + 1;
+            float constituentHitWidth = hitWidth/numberOfConstituentHits;
+	    float constituentHitWeight = hitWeight/numberOfConstituentHits;
+	    
+	    float xPositionAlongHit(hit->GetPositionVector().GetX() - (hitWidth/2));
+	    for(unsigned int i(0); i < numberOfConstituentHits; ++i) 
+	    {
+                i == 0 ? xPositionAlongHit += constituentHitWidth/2 : xPositionAlongHit += constituentHitWidth;
+		isTransverse ? chi += constituentHitWeight*pow(hit->GetPositionVector().GetZ() - intercept.GetZ() - gradient*xPositionAlongHit , 2) : chi += constituentHitWeight*pow(xPositionAlongHit - intercept.GetX() - gradient*hit->GetPositionVector().GetZ(), 2);
+	    }
+	}
     }
 
-    isTransverse? direction = CartesianVector(1.0, 0, gradient).GetUnitVector() : direction = CartesianVector(gradient, 0, 1.0).GetUnitVector();
+   //std::cout << "Gradient: " << gradient << std::endl;
+   //std::cout << "intercept: " << intercept << std::endl;
+   
+   isTransverse? direction = CartesianVector(1.0, 0, gradient).GetUnitVector() : direction = CartesianVector(gradient, 0, 1.0).GetUnitVector();
 
+   if(!isTransverse)
+     intercept.SetValues(0, 0, -intercept.GetX()/gradient);
 
-    if(!isTransverse)
-        intercept.SetValues(0, 0, -intercept.GetX()/gradient);
+   chiSquared = chi;
 
-    chiSquared = chi;
 
     return;
 
 }
 
-
+*/
+  
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-
-CartesianVector HitWidthClusterMergingAlgorithm::GetExtremalCoordinatesLowerX(const Cluster *const pCluster) 
+CartesianVector TestHitWidthClusterMergingAlgorithm::GetExtremalCoordinatesLowerX(const Cluster *const pCluster) 
 {
 
 
@@ -714,7 +912,7 @@ CartesianVector HitWidthClusterMergingAlgorithm::GetExtremalCoordinatesLowerX(co
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-CartesianVector HitWidthClusterMergingAlgorithm::GetExtremalCoordinatesHigherX(const Cluster *const pCluster) 
+CartesianVector TestHitWidthClusterMergingAlgorithm::GetExtremalCoordinatesHigherX(const Cluster *const pCluster) 
 {
 
 
@@ -731,7 +929,7 @@ CartesianVector HitWidthClusterMergingAlgorithm::GetExtremalCoordinatesHigherX(c
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 //SHOULD REALLY BE IN A HELPER CLASS
-void HitWidthClusterMergingAlgorithm::GetExtremalCoordinates(const Cluster *const pCluster, CartesianVector &lowerXCoordinate, CartesianVector &higherXCoordinate)
+void TestHitWidthClusterMergingAlgorithm::GetExtremalCoordinates(const Cluster *const pCluster, CartesianVector &lowerXCoordinate, CartesianVector &higherXCoordinate)
 {
     return GetExtremalCoordinates(pCluster->GetOrderedCaloHitList(), lowerXCoordinate, higherXCoordinate);
 }
@@ -740,7 +938,7 @@ void HitWidthClusterMergingAlgorithm::GetExtremalCoordinates(const Cluster *cons
 
 
 //SHOULD REALLY BE IN A HELPER CLASS
-void HitWidthClusterMergingAlgorithm::GetExtremalCoordinates(const OrderedCaloHitList &orderedCaloHitList, CartesianVector &lowerXCoordinate, CartesianVector &higherXCoordinate)
+void TestHitWidthClusterMergingAlgorithm::GetExtremalCoordinates(const OrderedCaloHitList &orderedCaloHitList, CartesianVector &lowerXCoordinate, CartesianVector &higherXCoordinate)
 {
     if (orderedCaloHitList.empty())
         throw StatusCodeException(STATUS_CODE_NOT_FOUND);
@@ -778,7 +976,7 @@ void HitWidthClusterMergingAlgorithm::GetExtremalCoordinates(const OrderedCaloHi
 
 
 //SHOULD REALLY BE IN A HELPER CLASS
-void HitWidthClusterMergingAlgorithm::GetExtremalCoordinates(const CartesianPointVector &coordinateVector, CartesianVector &lowerXCoordinate, CartesianVector &higherXCoordinate)
+void TestHitWidthClusterMergingAlgorithm::GetExtremalCoordinates(const CartesianPointVector &coordinateVector, CartesianVector &lowerXCoordinate, CartesianVector &higherXCoordinate)
 {
     if (coordinateVector.empty())
         throw StatusCodeException(STATUS_CODE_NOT_FOUND);
@@ -886,7 +1084,7 @@ void HitWidthClusterMergingAlgorithm::GetExtremalCoordinates(const CartesianPoin
 
 
 //SHOULD REALLY BE IN A HELPER CLASS
-void HitWidthClusterMergingAlgorithm::GetExtremalCoordinatesX(const Cluster *const pCluster, float &minX, float &maxX)
+void TestHitWidthClusterMergingAlgorithm::GetExtremalCoordinatesX(const Cluster *const pCluster, float &minX, float &maxX)
 {
 
     minX = +std::numeric_limits<float>::max();
@@ -924,7 +1122,7 @@ void HitWidthClusterMergingAlgorithm::GetExtremalCoordinatesX(const Cluster *con
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 //SHOULD REALLY BE IN A HELPER CLASS
-bool HitWidthClusterMergingAlgorithm::SortByX(const Cluster *const pLhs, const Cluster *const pRhs)
+bool TestHitWidthClusterMergingAlgorithm::SortByX(const Cluster *const pLhs, const Cluster *const pRhs)
 {
     float lhsMinX(GetMinX(pLhs));
     float rhsMinX(GetMinX(pRhs));
@@ -935,7 +1133,7 @@ bool HitWidthClusterMergingAlgorithm::SortByX(const Cluster *const pLhs, const C
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 //SHOULD REALLY BE IN A HELPER CLASS
-float HitWidthClusterMergingAlgorithm::GetMinX(const Cluster *const pCluster)
+float TestHitWidthClusterMergingAlgorithm::GetMinX(const Cluster *const pCluster)
 {
 
     float minX(+std::numeric_limits<float>::max());
@@ -964,7 +1162,7 @@ float HitWidthClusterMergingAlgorithm::GetMinX(const Cluster *const pCluster)
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-bool HitWidthClusterMergingAlgorithm::SortByMaxX(const Cluster *const pLhs, const Cluster *const pRhs)
+bool TestHitWidthClusterMergingAlgorithm::SortByMaxX(const Cluster *const pLhs, const Cluster *const pRhs)
 {
 
     CartesianVector lhsLowerXEdge(0,0,0);
@@ -981,7 +1179,7 @@ bool HitWidthClusterMergingAlgorithm::SortByMaxX(const Cluster *const pLhs, cons
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-float HitWidthClusterMergingAlgorithm::GetTotalClusterWeight(const Cluster *const pCluster)
+float TestHitWidthClusterMergingAlgorithm::GetTotalClusterWeight(const Cluster *const pCluster)
 {
   
     const OrderedCaloHitList &orderedCaloHitList(pCluster->GetOrderedCaloHitList());
@@ -1001,42 +1199,8 @@ float HitWidthClusterMergingAlgorithm::GetTotalClusterWeight(const Cluster *cons
 
 }
 
-//------------------------------------------------------------------------------------------------------------------------------------------
 
-void HitWidthClusterMergingAlgorithm::FillPositionToWeightMap(const pandora::Cluster *const pCluster, ClusterFitParameters::ClusterPositionToWeightMap &clusterPositionToWeightMap) const
-{
-
-    OrderedCaloHitList orderedCaloHitList = pCluster->GetOrderedCaloHitList();
-
-    for(OrderedCaloHitList::const_iterator iter = orderedCaloHitList.begin(); iter !=  orderedCaloHitList.end(); ++iter) 
-    {
-        for(CaloHitList::const_iterator hitIter = iter->second->begin(); hitIter != iter->second->end(); ++hitIter) 
-        {
-	    const CaloHit *const hit = (*hitIter);
-
-	    float hitWidth = hit->GetCellSize1();
-	    float hitWeight = hitWidth;
-
-            unsigned int numberOfConstituentHits = floor(hitWidth/hit->GetCellSize0()) + 1;
-            float constituentHitWidth = hitWidth/numberOfConstituentHits;
-	    float constituentHitWeight = hitWeight/numberOfConstituentHits;
-
-	    float xPositionAlongHit(hit->GetPositionVector().GetX() - (hitWidth/2));
-	    for(unsigned int i(0); i < numberOfConstituentHits; ++i) 
-	    {
-                i == 0 ? xPositionAlongHit += constituentHitWidth/2 : xPositionAlongHit += constituentHitWidth;
-	         clusterPositionToWeightMap.insert(std::pair(CartesianVector(xPositionAlongHit, 0, hit->GetPositionVector().GetZ()), constituentHitWeight));
-	    }
-	}
-    }
-
-    return;
-
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-
-StatusCode HitWidthClusterMergingAlgorithm::ReadSettings(const TiXmlHandle xmlHandle)
+StatusCode TestHitWidthClusterMergingAlgorithm::ReadSettings(const TiXmlHandle xmlHandle)
 {
  
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle, "MinClusterWeight", m_minClusterWeight));
@@ -1061,169 +1225,3 @@ StatusCode HitWidthClusterMergingAlgorithm::ReadSettings(const TiXmlHandle xmlHa
 } // namespace lar_content
 
 
-
-/*
-  StatusCode HitWidthClusterMergingAlgorithm::Run(){
-
-    const ClusterList *pClusterList = NULL;
-    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetList(*this, m_clusterListName, pClusterList));
-
-    ClusterVector clusterVector;
-    GetListOfCleanClusters(pClusterList, clusterVector);
-
-    
-    // Fill cluster fit map 
-    ClusterToFitParametersMap clusterToFitParametersMap;
-
-    for(const Cluster *const pCluster : clusterVector) 
-    {
-      clusterToFitParametersMap.insert(std::pair(pCluster, ClusterFitParameters(pCluster)));
-    }
-
-
-    PandoraMonitoringApi::Create(this->GetPandora());
-    PandoraMonitoringApi::SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_XZ, -1.f, -1.f, 1.f);
-
-    for(auto entry: clusterToFitParametersMap){
-
-      ClusterList aCluster;
-      aCluster.push_back(entry.first);
-
-      PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &aCluster, "A Cluster", BLACK);
-
-      std::cout << "Current: " << std::endl;
-
-      for(auto iter = entry.second.m_currentClusterPositionToWeightMap.begin(); iter != entry.second.m_currentClusterPositionToWeightMap.end(); ++iter) {
-
-	const CartesianVector pos = iter->first;
-
-	PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &pos, "POINT", RED, 2);
-	PandoraMonitoringApi::Pause(this->GetPandora());
-
-      }
-
-      PandoraMonitoringApi::Pause(this->GetPandora());
-
-
-      std::cout << "Test: " << std::endl;
-
-      for(auto iter = entry.second.m_testClusterPositionToWeightMap.begin(); iter != entry.second.m_testClusterPositionToWeightMap.end(); ++iter) {
-
-	const CartesianVector pos = iter->first;
-
-	PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &pos, "POINT", BLUE, 2);
-	PandoraMonitoringApi::Pause(this->GetPandora());
-
-      }
-
-      PandoraMonitoringApi::Pause(this->GetPandora());
-
-    }
-
-
-   
-    return STATUS_CODE_SUCCESS;
-
-  } 
-*/
-//------------------------------------------------------------------------------------------------------------------------------------------
-
-/*
-StatusCode HitWidthClusterMergingAlgorithm::Run()
-{
-
-    const ClusterList *pClusterList = NULL;
-    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetList(*this, m_clusterListName, pClusterList));
-
-    ClusterVector clusterVector;
-    GetListOfCleanClusters(pClusterList, clusterVector);
-    
-    PandoraMonitoringApi::Create(this->GetPandora());
-    PandoraMonitoringApi::SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_XZ, -1.f, -1.f, 1.f);
-
-    //ClusterList consideredClusters(clusterVector.begin(), clusterVector.end());
-    //PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &consideredClusters, "Considered Clusters", BLACK);
-
-    // Fill cluster fit map 
-    ClusterToFitParametersMap clusterToFitParametersMap;
-    for(const Cluster *const pCluster : clusterVector) 
-    {
-        if(!clusterToFitParametersMap.insert(std::pair(pCluster, ClusterFitParameters(pCluster))).second) {
-	    std::cout << "Cluster fit not added to map!" << std::endl;
-	    throw;
-	}
-    }
-
-
-
-    for(ClusterVector::const_iterator iterCurrentCluster = clusterVector.begin(); iterCurrentCluster != clusterVector.end(); ++iterCurrentCluster)
-    {
-      
-      const Cluster *const pCurrentCluster = *iterCurrentCluster;
-      const ClusterFitParameters currentFitParameters(clusterToFitParametersMap.at(pCurrentCluster));
-	
-     ClusterList currentCluster;
-     currentCluster.push_back(pCurrentCluster);
-     PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &currentCluster, "Current Cluster", BLACK);
-
-     const CartesianVector currentClusterDirection = GetClusterEndDirection(currentFitParameters.m_currentClusterPositionToWeightMap, currentFitParameters.m_numCaloHits);
-
-      for (ClusterVector::const_iterator iterTestCluster = iterCurrentCluster; iterTestCluster != clusterVector.end(); ++iterTestCluster)
-      {
-	    
-           if (iterCurrentCluster == iterTestCluster)
-               continue;
-
-
-	   const Cluster *const pTestCluster = *iterTestCluster;
-           const ClusterFitParameters testFitParameters = clusterToFitParametersMap.at(pTestCluster);
-
-           ClusterList testCluster;
-           testCluster.push_back(pTestCluster);
-           PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &testCluster, "Test Cluster", BLUE);
-	         
-           const CartesianVector testClusterDirection = GetClusterEndDirection(testFitParameters.m_testClusterPositionToWeightMap, testFitParameters.m_numCaloHits);
-
-
-	   std::cout << "Opening Angle: " << std::fabs(currentClusterDirection.GetCosOpeningAngle(testClusterDirection)) << std::endl;
-
-	   PandoraMonitoringApi::Pause(this->GetPandora());
-
-        }
-
-      std::cout << "ALL CLUSTERS VIEWED" << std::endl;
-      PandoraMonitoringApi::ViewEvent(this->GetPandora());
-
-    }
-
-
-    return STATUS_CODE_SUCCESS;
-    
-}
-*/
-
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-/*
-StatusCode HitWidthClusterMergingAlgorithm::Run()
-{
-
-    const ClusterList *pClusterList = NULL;
-    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetList(*this, m_clusterListName, pClusterList));
-
-    ClusterVector clusterVector;
-    GetListOfCleanClusters(pClusterList, clusterVector);
-    
-    PandoraMonitoringApi::Create(this->GetPandora());
-    PandoraMonitoringApi::SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_XZ, -1.f, -1.f, 1.f);
-
-    //ClusterList consideredClusters(clusterVector.begin(), clusterVector.end());
-    //PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &consideredClusters, "Considered Clusters", BLACK);
-
-    ClusterAssociationMap aMap;
-    this->TestPopulateClusterAssociationMap(clusterVector, aMap);
-
-    return STATUS_CODE_SUCCESS;
-    
-}
-*/

@@ -22,7 +22,8 @@ namespace lar_content {
 
   ParticleEfficiencyAlgorithm::ParticleEfficiencyAlgorithm() :
     m_caloHitListName(), 
-    m_pfoListName(),
+    m_pfoListNames(),
+    m_vertexListName(),
     m_particlesInEvent(),
     m_foldToPrimaries(false), 
     m_minCompleteness(0.7),
@@ -68,9 +69,6 @@ namespace lar_content {
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetList(*this, m_caloHitListName, pCaloHitList));
 
 
-
-
-
     // MC PARTICLES
 
     // Get MC Particle to reconstructable hits map
@@ -91,12 +89,31 @@ namespace lar_content {
     // PFOS
 
     // WRITE TO TREE
-    // If no pfos are created, still need to fill MC tree with this info
-    const PfoList *pPfoList = nullptr;
-    StatusCode pfoListStatus(PandoraContentApi::GetList(*this, m_pfoListName, pPfoList));
 
-    // Handle case where no pfos are created
-    if(pfoListStatus == STATUS_CODE_NOT_INITIALIZED){
+    // There are two lists, track particles and shower particles 
+    // Get all the pfos from each list (depending on which ones exist in Pandora...)
+    PfoList allPfos;
+    unsigned int listDoesNotExistCount(0);
+    for(const std::string &listName : m_pfoListNames) {
+
+      const PfoList *pPfoList = nullptr;
+      StatusCode listStatus = PandoraContentApi::GetList(*this, listName, pPfoList);
+
+      if(listStatus == STATUS_CODE_NOT_INITIALIZED) {
+        listDoesNotExistCount++;
+        continue;
+      } 
+
+      // Ensure otther StatusCodes are still handled
+      PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, listStatus);
+    
+      for(const Pfo *const pPfo : *pPfoList)
+        allPfos.push_back(pPfo);
+
+    }
+
+    // If no pfos are created, or the lists have not been created yet, still need to fill MC tree with this info
+    if((listDoesNotExistCount == m_pfoListNames.size()) || (allPfos.empty())){
       if(m_writeToTree) {
 	if(m_particlesInEvent == 1) {
 	  FillTreeWithUnmatchedSingleParticleEvent(orderedTargetMCParticleVector, mcToRecoHitsMap);
@@ -105,12 +122,9 @@ namespace lar_content {
 	  FillTreeWithUnmatchedTwoParticleEvent(orderedTargetMCParticleVector, mcToRecoHitsMap);
 	}
       }
-      return STATUS_CODE_NOT_INITIALIZED;
-    } 
+      return STATUS_CODE_SUCCESS;
+    }
  
-    // ensure that other StatusCodes are still handled
-    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, pfoListStatus);
-
 
     // Get pfo to reconstructable hits map
     LArMCParticleHelper::PfoContributionMap pfoToRecoHitsMap;
@@ -118,13 +132,13 @@ namespace lar_content {
     if (m_foldToPrimaries) {
       // Get list of 'primary' pfos to be matched with the target MC particles
       PfoList finalStatePfos;
-      for (const ParticleFlowObject *const pPfo : *pPfoList) {
+      for (const ParticleFlowObject *const pPfo : allPfos) {
 	if (LArPfoHelper::IsFinalState(pPfo))
 	  finalStatePfos.push_back(pPfo);
       }
       LArMCParticleHelper::GetPfoToReconstructable2DHitsMap(finalStatePfos, mcToRecoHitsMap, pfoToRecoHitsMap);
     } else {
-      LArMCParticleHelper::GetUnfoldedPfoToReconstructable2DHitsMap(*pPfoList, mcToRecoHitsMap, pfoToRecoHitsMap);
+      LArMCParticleHelper::GetUnfoldedPfoToReconstructable2DHitsMap(allPfos, mcToRecoHitsMap, pfoToRecoHitsMap);
     }
 
     // For user output purposes
@@ -167,7 +181,7 @@ namespace lar_content {
       PrintMCParticleMatchesInfoToScreen(orderedTargetMCParticleVector, orderedPfoVector, mcToRecoHitsMap, mcParticleToPfoHitSharingMap, mcParticleToPfoCompletenessMap, mcParticleToPfoPurityMap);
     }
     
- 
+
     return STATUS_CODE_SUCCESS;
 
   }
@@ -188,6 +202,8 @@ namespace lar_content {
       if(targetPrimaries.size() > 1) {
         std::cout << "WARNING: EVENT HAS MORE THAT 1 PRIMARY PARTICLE" << std::endl;
       }
+      
+      std::cout << "WARNING: EVENT HAS LESS THAN 1 PRIMARY PARTICLE, RETURNED WIHTOUT WRITING TO TREE" << std::endl;
       return;
     }
 
@@ -258,7 +274,6 @@ namespace lar_content {
       }
     }
 
-    //THIS DOESN'T WORK
     int isReconstructed(0);
     for(unsigned int i(0); i < completenessVector.size(); ++i) {
       if((completenessVector[i] > m_minCompleteness) && (purityVector[i] > m_minPurity)) {
@@ -292,6 +307,8 @@ namespace lar_content {
       if(targetPrimaries.size() > 1) {
         std::cout << "WARNING: EVENT HAS MORE THAT 1 PRIMARY PARTICLE" << std::endl;
       }
+      
+      std::cout << "WARNING: EVENT HAS LESS THAN 1 PRIMARY PARTICLE, RETURNED WIHTOUT WRITING TO TREE" << std::endl;
       return;
     }
 
@@ -340,9 +357,13 @@ namespace lar_content {
     std::vector<double> completenessVector({0});
     std::vector<double> purityVector({0});
 
+    int isReconstructed(0);
+
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "SharedHitsVector", &sharedHitsVector));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "CompletenessVector", &completenessVector));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "PurityVector", &purityVector));
+
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "IsReconstructed", isReconstructed));
 
     PANDORA_MONITORING_API(FillTree(this->GetPandora(), m_treeName));
     
@@ -354,8 +375,9 @@ namespace lar_content {
 
     float theta0YZ;
     float theta0XZ;
-
     GetLArSoftAngles(pMCParticle->GetMomentum(), theta0XZ, theta0YZ);
+
+    float recoOffsetFromEventVertex(GetReconstructedOffsetFromEventVertex(pMCParticle));
 
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "EventNumber", m_eventNumber));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "MCParticleID", pMCParticle->GetParticleId()));
@@ -368,6 +390,8 @@ namespace lar_content {
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Theta0YZ", theta0YZ));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Theta0XZ", theta0XZ));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "TotHits", static_cast<int>(mcToRecoHitsMap.at(pMCParticle).size())));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "RecoOffsetFromEventVertex", recoOffsetFromEventVertex));
+
 
   }
 
@@ -549,6 +573,54 @@ namespace lar_content {
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
+
+
+float ParticleEfficiencyAlgorithm::GetReconstructedOffsetFromEventVertex(const MCParticle *const pMCParticle) 
+{
+
+    const VertexList *pVertexList = nullptr;
+    StatusCode vertexStatus = PandoraContentApi::GetList(*this, m_vertexListName, pVertexList);
+
+    float vertexOffset(0);
+
+    // If vertex is not reconstructed, still want to be able to fill the tree
+    // Fill will something non-sensical so can retrieve this information
+    if(vertexStatus == STATUS_CODE_NOT_INITIALIZED) {
+      return -1.f;
+    }
+
+    // Ensure that other SatusCodes are still handled
+    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, vertexStatus);
+
+    // Check that there is not more than one reconstructed event vertex (this shouldn't happen)
+    if(pVertexList->size() != 1)
+    {
+      std::cout << "WARNING - VERTEX LIST SIZE DOES NOT EQUAL 1" << std::endl;
+      throw;
+    }
+
+    // Reconstructed event vertex
+    const Vertex *const pRecoNeutrinoVertex = (*pVertexList->begin());
+    const CartesianVector *const pRecoEventVertex(&pRecoNeutrinoVertex->GetPosition()); 
+
+    // MC particle vertex
+    const CartesianVector *const pVertexPosition(&pMCParticle->GetVertex());
+
+    vertexOffset = std::sqrt(pVertexPosition->GetDistanceSquared(*pRecoEventVertex));
+
+    //std::cout << "Vertex Offset: " << vertexOffset << std::endl;
+    //std::string trueString = "TRUE: " + std::to_string(pTrueNeutrinoVertexPosition->GetX()) + ", " + std::to_string(pTrueNeutrinoVertexPosition->GetY()) + ", " + std::to_string(pTrueNeutrinoVertexPosition->GetZ());  
+    //std::string recoString = "RECO: " + std::to_string(pRecoNeutrinoVertexPosition->GetX()) + ", " + std::to_string(pRecoNeutrinoVertexPosition->GetY()) + ", " + std::to_string(pRecoNeutrinoVertexPosition->GetZ());  
+    //PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), pVertexPosition, "TRUE", RED, 2);
+    //PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &m_recoEventVertex, "FALSE", BLUE, 2);
+    //PandoraMonitoringApi::ViewEvent(this->GetPandora());
+
+    return vertexOffset;
+
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
   void ParticleEfficiencyAlgorithm::GetDeltaLArSoftAngles(const MCParticle *const particle1, const MCParticle *const particle2, float &deltaTheta0XZ, float &deltaTheta0YZ) {
 
     float particle1Theta0XZ;
@@ -573,7 +645,10 @@ namespace lar_content {
 
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle, "CaloHitListName", m_caloHitListName));
 
-    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle, "PfoListName", m_pfoListName));
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadVectorOfValues(xmlHandle,
+        "PfoListNames", m_pfoListNames));
+
+    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle, "VertexListName", m_vertexListName));
 
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle, "ParticlesInEvent", m_particlesInEvent));
 

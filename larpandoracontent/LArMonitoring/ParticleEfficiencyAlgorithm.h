@@ -58,12 +58,15 @@ namespace lar_content {
 
     void GetLArSoftAngles(const pandora::CartesianVector &vector, float &theta0XZ, float &theta0YZ);
 
+    float GetReconstructedOffsetFromEventVertex(const pandora::MCParticle *const pMCParticle);
+
     void GetDeltaLArSoftAngles(const pandora::MCParticle *const particle1, const pandora::MCParticle *const particle2, float &deltaTheta0XZ, float &deltaTheta0YZ);
 
     pandora::StatusCode ReadSettings(const pandora::TiXmlHandle xmlHandle);
 
     std::string  m_caloHitListName; // Name of input calo hit list
-    std::string  m_pfoListName; // Name of input pfo list
+    pandora::StringVector  m_pfoListNames; // Name of input pfo list
+    std::string m_vertexListName;
 
     int m_particlesInEvent;
 
