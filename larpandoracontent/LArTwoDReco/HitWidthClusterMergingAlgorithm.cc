@@ -68,6 +68,25 @@ HitWidthClusterMergingAlgorithm::HitWidthClusterMergingAlgorithm() :
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
+/*
+StatusCode HitWidthClusterMergingAlgorithm::Run()
+{
+
+    const ClusterList *pClusterList = NULL;
+    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetList(*this, m_clusterListName, pClusterList));
+
+    ClusterVector clusterVector;
+    GetListOfCleanClusters(pClusterList, clusterVector);
+    
+    ClusterAssociationMap clusterAssociationMap;
+    this->PopulateClusterAssociationMap(clusterVector, clusterAssociationMap);
+    this->CleanupForwardAssociations(clusterVector, clusterAssociationMap);
+    this->SetBackwardAssociations(clusterVector, clusterAssociationMap);
+
+    return STATUS_CODE_SUCCESS;
+}
+*/
+
 
 void HitWidthClusterMergingAlgorithm::TestPopulateClusterAssociationMap(const ClusterVector &clusterVector, ClusterAssociationMap &clusterAssociationMap) const
 {    
@@ -153,19 +172,6 @@ void HitWidthClusterMergingAlgorithm::TestPopulateClusterAssociationMap(const Cl
       //PandoraMonitoringApi::Pause(this->GetPandora());
       return false;
     }
-    /*
-    // if lower x extrema of test cluster is behind higher x of current cluster (applies only to clusters that overlap)
-    // also check if the higher x extrema is within z limits of the lower x extrema
-    // require to stop clustering following delta rays
-    if(testFitParameters.m_lowerXExtrema.GetX() < currentFitParameters.m_higherXExtrema.GetX()) {
-      if(testFitParameters.m_higherXExtrema.GetZ() > (currentFitParameters.m_higherXExtrema.GetZ() + m_maxZMergeDistance) || testFitParameters.m_higherXExtrema.GetZ() < (currentFitParameters.m_higherXExtrema.GetZ() - m_maxZMergeDistance)) {
-        PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &testClusterList, "TEST - BOTH EXTREMA OUTSIDE Z", RED);
-        PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &testFitParameters.m_lowerXExtrema, "TEST", RED, 2);
-        //PandoraMonitoringApi::Pause(this->GetPandora());
-        return false;
-      }
-    }
-    */
 
     if(testFitParameters.m_lowerXExtrema.GetZ() > (currentFitParameters.m_higherXExtrema.GetZ() + m_maxZMergeDistance) || testFitParameters.m_lowerXExtrema.GetZ() < (currentFitParameters.m_higherXExtrema.GetZ() - m_maxZMergeDistance)) {
       PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &testClusterList, "TEST - Outside Z", RED);
@@ -253,35 +259,149 @@ void HitWidthClusterMergingAlgorithm::PopulateClusterAssociationMap(const Cluste
             clusterAssociationMap[pCurrentCluster].m_forwardAssociations.insert(pTestCluster);
             clusterAssociationMap[pTestCluster].m_backwardAssociations.insert(pCurrentCluster);
         }
-
     }
+
+    this->CleanupForwardAssociations(clusterVector, clusterAssociationMap);
 
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
+void HitWidthClusterMergingAlgorithm::CleanupForwardAssociations(const ClusterVector &clusterVector, ClusterAssociationMap &clusterAssociationMap) const
+{
 
-  bool HitWidthClusterMergingAlgorithm::AreClustersAssociated(const ClusterFitParameters &currentFitParameters, const ClusterFitParameters &testFitParameters) const
+  ClusterAssociationMap tempMap(clusterAssociationMap);
+
+
+  for(const Cluster *const pCluster : clusterVector) 
+  {
+
+      const ClusterAssociationMap::const_iterator primaryMapIter = clusterAssociationMap.find(pCluster);
+
+      if(primaryMapIter == clusterAssociationMap.end())
+          continue;
+
+      const ClusterSet &primaryForwardAssociations(primaryMapIter->second.m_forwardAssociations);
+
+      // loop through the primary associations of each cluster
+      // find clusters that are not present in secondary associations 
+      for(const Cluster *const pConsideredCluster : primaryForwardAssociations)
+      {
+	  for(const Cluster *const pAssociatedCluster : primaryForwardAssociations)
+          {
+	      if(pConsideredCluster == pAssociatedCluster)
+	          continue;
+
+              const ClusterAssociationMap::const_iterator secondaryMapIter = clusterAssociationMap.find(pAssociatedCluster);
+
+              if(secondaryMapIter == clusterAssociationMap.end()) 
+                  continue;
+
+	      const ClusterSet &secondaryForwardAssociations(secondaryMapIter->second.m_forwardAssociations);
+	      
+	      // if cluster is present in the forward associations of any cluster at the same level remove
+	      if(secondaryForwardAssociations.find(pConsideredCluster) != secondaryForwardAssociations.end()) 
+              {
+		  ClusterSet &tempPrimaryForwardAssociations(tempMap.find(pCluster)->second.m_forwardAssociations);
+		  const ClusterSet::const_iterator forwardAssociationToRemove(tempPrimaryForwardAssociations.find(pConsideredCluster));
+
+		  if(forwardAssociationToRemove == tempPrimaryForwardAssociations.end())
+		      continue;
+
+		  ClusterSet &tempPrimaryBackwardAssociations(tempMap.find(pConsideredCluster)->second.m_backwardAssociations);
+		  const ClusterSet::const_iterator backwardAssociationToRemove(tempPrimaryBackwardAssociations.find(pCluster));
+
+		  if(backwardAssociationToRemove == tempPrimaryBackwardAssociations.end())
+		      continue;
+
+                  tempPrimaryForwardAssociations.erase(forwardAssociationToRemove);
+		  tempPrimaryBackwardAssociations.erase(backwardAssociationToRemove);
+      	      }
+	      
+	  }
+      }
+  }
+  /*
+  PandoraMonitoringApi::Create(this->GetPandora());
+  PandoraMonitoringApi::SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_XZ, -1.f, -1.f, 1.f);
+
+  for(const Cluster *const pCluster : clusterVector) 
+  {
+      const ClusterAssociationMap::const_iterator oldIter(clusterAssociationMap.find(pCluster));
+      const ClusterAssociationMap::const_iterator newIter(tempMap.find(pCluster));
+
+      if(oldIter == clusterAssociationMap.end() || newIter == clusterAssociationMap.end())
+	continue;
+
+      ClusterList currentCluster;
+      currentCluster.push_back(pCluster);
+      PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &currentCluster, "CURRENT", BLACK);
+
+      const ClusterSet &oldAssociations(oldIter->second.m_forwardAssociations);
+      const ClusterSet &newAssociations(newIter->second.m_forwardAssociations);
+
+      std::cout << "Old Associations: " << std::endl;
+      ClusterList oldClusters;
+      for(const Cluster *const pOldCluster : oldAssociations) 
+      {
+          oldClusters.push_back(pOldCluster);
+      }
+      PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &oldClusters, "Old Clusters", RED);
+
+      std::cout << "New Associations: " << std::endl;
+      ClusterList newClusters;
+      for(const Cluster *const pNewCluster : newAssociations) 
+      {
+          newClusters.push_back(pNewCluster);
+      }
+      PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &newClusters, "New Clusters", GREEN);
+
+      PandoraMonitoringApi::ViewEvent(this->GetPandora());
+
+  }
+  */ 
+  
+  clusterAssociationMap = tempMap;
+
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void HitWidthClusterMergingAlgorithm::SetBackwardAssociations(const ClusterVector &clusterVector, ClusterAssociationMap &clusterAssociationMap) const
+{
+
+    for(const Cluster *const pCluster : clusterVector)
+    {
+
+      ClusterAssociationMap::const_iterator mapIter(clusterAssociationMap.find(pCluster));
+     
+       if(mapIter == clusterAssociationMap.end())
+	  continue;
+
+       const ClusterSet &forwardAssociations(mapIter->second.m_forwardAssociations);
+
+       for(const Cluster *const pForwardCluster : forwardAssociations)
+       {
+	   clusterAssociationMap[pForwardCluster].m_backwardAssociations.insert(pCluster);
+       }
+    }  
+
+}
+
+
+
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+bool HitWidthClusterMergingAlgorithm::AreClustersAssociated(const ClusterFitParameters &currentFitParameters, const ClusterFitParameters &testFitParameters) const
 {
 
     CartesianVector currentClusterDirection(GetClusterEndDirection(currentFitParameters.m_currentClusterPositionToWeightMap, currentFitParameters.m_numCaloHits));
     CartesianVector testClusterDirection(GetClusterEndDirection(testFitParameters.m_testClusterPositionToWeightMap, testFitParameters.m_numCaloHits));
-    
 
     if(testFitParameters.m_lowerXExtrema.GetX() > (currentFitParameters.m_higherXExtrema.GetX() + m_maxXMergeDistance)) {  
       return false;
     }
-
-    /*
-    // if lower x extrema of test cluster is behind higher x of current cluster (applies only to clusters that overlap)
-    // also check if the higher x extrema is within z limits of the lower x extrema
-    // require to stop clustering following delta rays
-    if(testFitParameters.m_lowerXExtrema.GetX() < currentFitParameters.m_higherXExtrema.GetX()) {
-      if(testFitParameters.m_higherXExtrema.GetZ() > (currentFitParameters.m_higherXExtrema.GetZ() + m_maxZMergeDistance) || testFitParameters.m_higherXExtrema.GetZ() < (currentFitParameters.m_higherXExtrema.GetZ() - m_maxZMergeDistance)) {
-        return false;
-      }
-    }
-    */
 
     if(testFitParameters.m_lowerXExtrema.GetZ() > (currentFitParameters.m_higherXExtrema.GetZ() + m_maxZMergeDistance) || testFitParameters.m_lowerXExtrema.GetZ() < (currentFitParameters.m_higherXExtrema.GetZ() - m_maxZMergeDistance)) {
       return false;
@@ -292,7 +412,6 @@ void HitWidthClusterMergingAlgorithm::PopulateClusterAssociationMap(const Cluste
     }
     
     return true;
-
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -302,11 +421,13 @@ bool HitWidthClusterMergingAlgorithm::IsExtremalCluster(const bool isForward, co
   
   //NEED TO IMPLEMENT USING THE MAP INSTEAD
 
-    float currentMinX(0), currentMaxX(0);
-    GetExtremalCoordinatesX(pCurrentCluster, currentMinX, currentMaxX);
+    CartesianVector currentMin(0,0,0), currentMax(0,0,0);
+    HitWidthClusterMergingAlgorithm::GetExtremalCoordinates(pCurrentCluster, currentMin, currentMax);
 
-    float testMinX(0.f), testMaxX(0.f);
-    GetExtremalCoordinatesX(pTestCluster, testMinX, testMaxX);
+    CartesianVector testMin(0,0,0), testMax(0,0,0);
+    HitWidthClusterMergingAlgorithm::GetExtremalCoordinates(pTestCluster, testMin, testMax);
+
+    float testMaxX(testMax.GetX()), currentMaxX(currentMax.GetX());
 
     if (isForward)
     {
@@ -315,8 +436,8 @@ bool HitWidthClusterMergingAlgorithm::IsExtremalCluster(const bool isForward, co
     }
     else
     {
-        if (std::fabs(testMinX - currentMaxX) > std::numeric_limits<float>::epsilon())
-            return (testMinX < currentMinX);
+        if (std::fabs(testMaxX - currentMaxX) > std::numeric_limits<float>::epsilon())
+            return (testMaxX < currentMaxX);
     }
   
     return LArClusterHelper::SortByNHits(pTestCluster, pCurrentCluster);
@@ -973,8 +1094,8 @@ bool HitWidthClusterMergingAlgorithm::SortByMaxX(const Cluster *const pLhs, cons
     CartesianVector rhsLowerXEdge(0,0,0);
     CartesianVector rhsUpperXEdge(0,0,0);
 
-    GetExtremalCoordinates(pLhs, lhsLowerXEdge, lhsUpperXEdge);
-    GetExtremalCoordinates(pRhs, rhsLowerXEdge, rhsUpperXEdge);
+    HitWidthClusterMergingAlgorithm::GetExtremalCoordinates(pLhs, lhsLowerXEdge, lhsUpperXEdge);
+    HitWidthClusterMergingAlgorithm::GetExtremalCoordinates(pRhs, rhsLowerXEdge, rhsUpperXEdge);
   
     return (lhsUpperXEdge.GetX() < rhsUpperXEdge.GetX());
 }
@@ -1055,7 +1176,7 @@ StatusCode HitWidthClusterMergingAlgorithm::ReadSettings(const TiXmlHandle xmlHa
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
         "FittingSampleWeight", m_fittingSampleWeight));
 
-    return STATUS_CODE_SUCCESS;
+    return ClusterAssociationAlgorithm::ReadSettings(xmlHandle);
 }
   
 } // namespace lar_content
