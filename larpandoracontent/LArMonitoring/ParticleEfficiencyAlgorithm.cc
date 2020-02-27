@@ -230,6 +230,9 @@ namespace lar_content {
       if(targetPrimaries.size() > 2) {
 	std::cout << "WARNING: EVENT HAS MORE THAT 2 PRIMARY PARTICLES" << std::endl;
       }
+
+      std::cout << "WARNING: EVENT HAS LESS THAN 2 PRIMARY PARTICLES, RETURNED WIHTOUT WRITING TO TREE" << std::endl;
+
       return;
     }
 
@@ -334,6 +337,7 @@ namespace lar_content {
       if(targetPrimaries.size() > 2) {
         std::cout << "WARNING: EVENT HAS MORE THAT 2 PRIMARY PARTICLES" << std::endl;
       }
+      std::cout << "WARNING: EVENT HAS LESS THAN 2 PRIMARY PARTICLES, RETURNED WIHTOUT WRITING TO TREE" << std::endl;
       return;
     }
 

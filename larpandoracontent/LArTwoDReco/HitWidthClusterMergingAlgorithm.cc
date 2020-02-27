@@ -68,24 +68,6 @@ HitWidthClusterMergingAlgorithm::HitWidthClusterMergingAlgorithm() :
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
-/*
-StatusCode HitWidthClusterMergingAlgorithm::Run()
-{
-
-    const ClusterList *pClusterList = NULL;
-    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetList(*this, m_clusterListName, pClusterList));
-
-    ClusterVector clusterVector;
-    GetListOfCleanClusters(pClusterList, clusterVector);
-    
-    ClusterAssociationMap clusterAssociationMap;
-    this->PopulateClusterAssociationMap(clusterVector, clusterAssociationMap);
-    this->CleanupForwardAssociations(clusterVector, clusterAssociationMap);
-    this->SetBackwardAssociations(clusterVector, clusterAssociationMap);
-
-    return STATUS_CODE_SUCCESS;
-}
-*/
 
 
 void HitWidthClusterMergingAlgorithm::TestPopulateClusterAssociationMap(const ClusterVector &clusterVector, ClusterAssociationMap &clusterAssociationMap) const
@@ -146,8 +128,6 @@ void HitWidthClusterMergingAlgorithm::TestPopulateClusterAssociationMap(const Cl
         PandoraMonitoringApi::ViewEvent(this->GetPandora()); 
 
     }
-
-    
 	
 
 }
@@ -209,12 +189,6 @@ void HitWidthClusterMergingAlgorithm::GetListOfCleanClusters(const ClusterList *
         if(GetTotalClusterWeight(pCluster) < m_minClusterWeight)
             continue;
 
-        //ignore clusters that aren't transverse??
-        //ClusterFitParameters::ClusterPositionToWeightMap constituentHitsToWeightMap(distanceToOriginSort);
-        //FillPositionToWeightMap(pCluster, constituentHitsToWeightMap);
-
-        //GetClusterDirection(constituentHitsToWeightMap, pCluster->GetNCaloHits());
-
         clusterVector.push_back(pCluster);
     }
 
@@ -261,6 +235,7 @@ void HitWidthClusterMergingAlgorithm::PopulateClusterAssociationMap(const Cluste
         }
     }
 
+    // remove all 'shortcut' routes
     this->CleanupForwardAssociations(clusterVector, clusterAssociationMap);
 
 }
@@ -271,7 +246,6 @@ void HitWidthClusterMergingAlgorithm::CleanupForwardAssociations(const ClusterVe
 {
 
   ClusterAssociationMap tempMap(clusterAssociationMap);
-
 
   for(const Cluster *const pCluster : clusterVector) 
   {
@@ -284,16 +258,17 @@ void HitWidthClusterMergingAlgorithm::CleanupForwardAssociations(const ClusterVe
       const ClusterSet &primaryForwardAssociations(primaryMapIter->second.m_forwardAssociations);
 
       // loop through the primary associations of each cluster
-      // find clusters that are not present in secondary associations 
+      // remove clusters that are present in secondary associations of other primary clusters 
       for(const Cluster *const pConsideredCluster : primaryForwardAssociations)
       {
-	  for(const Cluster *const pAssociatedCluster : primaryForwardAssociations)
+	  for(const Cluster *const pPrimaryCluster : primaryForwardAssociations)
           {
-	      if(pConsideredCluster == pAssociatedCluster)
+	      if(pConsideredCluster == pPrimaryCluster)
 	          continue;
 
-              const ClusterAssociationMap::const_iterator secondaryMapIter = clusterAssociationMap.find(pAssociatedCluster);
+              const ClusterAssociationMap::const_iterator secondaryMapIter = clusterAssociationMap.find(pPrimaryCluster);
 
+	      // if primary cluster has no associations (this shouldn't ever be the case)
               if(secondaryMapIter == clusterAssociationMap.end()) 
                   continue;
 
@@ -305,12 +280,14 @@ void HitWidthClusterMergingAlgorithm::CleanupForwardAssociations(const ClusterVe
 		  ClusterSet &tempPrimaryForwardAssociations(tempMap.find(pCluster)->second.m_forwardAssociations);
 		  const ClusterSet::const_iterator forwardAssociationToRemove(tempPrimaryForwardAssociations.find(pConsideredCluster));
 
+		  // if association has already been removed
 		  if(forwardAssociationToRemove == tempPrimaryForwardAssociations.end())
 		      continue;
 
 		  ClusterSet &tempPrimaryBackwardAssociations(tempMap.find(pConsideredCluster)->second.m_backwardAssociations);
 		  const ClusterSet::const_iterator backwardAssociationToRemove(tempPrimaryBackwardAssociations.find(pCluster));
 
+		  // if association has already been removed
 		  if(backwardAssociationToRemove == tempPrimaryBackwardAssociations.end())
 		      continue;
 
@@ -337,59 +314,49 @@ void HitWidthClusterMergingAlgorithm::CleanupForwardAssociations(const ClusterVe
       currentCluster.push_back(pCluster);
       PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &currentCluster, "CURRENT", BLACK);
 
-      const ClusterSet &oldAssociations(oldIter->second.m_forwardAssociations);
-      const ClusterSet &newAssociations(newIter->second.m_forwardAssociations);
+      const ClusterSet &oldForwardAssociations(oldIter->second.m_forwardAssociations);
+      const ClusterSet &newForwardAssociations(newIter->second.m_forwardAssociations);
 
-      std::cout << "Old Associations: " << std::endl;
-      ClusterList oldClusters;
-      for(const Cluster *const pOldCluster : oldAssociations) 
-      {
-          oldClusters.push_back(pOldCluster);
-      }
-      PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &oldClusters, "Old Clusters", RED);
+      const ClusterSet &oldBackwardAssociations(oldIter->second.m_backwardAssociations);
+      const ClusterSet &newBackwardAssociations(newIter->second.m_backwardAssociations);
 
-      std::cout << "New Associations: " << std::endl;
-      ClusterList newClusters;
-      for(const Cluster *const pNewCluster : newAssociations) 
+      ClusterList oldForwardClusters;
+      for(const Cluster *const pOldCluster : oldForwardAssociations) 
       {
-          newClusters.push_back(pNewCluster);
+          oldForwardClusters.push_back(pOldCluster);
       }
-      PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &newClusters, "New Clusters", GREEN);
+      PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &oldForwardClusters, "Old Forward Clusters", DARKGREEN);
+
+      ClusterList newForwardClusters;
+      for(const Cluster *const pNewCluster : newForwardAssociations) 
+      {
+          newForwardClusters.push_back(pNewCluster);
+      }
+      PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &newForwardClusters, "New Forward Clusters", GREEN);
+
+
+      ClusterList oldBackwardClusters;
+      for(const Cluster *const pOldCluster : oldBackwardAssociations) 
+      {
+          oldBackwardClusters.push_back(pOldCluster);
+      }
+      PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &oldBackwardClusters, "Old Backward Clusters", DARKRED);
+
+      ClusterList newBackwardClusters;
+      for(const Cluster *const pNewCluster : newBackwardAssociations) 
+      {
+          newBackwardClusters.push_back(pNewCluster);
+      }
+      PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &newBackwardClusters, "New Backward Clusters", RED);
 
       PandoraMonitoringApi::ViewEvent(this->GetPandora());
 
   }
-  */ 
+  */
   
   clusterAssociationMap = tempMap;
 
 }
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-
-void HitWidthClusterMergingAlgorithm::SetBackwardAssociations(const ClusterVector &clusterVector, ClusterAssociationMap &clusterAssociationMap) const
-{
-
-    for(const Cluster *const pCluster : clusterVector)
-    {
-
-      ClusterAssociationMap::const_iterator mapIter(clusterAssociationMap.find(pCluster));
-     
-       if(mapIter == clusterAssociationMap.end())
-	  continue;
-
-       const ClusterSet &forwardAssociations(mapIter->second.m_forwardAssociations);
-
-       for(const Cluster *const pForwardCluster : forwardAssociations)
-       {
-	   clusterAssociationMap[pForwardCluster].m_backwardAssociations.insert(pCluster);
-       }
-    }  
-
-}
-
-
-
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
