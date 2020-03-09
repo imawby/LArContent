@@ -12,6 +12,8 @@
 #include "Pandora/AlgorithmTool.h"
 #include "Pandora/Pandora.h"
 
+#include "larpandoracontent/LArTest/TestAlgorithm.h"
+
 #include "larpandoracontent/LArCheating/CheatingBeamParticleIdTool.h"
 #include "larpandoracontent/LArCheating/CheatingClusterCharacterisationAlgorithm.h"
 #include "larpandoracontent/LArCheating/CheatingClusterCreationAlgorithm.h"
@@ -36,6 +38,7 @@
 #include "larpandoracontent/LArControlFlow/SimpleNeutrinoIdTool.h"
 #include "larpandoracontent/LArControlFlow/PostProcessingAlgorithm.h"
 #include "larpandoracontent/LArControlFlow/PreProcessingAlgorithm.h"
+#include "larpandoracontent/LArControlFlow/HitSplitPreProcessingAlgorithm.h"
 #include "larpandoracontent/LArControlFlow/SlicingAlgorithm.h"
 #include "larpandoracontent/LArControlFlow/StitchingCosmicRayMergingTool.h"
 
@@ -186,7 +189,8 @@
  
 #define LAR_ALGORITHM_LIST(d)                                                                                                   \
     d("LArHitWidthClusterMerging",              HitWidthClusterMergingAlgorithm)                                                \
-    d("LArTestHitWidthClusterMerging",              TestHitWidthClusterMergingAlgorithm)                                                \
+    d("LArTest",                                TestAlgorithm)                                                                  \
+    d("LArTestHitWidthClusterMerging",          TestHitWidthClusterMergingAlgorithm)                                            \
     d("LArNeutrinoEventValidation",             NeutrinoEventValidationAlgorithm)                                               \
     d("LArTestBeamEventValidation",             TestBeamEventValidationAlgorithm)                                               \
     d("LArTestBeamHierarchyEventValidation",    TestBeamHierarchyEventValidationAlgorithm)                                      \
@@ -211,6 +215,7 @@
     d("LArPcaShowerParticleBuilding",           PcaShowerParticleBuildingAlgorithm)                                             \
     d("LArMaster",                              MasterAlgorithm)                                                                \
     d("LArPostProcessing",                      PostProcessingAlgorithm)                                                        \
+    d("LArHitSplitPreProcessing",               HitSplitPreProcessingAlgorithm)                                                 \
     d("LArPreProcessing",                       PreProcessingAlgorithm)                                                         \
     d("LArSlicing",                             SlicingAlgorithm)                                                               \
     d("LArTrackParticleBuilding",               TrackParticleBuildingAlgorithm)                                                 \

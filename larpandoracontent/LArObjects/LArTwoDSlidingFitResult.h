@@ -71,6 +71,8 @@ public:
      */
     const pandora::Cluster *GetCluster() const;
 
+    void SetCluster(const pandora::Cluster *const pCluster);
+
     /**
      *  @brief  Get the layer fit half window
      *

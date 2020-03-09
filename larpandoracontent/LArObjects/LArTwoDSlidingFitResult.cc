@@ -116,6 +116,13 @@ const pandora::Cluster *TwoDSlidingFitResult::GetCluster() const
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
+void TwoDSlidingFitResult::SetCluster(const Cluster *const pCluster)
+{
+    m_pCluster = pCluster;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
 float TwoDSlidingFitResult::GetLayerFitHalfWindowLength() const
 {
     return (static_cast<float>(m_layerFitHalfWindow)) * m_layerPitch;

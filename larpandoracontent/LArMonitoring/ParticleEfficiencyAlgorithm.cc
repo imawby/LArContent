@@ -79,6 +79,7 @@ namespace lar_content {
     MCParticleVector orderedTargetMCParticleVector;
     LArMonitoringHelper::GetOrderedMCParticleVector({mcToRecoHitsMap}, orderedTargetMCParticleVector);
 
+
     // VISUALISE ON SCREEN
     // Visualize the reconstructable MC particles and their hits
     if(m_visualiseMCParticles) {
