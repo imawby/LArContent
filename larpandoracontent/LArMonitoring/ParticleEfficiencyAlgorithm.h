@@ -58,7 +58,7 @@ namespace lar_content {
 
     void GetLArSoftAngles(const pandora::CartesianVector &vector, float &theta0XZ, float &theta0YZ);
 
-    float GetReconstructedOffsetFromEventVertex(const pandora::MCParticle *const pMCParticle);
+    void GetReconstructedOffsetFromEventVertex(const pandora::MCParticle *const pMCParticle);
 
     void GetDeltaLArSoftAngles(const pandora::MCParticle *const particle1, const pandora::MCParticle *const particle2, float &deltaTheta0XZ, float &deltaTheta0YZ);
 
@@ -82,6 +82,8 @@ namespace lar_content {
     bool m_printToScreen;
     bool m_visualiseMCParticles;
     bool m_visualisePfos;
+
+    bool m_isThreeViewMode;
 
     int m_eventNumber;
 

@@ -34,6 +34,7 @@ namespace lar_content {
     m_printToScreen(false),
     m_visualiseMCParticles(false),
     m_visualisePfos(false),
+    m_isThreeViewMode(true),
     m_eventNumber(0)
   {
   }
@@ -68,6 +69,14 @@ namespace lar_content {
     const CaloHitList *pCaloHitList = nullptr;
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetList(*this, m_caloHitListName, pCaloHitList));
 
+
+    // set reconstruction parameters to be appropriate for a single view
+    if(!m_isThreeViewMode)
+    {
+        m_parameters.m_minPrimaryGoodHits = 0;
+        m_parameters.m_minHitsForGoodView = 0;
+        m_parameters.m_minPrimaryGoodViews = 0;
+    }
 
     // MC PARTICLES
 
@@ -382,7 +391,6 @@ namespace lar_content {
     float theta0XZ;
     GetLArSoftAngles(pMCParticle->GetMomentum(), theta0XZ, theta0YZ);
 
-    float recoOffsetFromEventVertex(GetReconstructedOffsetFromEventVertex(pMCParticle));
 
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "EventNumber", m_eventNumber));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "MCParticleID", pMCParticle->GetParticleId()));
@@ -395,8 +403,10 @@ namespace lar_content {
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Theta0YZ", theta0YZ));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Theta0XZ", theta0XZ));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "TotHits", static_cast<int>(mcToRecoHitsMap.at(pMCParticle).size())));
-    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "RecoOffsetFromEventVertex", recoOffsetFromEventVertex));
 
+
+    if(!m_vertexListName.empty())
+        GetReconstructedOffsetFromEventVertex(pMCParticle);
 
   }
 
@@ -580,7 +590,7 @@ namespace lar_content {
 
 
 
-float ParticleEfficiencyAlgorithm::GetReconstructedOffsetFromEventVertex(const MCParticle *const pMCParticle) 
+void ParticleEfficiencyAlgorithm::GetReconstructedOffsetFromEventVertex(const MCParticle *const pMCParticle) 
 {
 
     const VertexList *pVertexList = nullptr;
@@ -591,17 +601,18 @@ float ParticleEfficiencyAlgorithm::GetReconstructedOffsetFromEventVertex(const M
     // If vertex is not reconstructed, still want to be able to fill the tree
     // Fill will something non-sensical so can retrieve this information
     if(vertexStatus == STATUS_CODE_NOT_INITIALIZED) {
-      return -1.f;
+        vertexOffset = -1.f;
+        PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "RecoOffsetFromEventVertex", vertexOffset));
     }
 
     // Ensure that other SatusCodes are still handled
-    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, vertexStatus);
+    PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, vertexStatus);
 
     // Check that there is not more than one reconstructed event vertex (this shouldn't happen)
     if(pVertexList->size() != 1)
     {
-      std::cout << "WARNING - VERTEX LIST SIZE DOES NOT EQUAL 1" << std::endl;
-      throw;
+        std::cout << "WARNING - VERTEX LIST SIZE DOES NOT EQUAL 1" << std::endl;
+        throw;
     }
 
     // Reconstructed event vertex
@@ -613,14 +624,7 @@ float ParticleEfficiencyAlgorithm::GetReconstructedOffsetFromEventVertex(const M
 
     vertexOffset = std::sqrt(pVertexPosition->GetDistanceSquared(*pRecoEventVertex));
 
-    //std::cout << "Vertex Offset: " << vertexOffset << std::endl;
-    //std::string trueString = "TRUE: " + std::to_string(pTrueNeutrinoVertexPosition->GetX()) + ", " + std::to_string(pTrueNeutrinoVertexPosition->GetY()) + ", " + std::to_string(pTrueNeutrinoVertexPosition->GetZ());  
-    //std::string recoString = "RECO: " + std::to_string(pRecoNeutrinoVertexPosition->GetX()) + ", " + std::to_string(pRecoNeutrinoVertexPosition->GetY()) + ", " + std::to_string(pRecoNeutrinoVertexPosition->GetZ());  
-    //PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), pVertexPosition, "TRUE", RED, 2);
-    //PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &m_recoEventVertex, "FALSE", BLUE, 2);
-    //PandoraMonitoringApi::ViewEvent(this->GetPandora());
-
-    return vertexOffset;
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "RecoOffsetFromEventVertex", vertexOffset));
 
 }
 
@@ -653,7 +657,7 @@ float ParticleEfficiencyAlgorithm::GetReconstructedOffsetFromEventVertex(const M
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadVectorOfValues(xmlHandle,
         "PfoListNames", m_pfoListNames));
 
-    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle, "VertexListName", m_vertexListName));
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "VertexListName", m_vertexListName));
 
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle, "ParticlesInEvent", m_particlesInEvent));
 
@@ -683,6 +687,10 @@ float ParticleEfficiencyAlgorithm::GetReconstructedOffsetFromEventVertex(const M
 
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
         "VisualisePfos", m_visualisePfos));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "IsThreeViewMode", m_isThreeViewMode));
+
+
 
   return STATUS_CODE_SUCCESS;
 
