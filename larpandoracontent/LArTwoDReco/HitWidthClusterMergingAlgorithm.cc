@@ -22,6 +22,7 @@ namespace lar_content
 HitWidthClusterMergingAlgorithm::HitWidthClusterMergingAlgorithm() :
   m_clusterListName(),
   m_maxConstituentHitWidth(0.5),
+  m_hitWidthScalingFactor(1),
   m_useSlidingLinearFit(false),
   m_layerFitHalfWindow(20),
   m_minClusterWeight(0.5),      
@@ -48,7 +49,7 @@ void HitWidthClusterMergingAlgorithm::GetListOfCleanClusters(const ClusterList *
         if(LArHitWidthHelper::GetTotalClusterWeight(pCluster) < m_minClusterWeight)
             continue;
 
-        pClusterToParametersMap->insert(std::pair(pCluster, LArHitWidthHelper::ClusterParameters(pCluster, m_maxConstituentHitWidth, m_useSlidingLinearFit)));
+        pClusterToParametersMap->insert(std::pair(pCluster, LArHitWidthHelper::ClusterParameters(pCluster, m_maxConstituentHitWidth, m_useSlidingLinearFit, m_hitWidthScalingFactor)));
 
         clusterVector.push_back(pCluster);
     }
@@ -438,6 +439,10 @@ StatusCode HitWidthClusterMergingAlgorithm::ReadSettings(const TiXmlHandle xmlHa
 
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
         "MaxConstituentHitWidth", m_maxConstituentHitWidth));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, 
+        "HitWidthScalingFactor", m_hitWidthScalingFactor));
+
 
     return ClusterAssociationAlgorithm::ReadSettings(xmlHandle);
 }

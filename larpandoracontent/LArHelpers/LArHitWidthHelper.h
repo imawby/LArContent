@@ -44,7 +44,7 @@ public:
    class ClusterParameters
     {
     public:
-      ClusterParameters(const pandora::Cluster *const pCluster, const float maxConsituentHitWidth, bool isUniformHits);
+      ClusterParameters(const pandora::Cluster *const pCluster, const float maxConsituentHitWidth, const bool isUniformHits, const float hitWidthScalingFactor);
 
         const pandora::Cluster* GetClusterAddress() const;
 	unsigned int GetNumCaloHits() const;
@@ -78,8 +78,8 @@ public:
     };
     
 
-    static ConstituentHitVector GetConstituentHits(const pandora::Cluster *const pCluster, const float maxConstituentHitWidth);
-    static ConstituentHitVector GetUniformConstituentHits(const pandora::Cluster *const pCluster, const float constituentHitWidth);
+    static ConstituentHitVector GetConstituentHits(const pandora::Cluster *const pCluster, const float maxConstituentHitWidth, const float hitWidthScalingFactor);
+    static ConstituentHitVector GetUniformConstituentHits(const pandora::Cluster *const pCluster, const float constituentHitWidth, const float hitWidthScalingFactor);
     static pandora::CartesianPointVector GetConstituentHitPositionVector(const ConstituentHitVector &constituentHitVector);
     static pandora::CartesianVector GetExtremalCoordinatesLowerX(const ConstituentHitVector &constituentHitVector);
     static pandora::CartesianVector GetExtremalCoordinatesHigherX(const ConstituentHitVector &constituentHitVector);

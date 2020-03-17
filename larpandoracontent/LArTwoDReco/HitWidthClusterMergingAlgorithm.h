@@ -54,6 +54,7 @@ private:
   std::string m_clusterListName;
 
   float m_maxConstituentHitWidth;
+  float m_hitWidthScalingFactor;
 
   bool m_useSlidingLinearFit;
   float m_layerFitHalfWindow;
