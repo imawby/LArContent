@@ -47,6 +47,7 @@
 
 #include "larpandoracontent/LArHelpers/LArGeometryHelper.h"
 
+
 #include "larpandoracontent/LArMonitoring/CosmicRayTaggingMonitoringTool.h"
 #include "larpandoracontent/LArMonitoring/NeutrinoEventValidationAlgorithm.h"
 #include "larpandoracontent/LArMonitoring/MCParticleMonitoringAlgorithm.h"
@@ -138,6 +139,7 @@
 #include "larpandoracontent/LArTrackShowerId/SvmPfoCharacterisationAlgorithm.h"
 #include "larpandoracontent/LArTrackShowerId/TrackShowerIdFeatureTool.h"
 
+#include "larpandoracontent/LArTwoDReco/LArClusterAssociation/TestCrossGapsAssociationAlgorithm.h"
 #include "larpandoracontent/LArTwoDReco/LArClusterAssociation/CrossGapsAssociationAlgorithm.h"
 #include "larpandoracontent/LArTwoDReco/LArClusterAssociation/CrossGapsExtensionAlgorithm.h"
 #include "larpandoracontent/LArTwoDReco/LArClusterAssociation/LongitudinalAssociationAlgorithm.h"
@@ -173,7 +175,6 @@
 
 #include "larpandoracontent/LArTwoDReco/TwoDParticleCreationAlgorithm.h"
 #include "larpandoracontent/LArTwoDReco/HitWidthClusterMergingAlgorithm.h"
-#include "larpandoracontent/LArTwoDReco/TestHitWidthClusterMergingAlgorithm.h"
 
 #include "larpandoracontent/LArUtility/ListChangingAlgorithm.h"
 #include "larpandoracontent/LArUtility/ListDeletionAlgorithm.h"
@@ -187,10 +188,13 @@
 
 #include "larpandoracontent/LArContent.h"
  
+#include "larpandoracontent/LArMonitoring/WriteEventLookupTreeAlgorithm.h"
+
+
 #define LAR_ALGORITHM_LIST(d)                                                                                                   \
+    d("LArWriteEventLookupTree",                WriteEventLookupTreeAlgorithm)                                                  \
     d("LArHitWidthClusterMerging",              HitWidthClusterMergingAlgorithm)                                                \
     d("LArTest",                                TestAlgorithm)                                                                  \
-    d("LArTestHitWidthClusterMerging",          TestHitWidthClusterMergingAlgorithm)                                            \
     d("LArNeutrinoEventValidation",             NeutrinoEventValidationAlgorithm)                                               \
     d("LArTestBeamEventValidation",             TestBeamEventValidationAlgorithm)                                               \
     d("LArTestBeamHierarchyEventValidation",    TestBeamHierarchyEventValidationAlgorithm)                                      \
@@ -246,6 +250,7 @@
     d("LArCutPfoCharacterisation",              CutPfoCharacterisationAlgorithm)                                                \
     d("LArShowerGrowing",                       ShowerGrowingAlgorithm)                                                         \
     d("LArSvmPfoCharacterisation",              SvmPfoCharacterisationAlgorithm)                                                \
+    d("LArTestCrossGapsAssociation",            TestCrossGapsAssociationAlgorithm)                                                  \
     d("LArCrossGapsAssociation",                CrossGapsAssociationAlgorithm)                                                  \
     d("LArCrossGapsExtension",                  CrossGapsExtensionAlgorithm)                                                    \
     d("LArLongitudinalAssociation",             LongitudinalAssociationAlgorithm)                                               \

@@ -73,9 +73,9 @@ namespace lar_content {
     // set reconstruction parameters to be appropriate for a single view
     if(!m_isThreeViewMode)
     {
-        m_parameters.m_minPrimaryGoodHits = 0;
-        m_parameters.m_minHitsForGoodView = 0;
-        m_parameters.m_minPrimaryGoodViews = 0;
+        m_parameters.m_minPrimaryGoodHits = 5;
+        m_parameters.m_minHitsForGoodView = 5;
+        m_parameters.m_minPrimaryGoodViews = 1;
     }
 
     // MC PARTICLES
