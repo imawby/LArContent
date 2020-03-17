@@ -62,7 +62,8 @@ private:
   float m_minClusterWeight;
   float m_maxXMergeDistance; //Distance either side of point
   float m_maxZMergeDistance; //Distance either side of point
-  float m_maxMergeCosOpeningAngle; 
+  float m_maxMergeCosOpeningAngle;
+  float m_maxDirectionDeviationCosAngle;
 
 
 
