@@ -600,13 +600,19 @@ void ParticleEfficiencyAlgorithm::GetReconstructedOffsetFromEventVertex(const MC
 
     // If vertex is not reconstructed, still want to be able to fill the tree
     // Fill will something non-sensical so can retrieve this information
-    if(vertexStatus == STATUS_CODE_NOT_INITIALIZED) {
-        vertexOffset = -1.f;
-        PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "RecoOffsetFromEventVertex", vertexOffset));
+    if(vertexStatus != STATUS_CODE_SUCCESS)
+    {
+        if(vertexStatus == STATUS_CODE_NOT_INITIALIZED)
+        {
+            vertexOffset = -1.f;
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "RecoOffsetFromEventVertex", vertexOffset));
+        }
+        else
+        {
+            // Ensure that other SatusCodes are still handled
+            PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, vertexStatus);
+        }
     }
-
-    // Ensure that other SatusCodes are still handled
-    PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, vertexStatus);
 
     // Check that there is not more than one reconstructed event vertex (this shouldn't happen)
     if(pVertexList->size() != 1)
