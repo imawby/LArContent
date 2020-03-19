@@ -46,7 +46,7 @@ void TestCrossGapsAssociationAlgorithm::GetListOfCleanClusters(const ClusterList
 
     for (const Cluster *const pCluster : *pClusterList)
     {
-      if (LArHitWidthHelper::GetTotalClusterWeight(pCluster) < 5) {
+      if (LArHitWidthHelper::GetOriginalTotalClusterWeight(pCluster) < 5) {
 	  ClusterList aCluster;
 	  aCluster.push_back(pCluster);
 	  //PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &aCluster, "CaloHits", RED);
