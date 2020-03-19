@@ -79,7 +79,7 @@ void HitWidthClusterMergingAlgorithm::PopulateClusterAssociationMap(const Cluste
         const Cluster *const pCurrentCluster = *iterCurrentCluster;
         const LArHitWidthHelper::ClusterToParametersMap::const_iterator currentParametersIter = pClusterToParametersMap->find(pCurrentCluster);
 
-	    if(currentParametersIter == pClusterToParametersMap->end())
+	if(currentParametersIter == pClusterToParametersMap->end())
             throw StatusCodeException(STATUS_CODE_NOT_FOUND);
 
         for (ClusterVector::const_iterator iterTestCluster = iterCurrentCluster; iterTestCluster != clusterVector.end(); ++iterTestCluster)
@@ -87,10 +87,10 @@ void HitWidthClusterMergingAlgorithm::PopulateClusterAssociationMap(const Cluste
             if (iterCurrentCluster == iterTestCluster)
                 continue;
 
-	        const Cluster *const pTestCluster = *iterTestCluster;
+	    const Cluster *const pTestCluster = *iterTestCluster;
             const LArHitWidthHelper::ClusterToParametersMap::const_iterator testParametersIter = pClusterToParametersMap->find(pTestCluster);
 
-	        if(testParametersIter == pClusterToParametersMap->end())
+	    if(testParametersIter == pClusterToParametersMap->end())
                 throw StatusCodeException(STATUS_CODE_NOT_FOUND);
 
             if (!this->AreClustersAssociated(currentParametersIter->second, testParametersIter->second))
@@ -100,7 +100,7 @@ void HitWidthClusterMergingAlgorithm::PopulateClusterAssociationMap(const Cluste
             clusterAssociationMap[pTestCluster].m_backwardAssociations.insert(pCurrentCluster);
         }
 
-	//PandoraMonitoringApi::ViewEvent(this->GetPandora());
+        //PandoraMonitoringApi::ViewEvent(this->GetPandora());
     }
 
     // remove all 'shortcut' routes
@@ -129,9 +129,9 @@ void HitWidthClusterMergingAlgorithm::CleanupClusterAssociations(const ClusterVe
       // remove clusters that are present in secondary associations of other primary clusters 
       for(const Cluster *const pConsideredCluster : primaryForwardAssociations)
       {
-	      for(const Cluster *const pPrimaryCluster : primaryForwardAssociations)
+	  for(const Cluster *const pPrimaryCluster : primaryForwardAssociations)
           {
-	          if(pConsideredCluster == pPrimaryCluster)
+	      if(pConsideredCluster == pPrimaryCluster)
                   continue;
 
               const ClusterAssociationMap::const_iterator secondaryMapIter = clusterAssociationMap.find(pPrimaryCluster);
@@ -140,26 +140,24 @@ void HitWidthClusterMergingAlgorithm::CleanupClusterAssociations(const ClusterVe
               if(secondaryMapIter == clusterAssociationMap.end()) 
                   continue;
 
-	          const ClusterSet &secondaryForwardAssociations(secondaryMapIter->second.m_forwardAssociations);
+	      const ClusterSet &secondaryForwardAssociations(secondaryMapIter->second.m_forwardAssociations);
 	      
-	          // if cluster is present in the forward associations of any cluster at the same level remove
-	          if(secondaryForwardAssociations.find(pConsideredCluster) != secondaryForwardAssociations.end()) 
+	      // if cluster is present in the forward associations of any cluster at the same level remove
+	      if(secondaryForwardAssociations.find(pConsideredCluster) != secondaryForwardAssociations.end()) 
               {
                   ClusterSet &tempPrimaryForwardAssociations(tempMap.find(pCluster)->second.m_forwardAssociations);
                   const ClusterSet::const_iterator forwardAssociationToRemove(tempPrimaryForwardAssociations.find(pConsideredCluster));
 
-		          // if association has already been removed
-		          if(forwardAssociationToRemove == tempPrimaryForwardAssociations.end())
+		  // if association has already been removed
+		  if(forwardAssociationToRemove == tempPrimaryForwardAssociations.end())
                       continue;
 
                   ClusterSet &tempPrimaryBackwardAssociations(tempMap.find(pConsideredCluster)->second.m_backwardAssociations);
                   const ClusterSet::const_iterator backwardAssociationToRemove(tempPrimaryBackwardAssociations.find(pCluster));
 
-		          // if association has already been removed
-		          if(backwardAssociationToRemove == tempPrimaryBackwardAssociations.end())
+		  // if association has already been removed
+		  if(backwardAssociationToRemove == tempPrimaryBackwardAssociations.end())
                       continue;
-
-
 
                   tempPrimaryForwardAssociations.erase(forwardAssociationToRemove);
                   tempPrimaryBackwardAssociations.erase(backwardAssociationToRemove);
@@ -396,10 +394,10 @@ CartesianVector HitWidthClusterMergingAlgorithm::GetClusterZIntercept(const LArH
         const CartesianVector hitPosition = constituentHit.GetPositionVector();
         const float hitWeight = constituentHit.GetHitWidth();
 
-	    if(std::fabs(clusterFitParameters.GetConstituentHitVector().begin()->GetPositionVector().GetX() - hitPosition.GetX()) > std::numeric_limits<float>::epsilon())
+	if(std::fabs(clusterFitParameters.GetConstituentHitVector().begin()->GetPositionVector().GetX() - hitPosition.GetX()) > std::numeric_limits<float>::epsilon())
             isXConstant = false;
 
-	    if(std::fabs(clusterFitParameters.GetConstituentHitVector().begin()->GetPositionVector().GetZ() - hitPosition.GetZ()) > std::numeric_limits<float>::epsilon())
+	if(std::fabs(clusterFitParameters.GetConstituentHitVector().begin()->GetPositionVector().GetZ() - hitPosition.GetZ()) > std::numeric_limits<float>::epsilon())
             isZConstant = false;
 
         weightedXSum += hitPosition.GetX() * hitWeight;

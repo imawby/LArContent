@@ -606,6 +606,7 @@ void ParticleEfficiencyAlgorithm::GetReconstructedOffsetFromEventVertex(const MC
         {
             vertexOffset = -1.f;
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "RecoOffsetFromEventVertex", vertexOffset));
+	    return;
         }
         else
         {
