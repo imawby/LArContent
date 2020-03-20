@@ -44,11 +44,11 @@ private:
 
     bool IsExtremalCluster(const bool isForward, const pandora::Cluster *const pCurrentCluster,  const pandora::Cluster *const pTestCluster) const;
 
-    pandora::CartesianVector GetClusterDirection(const LArHitWidthHelper::ClusterParameters &clusterFitParameters) const;
+    pandora::CartesianVector GetClusterDirection(const LArHitWidthHelper::ClusterParameters &clusterFitParameters, const pandora::CartesianVector &fitReferencePoint) const;
 
-    pandora::CartesianVector GetClusterZIntercept(const LArHitWidthHelper::ClusterParameters &clusterFitParameters) const;
+    pandora::CartesianVector GetClusterZIntercept(const LArHitWidthHelper::ClusterParameters &clusterFitParameters, const pandora::CartesianVector &fitReferencePoint) const;
 
-    void GetWeightedGradient(const LArHitWidthHelper::ClusterParameters &clusterFitParameters, bool isTransverse, pandora::CartesianVector &direction, pandora::CartesianVector &intercept, float &chiSquared) const;
+    void GetWeightedGradient(const LArHitWidthHelper::ClusterParameters &clusterFitParameters, bool isTransverse, pandora::CartesianVector &direction, pandora::CartesianVector &intercept, float &chiSquared, const pandora::CartesianVector &fitReferencePoint) const;
 
 
     std::string m_clusterListName;
@@ -58,6 +58,8 @@ private:
 
     bool m_useSlidingLinearFit;
     float m_layerFitHalfWindow;
+
+    float m_fittingWeight;
 
     float m_minClusterWeight;
     float m_maxXMergeDistance; //Distance either side of point

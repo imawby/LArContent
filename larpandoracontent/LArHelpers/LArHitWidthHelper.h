@@ -32,6 +32,15 @@ public:
         float GetHitWidth() const;
         const pandora::Cluster* GetParentClusterAddress() const;
 
+        struct  SortByDistanceToPoint
+        {
+	        SortByDistanceToPoint(const pandora::CartesianVector referencePoint) : m_referencePoint(referencePoint) {}
+            bool operator() (const ConstituentHit &lhs, const ConstituentHit &rhs);
+        
+            const pandora::CartesianVector m_referencePoint;
+        };
+
+        
     private:
         pandora::CartesianVector m_positionVector;
         float m_hitWidth;

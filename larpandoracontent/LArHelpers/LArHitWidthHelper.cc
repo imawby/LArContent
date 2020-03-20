@@ -30,6 +30,16 @@ const Cluster* LArHitWidthHelper::ConstituentHit::GetParentClusterAddress() cons
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
+bool LArHitWidthHelper::ConstituentHit::SortByDistanceToPoint::operator() (const ConstituentHit &lhs, const ConstituentHit &rhs)
+{
+    CartesianVector lhsPosition(lhs.GetPositionVector());
+    CartesianVector rhsPosition(rhs.GetPositionVector());
+
+    return (m_referencePoint.GetDistanceSquared(lhsPosition) < m_referencePoint.GetDistanceSquared(rhsPosition));   
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+    
 LArHitWidthHelper::ClusterParameters::ClusterParameters(const Cluster *const pCluster, const float maxConstituentHitWidth, const bool isUniformHits, const float hitWidthScalingFactor):
     m_pCluster(pCluster),
     m_numCaloHits(pCluster->GetNCaloHits()), 
