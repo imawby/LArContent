@@ -201,7 +201,7 @@ bool HitWidthClusterMergingAlgorithm::AreClustersAssociated(const LArHitWidthHel
     if(testFitParameters.GetLowerXExtrema().GetZ() > (currentFitParameters.GetHigherXExtrema().GetZ() + m_maxZMergeDistance) || testFitParameters.GetLowerXExtrema().GetZ() < (currentFitParameters.GetHigherXExtrema().GetZ() - m_maxZMergeDistance))
       return false;
     
-    if(fabs(currentClusterDirection.GetCosOpeningAngle(testClusterDirection)) < m_maxMergeCosOpeningAngle)
+    if(currentClusterDirection.GetCosOpeningAngle(testClusterDirection) < m_maxMergeCosOpeningAngle)
       return false;
 
     
@@ -227,7 +227,7 @@ bool HitWidthClusterMergingAlgorithm::AreClustersAssociated(const LArHitWidthHel
         if(currentStatus != STATUS_CODE_SUCCESS || testStatus != STATUS_CODE_SUCCESS)
             return false;
 
-        if(std::fabs(newClusterDirectionCurrent.GetCosOpeningAngle(currentClusterDirection)) < m_maxDirectionDeviationCosAngle || std::fabs(newClusterDirectionTest.GetCosOpeningAngle(testClusterDirection)) < m_maxDirectionDeviationCosAngle)
+        if(newClusterDirectionCurrent.GetCosOpeningAngle(currentClusterDirection) < m_maxDirectionDeviationCosAngle || newClusterDirectionTest.GetCosOpeningAngle(testClusterDirection) < m_maxDirectionDeviationCosAngle)
             return false;
         
     }
@@ -245,7 +245,7 @@ bool HitWidthClusterMergingAlgorithm::AreClustersAssociated(const LArHitWidthHel
         
         CartesianVector newClusterDirection(GetClusterDirection(newParameters, midpoint));
         
-        if(std::fabs(newClusterDirection.GetCosOpeningAngle(currentClusterDirection)) < m_maxDirectionDeviationCosAngle || std::fabs(newClusterDirection.GetCosOpeningAngle(testClusterDirection)) < m_maxDirectionDeviationCosAngle)
+        if(newClusterDirection.GetCosOpeningAngle(currentClusterDirection) < m_maxDirectionDeviationCosAngle || newClusterDirection.GetCosOpeningAngle(testClusterDirection) < m_maxDirectionDeviationCosAngle)
             return false;
     }
     
