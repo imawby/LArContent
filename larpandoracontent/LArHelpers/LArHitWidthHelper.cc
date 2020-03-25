@@ -5,7 +5,6 @@
  *
  *  $Log: $
  */
-
 #include "larpandoracontent/LArHelpers/LArHitWidthHelper.h"
 #include "larpandoracontent/LArHelpers/LArClusterHelper.h"
 
@@ -14,7 +13,10 @@ using namespace pandora;
 namespace lar_content
 {
 
-LArHitWidthHelper::ConstituentHit::ConstituentHit(const CartesianVector &positionVector, const float hitWidth, const Cluster *const parentClusterAddress) : m_positionVector(positionVector), m_hitWidth(hitWidth), m_parentClusterAddress(parentClusterAddress)
+LArHitWidthHelper::ConstituentHit::ConstituentHit(const CartesianVector &positionVector, const float hitWidth, const Cluster *const parentClusterAddress) :
+    m_positionVector(positionVector),
+    m_hitWidth(hitWidth),
+    m_parentClusterAddress(parentClusterAddress)
 {
 }
 
@@ -43,7 +45,9 @@ bool LArHitWidthHelper::ConstituentHit::SortByDistanceToPoint::operator() (const
 LArHitWidthHelper::ClusterParameters::ClusterParameters(const Cluster *const pCluster, const float maxConstituentHitWidth, const bool isUniformHits, const float hitWidthScalingFactor):
     m_pCluster(pCluster),
     m_numCaloHits(pCluster->GetNCaloHits()), 
-    m_constituentHitVector(isUniformHits ? LArHitWidthHelper::GetUniformConstituentHits(pCluster, maxConstituentHitWidth, hitWidthScalingFactor) : LArHitWidthHelper::GetConstituentHits(pCluster, maxConstituentHitWidth, hitWidthScalingFactor)),
+    m_constituentHitVector(isUniformHits ?
+                               LArHitWidthHelper::GetUniformConstituentHits(pCluster, maxConstituentHitWidth, hitWidthScalingFactor) :
+                               LArHitWidthHelper::GetConstituentHits(pCluster, maxConstituentHitWidth, hitWidthScalingFactor)),
     m_totalWeight(LArHitWidthHelper::GetTotalClusterWeight(m_constituentHitVector)),
     m_lowerXExtrema(LArHitWidthHelper::GetExtremalCoordinatesLowerX(m_constituentHitVector)), 
     m_higherXExtrema(LArHitWidthHelper::GetExtremalCoordinatesHigherX(m_constituentHitVector))
@@ -82,21 +86,36 @@ LArHitWidthHelper::ClusterToParametersMapStore* LArHitWidthHelper::ClusterToPara
 {
     if(!m_instance)
         m_instance = new ClusterToParametersMapStore();
+    
     return m_instance;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-LArHitWidthHelper::ClusterToParametersMap* LArHitWidthHelper::ClusterToParametersMapStore::GetMap()
+LArHitWidthHelper::ClusterToParametersMap& LArHitWidthHelper::ClusterToParametersMapStore::GetMap()
 {
-    return &m_clusterToParametersMap;
+    return m_clusterToParametersMap;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+const LArHitWidthHelper::ClusterParameters& LArHitWidthHelper::GetClusterParameters(const Cluster *const pCluster)
+{
+    LArHitWidthHelper::ClusterToParametersMapStore* pClusterToParametersMapStore(LArHitWidthHelper::ClusterToParametersMapStore::Instance());
+    const LArHitWidthHelper::ClusterToParametersMap clusterToParametersMap(pClusterToParametersMapStore->GetMap());
+
+    if (clusterToParametersMap.empty())
+        throw StatusCodeException(STATUS_CODE_NOT_INITIALIZED);
+
+    const auto clusterParametersIter(clusterToParametersMap.find(pCluster));
+
+    return clusterParametersIter->second;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 LArHitWidthHelper::ConstituentHitVector LArHitWidthHelper::GetConstituentHits(const Cluster *const pCluster, const float maxConstituentHitWidth, const float hitWidthScalingFactor) 
 {
-  
     OrderedCaloHitList orderedCaloHitList(pCluster->GetOrderedCaloHitList());
 
     if (orderedCaloHitList.empty())
@@ -106,24 +125,23 @@ LArHitWidthHelper::ConstituentHitVector LArHitWidthHelper::GetConstituentHits(co
 
     for (OrderedCaloHitList::const_iterator iter = orderedCaloHitList.begin(); iter != orderedCaloHitList.end(); ++iter)
     {
-        for(CaloHitList::const_iterator hitIter = iter->second->begin(); hitIter != iter->second->end(); ++hitIter) 
+        for (CaloHitList::const_iterator hitIter = iter->second->begin(); hitIter != iter->second->end(); ++hitIter) 
         {
-	  
             const CaloHit *const pCaloHit = *hitIter;
 
             const float hitWidth = pCaloHit->GetCellSize1() * hitWidthScalingFactor;
-            const unsigned int numberOfConstituentHits = floor(hitWidth/maxConstituentHitWidth) + 1;
-            const float constituentHitWidth = hitWidth/static_cast<float>(numberOfConstituentHits);
+            const unsigned int numberOfConstituentHits = ceil(hitWidth / maxConstituentHitWidth);
+            const float constituentHitWidth = hitWidth / numberOfConstituentHits;
 	    
-	        // start at end of cluster with the lowest x value
-            float xPositionAlongHit(pCaloHit->GetPositionVector().GetX() - (hitWidth/2));
-	        for(unsigned int i(0); i < numberOfConstituentHits; ++i) 
-             {
-                 i == 0 ? xPositionAlongHit += constituentHitWidth/2 : xPositionAlongHit += constituentHitWidth;
-                 CartesianVector consituentHitPosition(xPositionAlongHit, 0, pCaloHit->GetPositionVector().GetZ());
+	        // begin at the lower x end of the cluster
+            float xPositionAlongHit(pCaloHit->GetPositionVector().GetX() - (hitWidth / 2));
+	        for (unsigned int i = 0; i < numberOfConstituentHits; ++i) 
+            {
+                xPositionAlongHit += (i == 0) ? constituentHitWidth / 2 : constituentHitWidth;
+                CartesianVector consituentHitPosition(xPositionAlongHit, 0, pCaloHit->GetPositionVector().GetZ());
 
                 constituentHitVector.push_back(ConstituentHit(consituentHitPosition, constituentHitWidth, pCluster));
-             }
+            }
         }
     }
     return constituentHitVector;
@@ -133,7 +151,6 @@ LArHitWidthHelper::ConstituentHitVector LArHitWidthHelper::GetConstituentHits(co
 
 LArHitWidthHelper::ConstituentHitVector LArHitWidthHelper::GetUniformConstituentHits(const Cluster *const pCluster, const float constituentHitWidth, const float hitWidthScalingFactor)
 {
-
     OrderedCaloHitList orderedCaloHitList(pCluster->GetOrderedCaloHitList());
 
     if (orderedCaloHitList.empty())
@@ -146,10 +163,10 @@ LArHitWidthHelper::ConstituentHitVector LArHitWidthHelper::GetUniformConstituent
         for(CaloHitList::const_iterator hitIter = iter->second->begin(); hitIter != iter->second->end(); ++hitIter) 
         {
             const CaloHit *const pCaloHit = *hitIter;
-            const unsigned int numberOfConstituents(floor((pCaloHit->GetCellSize1() * hitWidthScalingFactor)/constituentHitWidth) + 1);
+            const unsigned int numberOfConstituents(ceil((pCaloHit->GetCellSize1() * hitWidthScalingFactor) / constituentHitWidth));
 
             CartesianVector positionAlongHit(pCaloHit->GetPositionVector());
-            if(numberOfConstituents % 2 == 1)
+            if (numberOfConstituents % 2 == 1)
             {
                 constituentHitVector.push_back(ConstituentHit(positionAlongHit, constituentHitWidth, pCluster));
 	            for(unsigned int i(0); i < ((numberOfConstituents - 1)/2); ++i)
@@ -269,35 +286,20 @@ CartesianPointVector LArHitWidthHelper::GetConstituentHitPositionVector(const Co
 
 bool LArHitWidthHelper::SortByHigherXExtrema(const Cluster *const pLhs, const Cluster *const pRhs)
 {
+    const LArHitWidthHelper::ClusterParameters lhsClusterParameters(LArHitWidthHelper::GetClusterParameters(pLhs));
+    const LArHitWidthHelper::ClusterParameters rhsClusterParameters(LArHitWidthHelper::GetClusterParameters(pRhs));
 
-    // Get the map of cluster to constitutent hit parameters
-    LArHitWidthHelper::ClusterToParametersMapStore* pClusterToParametersMapStore = LArHitWidthHelper::ClusterToParametersMapStore::Instance();
-    LArHitWidthHelper::ClusterToParametersMap* pClusterToParametersMap = pClusterToParametersMapStore->GetMap();
-
-    if(pClusterToParametersMap->empty())
-        throw StatusCodeException(STATUS_CODE_NOT_INITIALIZED);
-
-    LArHitWidthHelper::ClusterToParametersMap::const_iterator lhsIter(pClusterToParametersMap->find(pLhs));
-    LArHitWidthHelper::ClusterToParametersMap::const_iterator rhsIter(pClusterToParametersMap->find(pRhs));
-
-    if(lhsIter == pClusterToParametersMap->end() || rhsIter == pClusterToParametersMap->end())
-        throw StatusCodeException(STATUS_CODE_NOT_FOUND);
-
-
-    CartesianVector lhsHigherXExtrema(lhsIter->second.GetHigherXExtrema()), rhsHigherXExtrema(rhsIter->second.GetHigherXExtrema());
+    CartesianVector lhsHigherXExtrema(lhsClusterParameters.GetHigherXExtrema()), rhsHigherXExtrema(rhsClusterParameters.GetHigherXExtrema());
 
     return (lhsHigherXExtrema.GetX() < rhsHigherXExtrema.GetX());
-
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 void LArHitWidthHelper::GetExtremalCoordinatesX(const ConstituentHitVector &constituentHitVector, CartesianVector &lowerXCoordinate, CartesianVector &higherXCoordinate)
 {
-
     CartesianPointVector constituentHitPositionVector(GetConstituentHitPositionVector(constituentHitVector));
     GetExtremalCoordinatesX(constituentHitPositionVector, lowerXCoordinate, higherXCoordinate);
-
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
