@@ -32,7 +32,7 @@ private:
 
     void PopulateClusterAssociationMap(const pandora::ClusterVector &clusterVector, ClusterAssociationMap &clusterAssociationMap) const;
 
-    void CleanupClusterAssociations(const pandora::ClusterVector &clusterVector, ClusterAssociationMap &clusterAssociationMap) const;
+    void RemoveShortcutAssociations(const pandora::ClusterVector &clusterVector, ClusterAssociationMap &clusterAssociationMap) const;
 
     bool AreClustersAssociated(const LArHitWidthHelper::ClusterParameters &currentFitParameters, const LArHitWidthHelper::ClusterParameters &testFitParameters) const;
 
@@ -60,6 +60,3 @@ private:
 } //namespace lar_content
 
 #endif //LAR_HIT_WIDTH_CLUSTER_MERGING_ALGORITHM_H
-
-
-

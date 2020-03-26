@@ -28,7 +28,7 @@ public:
         float GetHitWidth() const;
         const pandora::Cluster* GetParentClusterAddress() const;
 
-        struct SortByDistanceToPoint
+        class SortByDistanceToPoint
         {
         public:
 	        SortByDistanceToPoint(const pandora::CartesianVector referencePoint) : m_referencePoint(referencePoint) {}
@@ -84,17 +84,18 @@ public:
         ClusterToParametersMap m_clusterToParametersMap;
     };
 
+//------------------------------------------------------------------------------------------------------------------------------------------
+
     static const ClusterParameters& GetClusterParameters(const pandora::Cluster *const pCluster);
-    static ConstituentHitVector GetConstituentHits(const pandora::Cluster *const pCluster, const float maxConstituentHitWidth, const float hitWidthScalingFactor);
-    static ConstituentHitVector GetUniformConstituentHits(const pandora::Cluster *const pCluster, const float constituentHitWidth, const float hitWidthScalingFactor);
+    static ConstituentHitVector GetConstituentHits(const pandora::Cluster *const pCluster, const float maxConstituentHitWidth, const float hitWidthScalingFactor, const bool isUniform);
+    static void SplitHitIntoConstituents(const pandora::CaloHit *const pCaloHit, const pandora::Cluster *const pCluster, const unsigned int numberOfConstituentHits, const float constituentHitWidth, ConstituentHitVector &constituentHitVector);
     static pandora::CartesianPointVector GetConstituentHitPositionVector(const ConstituentHitVector &constituentHitVector);
-    static pandora::CartesianVector GetExtremalCoordinatesLowerX(const ConstituentHitVector &constituentHitVector);
-    static pandora::CartesianVector GetExtremalCoordinatesHigherX(const ConstituentHitVector &constituentHitVector);
     static float GetTotalClusterWeight(const ConstituentHitVector &constituentHitVector);
     static float GetOriginalTotalClusterWeight(const pandora::Cluster *const pCluster);
     static bool SortByHigherXExtrema(const pandora::Cluster *const pLhs, const pandora::Cluster *const pRhs);
+    static pandora::CartesianVector GetExtremalCoordinatesLowerX(const ConstituentHitVector &constituentHitVector);
+    static pandora::CartesianVector GetExtremalCoordinatesHigherX(const ConstituentHitVector &constituentHitVector);
     static void GetExtremalCoordinatesX(const ConstituentHitVector &constituentHitVector, pandora::CartesianVector &lowerXCoordinate, pandora::CartesianVector &higherXCoordinate);
-    static void GetExtremalCoordinatesX(const pandora::CartesianPointVector &constituentHitPositionVector, pandora::CartesianVector &lowerXCoordinate, pandora::CartesianVector &higherXCoordinate);
 };
 
 //------------------------------------------------------------------------------------------------------------------------------------------

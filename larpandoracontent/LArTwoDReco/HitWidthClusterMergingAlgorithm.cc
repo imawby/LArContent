@@ -53,7 +53,6 @@ void HitWidthClusterMergingAlgorithm::GetListOfCleanClusters(const ClusterList *
         clusterVector.push_back(pCluster);
     }
 
-    //ORDER BY MAX EXTREMAL X COORDINATE
     std::sort(clusterVector.begin(), clusterVector.end(), LArHitWidthHelper::SortByHigherXExtrema);
 }
 
@@ -83,13 +82,12 @@ void HitWidthClusterMergingAlgorithm::PopulateClusterAssociationMap(const Cluste
         }
     }
 
-    // remove all 'shortcut' routes
-    this->CleanupClusterAssociations(clusterVector, clusterAssociationMap);
+    this->RemoveShortcutAssociations(clusterVector, clusterAssociationMap);
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void HitWidthClusterMergingAlgorithm::CleanupClusterAssociations(const ClusterVector &clusterVector, ClusterAssociationMap &clusterAssociationMap) const
+void HitWidthClusterMergingAlgorithm::RemoveShortcutAssociations(const ClusterVector &clusterVector, ClusterAssociationMap &clusterAssociationMap) const
 {
     // Create temporary map so can delete elements whilst still iterating over them
     ClusterAssociationMap tempMap(clusterAssociationMap);
@@ -101,10 +99,11 @@ void HitWidthClusterMergingAlgorithm::CleanupClusterAssociations(const ClusterVe
         if (primaryMapIter == clusterAssociationMap.end())
             continue;
 
-        const ClusterSet &primaryForwardAssociations(primaryMapIter->second.m_forwardAssociations);
-
-        // loop through the primary associations of each cluster
-        // remove clusters that are present in secondary associations of other primary associated clusters
+        // put ClusterSet into ClusterVector
+        ClusterVector primaryForwardAssociations(primaryMapIter->second.m_forwardAssociations.begin(), primaryMapIter->second.m_forwardAssociations.end());
+        std::sort(primaryForwardAssociations.begin(), primaryForwardAssociations.end(), LArClusterHelper::SortByNHits);
+        
+        // remove primary clusters that are present in secondary associations of other primary clusters
         for (const Cluster *const pConsideredCluster : primaryForwardAssociations)
         {
             for (const Cluster *const pPrimaryCluster : primaryForwardAssociations)
@@ -120,7 +119,6 @@ void HitWidthClusterMergingAlgorithm::CleanupClusterAssociations(const ClusterVe
 
                 const ClusterSet &secondaryForwardAssociations(secondaryMapIter->second.m_forwardAssociations);
 
-                // if considered cluster is present in the forward associations of any other primary associated cluster remove from primary associations
                 if (secondaryForwardAssociations.find(pConsideredCluster) != secondaryForwardAssociations.end())
                 {
                     ClusterSet &tempPrimaryForwardAssociations(tempMap.find(pCluster)->second.m_forwardAssociations);
@@ -143,26 +141,25 @@ void HitWidthClusterMergingAlgorithm::CleanupClusterAssociations(const ClusterVe
             }
         }
     }
-  clusterAssociationMap = tempMap;
+    
+    clusterAssociationMap = tempMap;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 bool HitWidthClusterMergingAlgorithm::AreClustersAssociated(const LArHitWidthHelper::ClusterParameters &currentFitParameters, const LArHitWidthHelper::ClusterParameters &testFitParameters) const
 {
-    CartesianVector currentClusterDirection(0,0,0);
-    CartesianVector testClusterDirection(0,0,0);
+    CartesianVector currentClusterDirection(0.f, 0.f, 0.f), testClusterDirection(0.f, 0.f, 0.f);
 
     if (m_useSlidingLinearFit)
     {
-        const CartesianPointVector currentConstituentHitPositionVector(LArHitWidthHelper::GetConstituentHitPositionVector(currentFitParameters.GetConstituentHitVector()));
-        const CartesianPointVector testConstituentHitPositionVector(LArHitWidthHelper::GetConstituentHitPositionVector(testFitParameters.GetConstituentHitVector()));
+        const CartesianPointVector &currentConstituentHitPositionVector(LArHitWidthHelper::GetConstituentHitPositionVector(currentFitParameters.GetConstituentHitVector()));
+        const CartesianPointVector &testConstituentHitPositionVector(LArHitWidthHelper::GetConstituentHitPositionVector(testFitParameters.GetConstituentHitVector()));
         const float layerPitch(LArGeometryHelper::GetWireZPitch(this->GetPandora()));
-        TwoDSlidingFitResult currentFitResult(&currentConstituentHitPositionVector, m_layerFitHalfWindow, layerPitch);
-        TwoDSlidingFitResult testFitResult(&testConstituentHitPositionVector, m_layerFitHalfWindow, layerPitch);
-
-        StatusCode currentStatus(currentFitResult.GetGlobalFitDirectionAtX(currentFitParameters.GetHigherXExtrema().GetX(), currentClusterDirection));
-        StatusCode testStatus(testFitResult.GetGlobalFitDirectionAtX(testFitParameters.GetLowerXExtrema().GetX(), testClusterDirection));
+        const TwoDSlidingFitResult currentFitResult(&currentConstituentHitPositionVector, m_layerFitHalfWindow, layerPitch);
+        const TwoDSlidingFitResult testFitResult(&testConstituentHitPositionVector, m_layerFitHalfWindow, layerPitch);
+        const StatusCode currentStatus(currentFitResult.GetGlobalFitDirectionAtX(currentFitParameters.GetHigherXExtrema().GetX(), currentClusterDirection));
+        const StatusCode testStatus(testFitResult.GetGlobalFitDirectionAtX(testFitParameters.GetLowerXExtrema().GetX(), testClusterDirection));
       
         if(currentStatus != STATUS_CODE_SUCCESS || testStatus != STATUS_CODE_SUCCESS)
             return false;
@@ -174,13 +171,13 @@ bool HitWidthClusterMergingAlgorithm::AreClustersAssociated(const LArHitWidthHel
     }
 
     if (testFitParameters.GetLowerXExtrema().GetX() > (currentFitParameters.GetHigherXExtrema().GetX() + m_maxXMergeDistance))
-      return false;
+        return false;
 
     if (testFitParameters.GetLowerXExtrema().GetZ() > (currentFitParameters.GetHigherXExtrema().GetZ() + m_maxZMergeDistance) || testFitParameters.GetLowerXExtrema().GetZ() < (currentFitParameters.GetHigherXExtrema().GetZ() - m_maxZMergeDistance))
-      return false;
+        return false;
     
     if (currentClusterDirection.GetCosOpeningAngle(testClusterDirection) < m_minMergeCosOpeningAngle)
-      return false;
+        return false;
     
     // check that the new direction is consistent with the old clusters
     if (m_useSlidingLinearFit)
@@ -192,11 +189,10 @@ bool HitWidthClusterMergingAlgorithm::AreClustersAssociated(const LArHitWidthHel
         newConstituentHitPositionVector.insert(newConstituentHitPositionVector.end(), testConstituentHitPositionVector.begin(), testConstituentHitPositionVector.end());
       
         const float layerPitch(LArGeometryHelper::GetWireZPitch(this->GetPandora()));
-        TwoDSlidingFitResult newFitResult(&newConstituentHitPositionVector, m_layerFitHalfWindow, layerPitch);
-        CartesianVector newClusterDirectionCurrent(0,0,0);
-        CartesianVector newClusterDirectionTest(0,0,0);
-        StatusCode currentStatus(newFitResult.GetGlobalFitDirectionAtX(currentFitParameters.GetHigherXExtrema().GetX(), newClusterDirectionCurrent));
-        StatusCode testStatus(newFitResult.GetGlobalFitDirectionAtX(testFitParameters.GetLowerXExtrema().GetX(), newClusterDirectionTest));
+        const TwoDSlidingFitResult newFitResult(&newConstituentHitPositionVector, m_layerFitHalfWindow, layerPitch);
+        CartesianVector newClusterDirectionCurrent(0.f, 0.f, 0.f), newClusterDirectionTest(0.f, 0.f, 0.f);
+        const StatusCode currentStatus(newFitResult.GetGlobalFitDirectionAtX(currentFitParameters.GetHigherXExtrema().GetX(), newClusterDirectionCurrent));
+        const StatusCode testStatus(newFitResult.GetGlobalFitDirectionAtX(testFitParameters.GetLowerXExtrema().GetX(), newClusterDirectionTest));
       
         if (currentStatus != STATUS_CODE_SUCCESS || testStatus != STATUS_CODE_SUCCESS)
             return false;
@@ -206,15 +202,15 @@ bool HitWidthClusterMergingAlgorithm::AreClustersAssociated(const LArHitWidthHel
     }
     else
     {
-        const LArHitWidthHelper::ConstituentHitVector currentConstituentHitVector(currentFitParameters.GetConstituentHitVector());
-        const LArHitWidthHelper::ConstituentHitVector testConstituentHitVector(testFitParameters.GetConstituentHitVector());
+        const LArHitWidthHelper::ConstituentHitVector &currentConstituentHitVector(currentFitParameters.GetConstituentHitVector());
+        const LArHitWidthHelper::ConstituentHitVector &testConstituentHitVector(testFitParameters.GetConstituentHitVector());
         LArHitWidthHelper::ConstituentHitVector newConstituentHitVector(currentConstituentHitVector);
         
         newConstituentHitVector.insert(newConstituentHitVector.end(), testConstituentHitVector.begin(), testConstituentHitVector.end());
       
-        LArHitWidthHelper::ClusterParameters newParameters(nullptr, currentFitParameters.GetNumCaloHits() + testFitParameters.GetNumCaloHits(), currentFitParameters.GetTotalWeight() + testFitParameters.GetTotalWeight(), newConstituentHitVector, CartesianVector(0,0,0), CartesianVector(0,0,0));
-        const CartesianVector midpoint((currentFitParameters.GetHigherXExtrema() + testFitParameters.GetLowerXExtrema())*0.5);
-        CartesianVector newClusterDirection(GetClusterDirection(newParameters, midpoint));
+        LArHitWidthHelper::ClusterParameters newParameters(nullptr, currentFitParameters.GetNumCaloHits() + testFitParameters.GetNumCaloHits(), 0.f, newConstituentHitVector, CartesianVector(0.f, 0.f, 0.f), CartesianVector(0.f, 0.f, 0.f));
+        const CartesianVector midpoint((currentFitParameters.GetHigherXExtrema() + testFitParameters.GetLowerXExtrema()) * 0.5);
+        const CartesianVector newClusterDirection(GetClusterDirection(newParameters, midpoint));
         
         if (newClusterDirection.GetCosOpeningAngle(currentClusterDirection) < m_minDirectionDeviationCosAngle || newClusterDirection.GetCosOpeningAngle(testClusterDirection) < m_minDirectionDeviationCosAngle)
             return false;
@@ -227,9 +223,9 @@ bool HitWidthClusterMergingAlgorithm::AreClustersAssociated(const LArHitWidthHel
 
 bool HitWidthClusterMergingAlgorithm::IsExtremalCluster(const bool isForward, const Cluster *const pCurrentCluster,  const Cluster *const pTestCluster) const
 {
-    const LArHitWidthHelper::ClusterParameters currentClusterParameters(LArHitWidthHelper::GetClusterParameters(pCurrentCluster));
-    const LArHitWidthHelper::ClusterParameters testClusterParameters(LArHitWidthHelper::GetClusterParameters(pTestCluster));
-    CartesianVector currentHigherXExtrema(currentClusterParameters.GetHigherXExtrema()), testHigherXExtrema(currentClusterParameters.GetHigherXExtrema());
+    const LArHitWidthHelper::ClusterParameters &currentClusterParameters(LArHitWidthHelper::GetClusterParameters(pCurrentCluster));
+    const LArHitWidthHelper::ClusterParameters &testClusterParameters(LArHitWidthHelper::GetClusterParameters(pTestCluster));
+    const CartesianVector &currentHigherXExtrema(currentClusterParameters.GetHigherXExtrema()), &testHigherXExtrema(testClusterParameters.GetHigherXExtrema());
     float currentMaxX(currentHigherXExtrema.GetX()), testMaxX(testHigherXExtrema.GetX());
 
     if (isForward)
@@ -252,20 +248,18 @@ CartesianVector HitWidthClusterMergingAlgorithm::GetClusterDirection(const LArHi
 {
     // if cluster composed of one hit, return a transverse line as fit
     if (clusterFitParameters.GetNumCaloHits() == 1)
-        return CartesianVector(1, 0, 0);
+        return CartesianVector(1.f, 0.f, 0.f);
 
     // minimise the longitudinal distance in fit (works best for transverse fits)
-    CartesianVector lsTransverseClusterFitDirection(0,0,0);
-    CartesianVector lsTransverseIntercept(0,0,0);
-    float lsTransverseChiSquared(0);
+    CartesianVector lsTransverseClusterFitDirection(0.f, 0.f, 0.f), lsTransverseIntercept(0.f, 0.f, 0.f);
+    float lsTransverseChiSquared(0.f);
 
     // minimise the transverse coordinate in fit (works best for longitudinal fits)
-    CartesianVector lsLongitudinalClusterFitDirection(0,0,0);
-    CartesianVector lsLongitudinalIntercept(0,0,0);
-    float lsLongitudinalChiSquared(0);
+    CartesianVector lsLongitudinalClusterFitDirection(0.f, 0.f, 0.f), lsLongitudinalIntercept(0.f, 0.f, 0.f);
+    float lsLongitudinalChiSquared(0.f);
 
-    GetWeightedGradient(clusterFitParameters, true, lsTransverseClusterFitDirection, lsTransverseIntercept, lsTransverseChiSquared, fitReferencePoint);
-    GetWeightedGradient(clusterFitParameters, false, lsLongitudinalClusterFitDirection, lsLongitudinalIntercept, lsLongitudinalChiSquared, fitReferencePoint);
+    this->GetWeightedGradient(clusterFitParameters, true, lsTransverseClusterFitDirection, lsTransverseIntercept, lsTransverseChiSquared, fitReferencePoint);
+    this->GetWeightedGradient(clusterFitParameters, false, lsLongitudinalClusterFitDirection, lsLongitudinalIntercept, lsLongitudinalChiSquared, fitReferencePoint);
     
     // return fit with the lowest chi-squared
     if (lsTransverseChiSquared < lsLongitudinalChiSquared)
@@ -281,15 +275,12 @@ void HitWidthClusterMergingAlgorithm::GetWeightedGradient(const LArHitWidthHelpe
     // cannot make a longitudinal fit to a single hit cluster
     if (!isTransverse && clusterFitParameters.GetNumCaloHits() == 1) 
     {
-        std::cout << "WARNING - CANNOT MAKE LONGITUDINAL FIT TO SINGLE HIT CLUSTER" << std::endl;
+        std::cout << "HitWidthClusterMergingAlgorithm::GetWeightedGradient - cannot make a longitudinal fit to a single hit cluster" << std::endl;
         throw StatusCodeException(STATUS_CODE_NOT_ALLOWED);
     }
 
-    float weightSum(0);
-    float weightedXSum(0);
-    float weightedZSum(0);
-    bool isXConstant(true);
-    bool isZConstant(true);
+    float weightSum(0.f), weightedXSum(0.f), weightedZSum(0.f);
+    bool isXConstant(true), isZConstant(true);
 
     LArHitWidthHelper::ConstituentHitVector constituentHitVector(clusterFitParameters.GetConstituentHitVector());
 
@@ -299,8 +290,8 @@ void HitWidthClusterMergingAlgorithm::GetWeightedGradient(const LArHitWidthHelpe
     // calculate weightedXMean and weightedZMean for fit
     for (const LArHitWidthHelper::ConstituentHit &constituentHit : constituentHitVector) 
     {
-        const CartesianVector hitPosition = constituentHit.GetPositionVector();
-        const float hitWeight = constituentHit.GetHitWidth();
+        const CartesianVector &hitPosition(constituentHit.GetPositionVector());
+        const float hitWeight(constituentHit.GetHitWidth());
 
         if (std::fabs(clusterFitParameters.GetConstituentHitVector().begin()->GetPositionVector().GetX() - hitPosition.GetX()) > std::numeric_limits<float>::epsilon())
             isXConstant = false;
@@ -320,8 +311,8 @@ void HitWidthClusterMergingAlgorithm::GetWeightedGradient(const LArHitWidthHelpe
     // return vertical fit for a cluster with constant x
     if (isXConstant) 
     {
-        direction = CartesianVector(0, 0, 1);
-        zIntercept = CartesianVector(0, 0, 0);
+        direction = CartesianVector(0.f, 0.f, 1.f);
+        zIntercept = CartesianVector(0.f, 0.f, 0.f);
         chiSquared = 0;
         return;
     }
@@ -329,23 +320,17 @@ void HitWidthClusterMergingAlgorithm::GetWeightedGradient(const LArHitWidthHelpe
     // return horizontal fit for a cluster with constant z
     if (isZConstant) 
     {
-        direction = CartesianVector(1, 0, 0);
-        zIntercept = CartesianVector(0, 0, clusterFitParameters.GetConstituentHitVector().begin()->GetPositionVector().GetZ());
-        chiSquared = 0;
+        direction = CartesianVector(1.f, 0.f, 0.f);
+        zIntercept = CartesianVector(0.f, 0.f, clusterFitParameters.GetConstituentHitVector().begin()->GetPositionVector().GetZ());
+        chiSquared = 0.f;
         return;
     }
 
-    float weightedXMean(weightedXSum/weightSum);
-    float weightedZMean(weightedZSum/weightSum);
-    
-    float numerator(0);
-    float denominator(0);
-
-    float weightCount(0);
+    float weightedXMean(weightedXSum/weightSum), weightedZMean(weightedZSum/weightSum), numerator(0.f), denominator(0.f), weightCount(0.f);
     for (const LArHitWidthHelper::ConstituentHit &constituentHit : constituentHitVector) 
     {
-        const CartesianVector hitPosition = constituentHit.GetPositionVector();
-        const float hitWeight = constituentHit.GetHitWidth();
+        const CartesianVector &hitPosition(constituentHit.GetPositionVector());
+        const float hitWeight(constituentHit.GetHitWidth());
         weightCount += hitWeight;
         
         numerator += hitWeight * (hitPosition.GetX() - weightedXMean) * (hitPosition.GetZ() - weightedZMean);
@@ -356,17 +341,14 @@ void HitWidthClusterMergingAlgorithm::GetWeightedGradient(const LArHitWidthHelpe
             break;
     }
 
-    float gradient = numerator/denominator;
-    
-    float intercept(0);
-    intercept = isTransverse ? weightedZMean - gradient * weightedXMean : weightedXMean - gradient * weightedZMean;
+    float gradient(numerator/denominator), chi(0.f);
+    float intercept(isTransverse ? weightedZMean - gradient * weightedXMean : weightedXMean - gradient * weightedZMean);
 
-    float chi(0);
     weightCount = 0;
     for (const LArHitWidthHelper::ConstituentHit &constituentHit : constituentHitVector) 
     {
-        const CartesianVector hitPosition = constituentHit.GetPositionVector();
-        const float hitWeight = constituentHit.GetHitWidth();
+        const CartesianVector hitPosition(constituentHit.GetPositionVector());
+        const float hitWeight(constituentHit.GetHitWidth());
         weightCount += hitWeight;
         
         chi += isTransverse ? hitWeight * pow(hitPosition.GetZ() - intercept - gradient * hitPosition.GetX(), 2) : hitWeight * pow(hitPosition.GetX() - intercept - gradient * hitPosition.GetZ(), 2);
