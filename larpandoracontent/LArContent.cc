@@ -175,6 +175,7 @@
 
 #include "larpandoracontent/LArTwoDReco/TwoDParticleCreationAlgorithm.h"
 #include "larpandoracontent/LArTwoDReco/HitWidthClusterMergingAlgorithm.h"
+#include "larpandoracontent/LArTwoDReco/EMTrackAlgorithm.h"
 
 #include "larpandoracontent/LArUtility/ListChangingAlgorithm.h"
 #include "larpandoracontent/LArUtility/ListDeletionAlgorithm.h"
@@ -193,6 +194,7 @@
 
 #define LAR_ALGORITHM_LIST(d)                                                                                                   \
     d("LArWriteEventLookupTree",                WriteEventLookupTreeAlgorithm)                                                  \
+    d("LArEMTrack",                             EMTrackAlgorithm)                                                               \
     d("LArHitWidthClusterMerging",              HitWidthClusterMergingAlgorithm)                                                \
     d("LArTest",                                TestAlgorithm)                                                                  \
     d("LArNeutrinoEventValidation",             NeutrinoEventValidationAlgorithm)                                               \
