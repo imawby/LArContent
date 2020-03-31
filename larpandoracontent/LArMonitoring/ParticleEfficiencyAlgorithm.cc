@@ -82,7 +82,7 @@ namespace lar_content {
 
     // Get MC Particle to reconstructable hits map
     LArMCParticleHelper::MCContributionMap mcToRecoHitsMap;
-    m_foldToPrimaries ? LArMCParticleHelper::SelectReconstructableMCParticles(pMCParticleList, pCaloHitList, m_parameters, LArMCParticleHelper::IsBeamNeutrinoFinalState, mcToRecoHitsMap) : LArMCParticleHelper::SelectUnfoldedReconstructableMCParticles(pMCParticleList, pCaloHitList, m_parameters, mcToRecoHitsMap);
+    LArMCParticleHelper::SelectReconstructableMCParticles(pMCParticleList, pCaloHitList, m_parameters, LArMCParticleHelper::IsBeamNeutrinoFinalState, mcToRecoHitsMap, m_foldToPrimaries);
 
     // For user output purposes
     MCParticleVector orderedTargetMCParticleVector;
@@ -143,12 +143,13 @@ namespace lar_content {
       // Get list of 'primary' pfos to be matched with the target MC particles
       PfoList finalStatePfos;
       for (const ParticleFlowObject *const pPfo : allPfos) {
-	if (LArPfoHelper::IsFinalState(pPfo))
-	  finalStatePfos.push_back(pPfo);
+	      if (LArPfoHelper::IsFinalState(pPfo))
+	          finalStatePfos.push_back(pPfo);
       }
-      LArMCParticleHelper::GetPfoToReconstructable2DHitsMap(finalStatePfos, mcToRecoHitsMap, pfoToRecoHitsMap);
+      
+      LArMCParticleHelper::GetPfoToReconstructable2DHitsMap(finalStatePfos, mcToRecoHitsMap, pfoToRecoHitsMap, true);
     } else {
-      LArMCParticleHelper::GetUnfoldedPfoToReconstructable2DHitsMap(allPfos, mcToRecoHitsMap, pfoToRecoHitsMap);
+        LArMCParticleHelper::GetPfoToReconstructable2DHitsMap(allPfos, mcToRecoHitsMap, pfoToRecoHitsMap, false);
     }
 
     // For user output purposes

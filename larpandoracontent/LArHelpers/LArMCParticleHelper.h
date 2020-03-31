@@ -47,6 +47,10 @@ public:
     typedef std::map<const pandora::ParticleFlowObject*, MCParticleToSharedHitsVector> PfoToMCParticleHitSharingMap;
     typedef std::map<const pandora::MCParticle*, PfoToSharedHitsVector> MCParticleToPfoHitSharingMap;
 
+    typedef std::pair<const pandora::ParticleFlowObject*, double> PfoCompletenessPurityPair;
+    typedef std::vector<PfoCompletenessPurityPair> PfoToCompletenessPurityVector;
+    typedef std::map<const pandora::MCParticle*, PfoToCompletenessPurityVector> MCParticleToPfoCompletenessPurityMap;
+    
     /**
      *  @brief   PrimaryParameters class
      */
@@ -67,6 +71,19 @@ public:
         bool          m_foldBackHierarchy;        ///< whether to fold the hierarchy back to the primary (neutrino) or leading particles (test beam)
     };
 
+    /**
+     *  @brief Get the map [MC particle -> vector of matched pairs (pfo MC particle matched to, completeness and purity of match)]
+     *
+     *  @param mcParticleToHitsMap the input mapping from MC particles to reconstructable hits
+     *  @param pfoToHitsMap the input mapping from pfos to reconstructable hits
+     *  @param mcParticleToPfoHitSharingMap the input mapping from selected reconstructable MC particles to pfos and the number hits shared
+     *  @param mcParticleToPfoCompletenessMap the output mapping from MC particles to vectors of matched pairs (pfo MC particle matched to, completeness of match) 
+     *  @param mcParticleToPfoPurityMap the output mapping from MC particles to vectors of matched pairs (pfo MC particle matched to, purity of match)
+     */
+    static void GetMCToPfoCompletenessPurityMaps(const MCContributionMap& mcParticleToHitsMap, const PfoContributionMap& pfoToHitsMap,
+        const MCParticleToPfoHitSharingMap& mcParticleToPfoHitSharingMap, MCParticleToPfoCompletenessPurityMap& mcParticleToPfoCompletenessMap,
+        MCParticleToPfoCompletenessPurityMap& mcParticleToPfoPurityMap);
+    
     /**
      *  @brief  Returns true if passed particle whose primary meets the passed criteria
      *
