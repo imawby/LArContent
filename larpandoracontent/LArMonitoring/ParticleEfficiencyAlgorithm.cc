@@ -82,7 +82,7 @@ namespace lar_content {
 
     // Get MC Particle to reconstructable hits map
     LArMCParticleHelper::MCContributionMap mcToRecoHitsMap;
-    LArMCParticleHelper::SelectReconstructableMCParticles(pMCParticleList, pCaloHitList, m_parameters, LArMCParticleHelper::IsBeamNeutrinoFinalState, mcToRecoHitsMap, m_foldToPrimaries);
+    LArMCParticleHelper::SelectReconstructableMCParticles(pMCParticleList, pCaloHitList, m_parameters, LArMCParticleHelper::IsBeamNeutrinoFinalState, mcToRecoHitsMap);
 
     // For user output purposes
     MCParticleVector orderedTargetMCParticleVector;

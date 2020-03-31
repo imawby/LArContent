@@ -100,12 +100,15 @@ namespace lar_content {
 
     // Nuance Code for event
     const MCParticle *pMCNeutrino(nullptr);
+    /*
     for(const MCParticle *const pMCParticle : *pMCParticleList) {
+        
       if(LArMCParticleHelper::IsDownstreamOfBeamNeutrino(pMCParticle)) {
 	pMCNeutrino = LArMCParticleHelper::GetParentMCParticle(pMCParticle);
 	break;
       }
     }
+    */
     unsigned int nuanceCode(LArMCParticleHelper::GetNuanceCode(pMCNeutrino));
 
     // Interaction type for the event 
@@ -171,12 +174,14 @@ namespace lar_content {
 
     // Nuance Code for event
     const MCParticle *pMCNeutrino(nullptr);
+    /*
     for(const MCParticle *const pMCParticle : *pMCParticleList) {
       if(LArMCParticleHelper::IsDownstreamOfBeamNeutrino(pMCParticle)) {
 	pMCNeutrino = LArMCParticleHelper::GetParentMCParticle(pMCParticle);
 	break;
       }
     }
+    */
     unsigned int nuanceCode(LArMCParticleHelper::GetNuanceCode(pMCNeutrino));
 
     // Interaction type for the event 
