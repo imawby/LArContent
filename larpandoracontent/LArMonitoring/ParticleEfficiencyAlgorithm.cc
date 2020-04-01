@@ -78,12 +78,15 @@ namespace lar_content {
         m_parameters.m_minPrimaryGoodViews = 1;
     }
 
+    m_parameters.m_foldBackHierarchy = m_foldToPrimaries;
+    
     // MC PARTICLES
 
     // Get MC Particle to reconstructable hits map
     LArMCParticleHelper::MCContributionMap mcToRecoHitsMap;
-    LArMCParticleHelper::SelectReconstructableMCParticles(pMCParticleList, pCaloHitList, m_parameters, LArMCParticleHelper::IsBeamNeutrinoFinalState, mcToRecoHitsMap);
-
+    //LArMCParticleHelper::SelectReconstructableMCParticles(pMCParticleList, pCaloHitList, m_parameters, LArMCParticleHelper::IsBeamNeutrinoFinalState, mcToRecoHitsMap);
+    LArMCParticleHelper::SelectReconstructableTestBeamHierarchyMCParticles(pMCParticleList, pCaloHitList, m_parameters, LArMCParticleHelper::IsBeamNeutrinoFinalState, mcToRecoHitsMap);
+     
     // For user output purposes
     MCParticleVector orderedTargetMCParticleVector;
     LArMonitoringHelper::GetOrderedMCParticleVector({mcToRecoHitsMap}, orderedTargetMCParticleVector);
