@@ -533,7 +533,7 @@ void LArMCParticleHelper::SelectReconstructableMCParticles(const MCParticleList 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 void LArMCParticleHelper::SelectReconstructableTestBeamHierarchyMCParticles(const MCParticleList *pMCParticleList, const CaloHitList *pCaloHitList, const PrimaryParameters &parameters,
-                                                                            std::function<bool(const MCParticle *const)> /*fCriteria*/, MCContributionMap &selectedMCParticlesToHitsMap)
+    std::function<bool(const MCParticle *const)> fCriteria, MCContributionMap &selectedMCParticlesToHitsMap)
 {
     // Obtain map: [mc particle -> target mc particle]
     LArMCParticleHelper::MCRelationMap mcToTargetMCMap;
@@ -561,9 +561,8 @@ void LArMCParticleHelper::SelectReconstructableTestBeamHierarchyMCParticles(cons
     }
 
     // Select MCParticles matching criteria
-    //MCParticleVector candidateTargets;
-    //LArMCParticleHelper::SelectParticlesMatchingCriteria(targetMCVector, fCriteria, candidateTargets, parameters, true);
-    MCParticleVector candidateTargets(targetMCVector.begin(), targetMCVector.end());
+    MCParticleVector candidateTargets;
+    LArMCParticleHelper::SelectParticlesMatchingCriteria(targetMCVector, fCriteria, candidateTargets, parameters, true);
 
     // Ensure the MCParticles have enough "good" hits to be reconstructed
     LArMCParticleHelper::SelectParticlesByHitCount(candidateTargets, targetMCToTrueHitListMap, mcToTargetMCMap, parameters, selectedMCParticlesToHitsMap);
