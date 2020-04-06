@@ -12,6 +12,10 @@
 
 #include "larpandoracontent/LArTwoDReco/LArClusterAssociation/ClusterAssociationAlgorithm.h"
 
+#include <chrono>
+
+using namespace std::chrono;
+
 using namespace pandora;
 
 namespace lar_content
@@ -27,6 +31,8 @@ ClusterAssociationAlgorithm::ClusterAssociationAlgorithm() :
 
 StatusCode ClusterAssociationAlgorithm::Run()
 {
+    auto startTotal = high_resolution_clock::now();
+    
     const ClusterList *pClusterList = NULL;
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetCurrentList(*this, pClusterList));
 
@@ -36,6 +42,8 @@ StatusCode ClusterAssociationAlgorithm::Run()
     ClusterAssociationMap clusterAssociationMap;
     this->PopulateClusterAssociationMap(clusterVector, clusterAssociationMap);
 
+    auto start = high_resolution_clock::now();
+    
     m_mergeMade = true;
 
     while (m_mergeMade)
@@ -75,6 +83,13 @@ StatusCode ClusterAssociationAlgorithm::Run()
                 this->AmbiguousPropagation(pCluster, false, clusterAssociationMap);
         }
     }
+
+    auto stop = high_resolution_clock::now();
+    duration<double> timeIntervalMerge = (stop - start);
+    std::cout << "M " << timeIntervalMerge.count() << std::endl;
+
+    duration<double> timeIntervalTotal = (stop - startTotal);
+    std::cout << "T " << timeIntervalTotal.count() << std::endl;
 
     return STATUS_CODE_SUCCESS;
 }
