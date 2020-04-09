@@ -14,7 +14,7 @@
 
 #include <chrono>
 
-using namespace std::chrono;
+//using namespace std::chrono;
 
 using namespace pandora;
 
@@ -31,7 +31,7 @@ ClusterAssociationAlgorithm::ClusterAssociationAlgorithm() :
 
 StatusCode ClusterAssociationAlgorithm::Run()
 {
-    auto startTotal = high_resolution_clock::now();
+  //auto startTotal = high_resolution_clock::now();
     
     const ClusterList *pClusterList = NULL;
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetCurrentList(*this, pClusterList));
@@ -42,7 +42,7 @@ StatusCode ClusterAssociationAlgorithm::Run()
     ClusterAssociationMap clusterAssociationMap;
     this->PopulateClusterAssociationMap(clusterVector, clusterAssociationMap);
 
-    auto start = high_resolution_clock::now();
+    //auto start = high_resolution_clock::now();
     
     m_mergeMade = true;
 
@@ -84,12 +84,12 @@ StatusCode ClusterAssociationAlgorithm::Run()
         }
     }
 
-    auto stop = high_resolution_clock::now();
-    duration<double> timeIntervalMerge = (stop - start);
-    std::cout << "M " << timeIntervalMerge.count() << std::endl;
+    //auto stop = high_resolution_clock::now();
+    //duration<double> timeIntervalMerge = (stop - start);
+    //std::cout << "M " << timeIntervalMerge.count() << std::endl;
 
-    duration<double> timeIntervalTotal = (stop - startTotal);
-    std::cout << "T " << timeIntervalTotal.count() << std::endl;
+    //duration<double> timeIntervalTotal = (stop - startTotal);
+    //std::cout << "T " << timeIntervalTotal.count() << std::endl;
 
     return STATUS_CODE_SUCCESS;
 }

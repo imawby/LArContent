@@ -14,7 +14,7 @@
 
 
 using namespace pandora;
-using namespace std::chrono;
+//using namespace std::chrono;
 
 
 namespace lar_content
@@ -36,7 +36,7 @@ HitWidthClusterMergingAlgorithm::HitWidthClusterMergingAlgorithm() :
 
 void HitWidthClusterMergingAlgorithm::GetListOfCleanClusters(const ClusterList *const pClusterList, ClusterVector &clusterVector) const
 {
-    auto start = high_resolution_clock::now();
+  //auto start = high_resolution_clock::now();
     
     // clear map if already full i.e. from other view clustering
     if (!m_clusterToParametersMap.empty())
@@ -55,16 +55,16 @@ void HitWidthClusterMergingAlgorithm::GetListOfCleanClusters(const ClusterList *
 
     std::sort(clusterVector.begin(), clusterVector.end(), LArHitWidthHelper::SortByHigherXExtrema(m_clusterToParametersMap));
 
-    auto stop = high_resolution_clock::now();
-    duration<double> timeInterval = (stop - start);
-    std::cout << "C " << timeInterval.count() << std::endl; 
+    //auto stop = high_resolution_clock::now();
+    //duration<double> timeInterval = (stop - start);
+    //std::cout << "C " << timeInterval.count() << std::endl; 
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 void HitWidthClusterMergingAlgorithm::PopulateClusterAssociationMap(const ClusterVector &clusterVector, ClusterAssociationMap &clusterAssociationMap) const
 {
-    auto start = high_resolution_clock::now();
+  //auto start = high_resolution_clock::now();
     
     // ATTN this method assumes that clusters have been sorted by extremal x position (low higherXExtrema -> high higherXExtrema)
     for (ClusterVector::const_iterator iterCurrentCluster = clusterVector.begin(); iterCurrentCluster != clusterVector.end(); ++iterCurrentCluster)
@@ -88,15 +88,15 @@ void HitWidthClusterMergingAlgorithm::PopulateClusterAssociationMap(const Cluste
         }
     }
 
-    auto stop = high_resolution_clock::now();
-    duration<double> timeIntervalMap = (stop - start);
-    std::cout << "P " << timeIntervalMap.count() << std::endl;
+    //auto stop = high_resolution_clock::now();
+    //duration<double> timeIntervalMap = (stop - start);
+    //std::cout << "P " << timeIntervalMap.count() << std::endl;
     
     this->RemoveShortcutAssociations(clusterVector, clusterAssociationMap);
 
-    auto stopAgain = high_resolution_clock::now();
-    duration<double> timeIntervalShortcut = (stopAgain - stop);
-    std::cout << "R " << timeIntervalShortcut.count() << std::endl;
+    //auto stopAgain = high_resolution_clock::now();
+    //duration<double> timeIntervalShortcut = (stopAgain - stop);
+    //std::cout << "R " << timeIntervalShortcut.count() << std::endl;
     
 }
 
@@ -104,7 +104,7 @@ void HitWidthClusterMergingAlgorithm::PopulateClusterAssociationMap(const Cluste
     
 bool HitWidthClusterMergingAlgorithm::IsExtremalCluster(const bool isForward, const Cluster *const pCurrentCluster,  const Cluster *const pTestCluster) const
 {
-    auto start = high_resolution_clock::now();
+  //auto start = high_resolution_clock::now();
     
     //ATTN - cannot use map since higherXExtrema may have changed during merging
     const LArHitWidthHelper::ConstituentHitVector currentConstituentHitVector(LArHitWidthHelper::GetConstituentHits(pCurrentCluster, m_maxConstituentHitWidth, m_hitWidthScalingFactor, false));
@@ -113,9 +113,9 @@ bool HitWidthClusterMergingAlgorithm::IsExtremalCluster(const bool isForward, co
     const CartesianVector testHigherXExtrema(LArHitWidthHelper::GetExtremalCoordinatesHigherX(testConstituentHitVector));
     float currentMaxX(currentHigherXExtrema.GetX()), testMaxX(testHigherXExtrema.GetX());
 
-    auto stop = high_resolution_clock::now();
-    duration<double> timeIntervalMap = (stop - start);
-    std::cout << "E " << timeIntervalMap.count() << std::endl;
+    //auto stop = high_resolution_clock::now();
+    //duration<double> timeIntervalMap = (stop - start);
+    //std::cout << "E " << timeIntervalMap.count() << std::endl;
     
     if (isForward)
     {
