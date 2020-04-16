@@ -849,7 +849,7 @@ void EMTrackAlgorithm::GetClusterMergingCoordinates(const TwoDSlidingFitResult &
         const float cosDirectionOpeningAngle(microDirection.GetCosOpeningAngle(m_useOtherCluster ? testAverageDirection : currentAverageDirection));
         
         //////////
-        std::cout << "COS OPENING ANGLE: " << cosDirectionOpeningAngle << std::endl;
+        //std::cout << "COS OPENING ANGLE: " << cosDirectionOpeningAngle << std::endl;
         //currentMicroFitResult.GetGlobalFitPosition(microIter->second.GetL(), currentMergePosition);
         //////////
         
@@ -869,7 +869,7 @@ void EMTrackAlgorithm::GetClusterMergingCoordinates(const TwoDSlidingFitResult &
 
         if (goodPositionCount > currentStabilityHitWindow)
         {
-            std::cout << "FOUND CURRENT BEST MARKER" << std::endl;
+	  //std::cout << "FOUND CURRENT BEST MARKER" << std::endl;
             break;
         }
             
@@ -880,7 +880,7 @@ void EMTrackAlgorithm::GetClusterMergingCoordinates(const TwoDSlidingFitResult &
         // if cannot find a point that is near the average (seems unlikely since thats how averages work...)
         if (i == minLayer)
         {
-            std::cout << "ISOBEL: COULDN'T FIND CURRENT AVERAGE POINT" << std::endl;
+	  //std::cout << "ISOBEL: COULDN'T FIND CURRENT AVERAGE POINT" << std::endl;
             currentMergePosition = currentMicroFitResult.GetGlobalMaxLayerPosition();
             currentMergeDirection = currentMicroFitResult.GetGlobalMaxLayerDirection();
         }
@@ -918,7 +918,7 @@ void EMTrackAlgorithm::GetClusterMergingCoordinates(const TwoDSlidingFitResult &
         const float cosDirectionOpeningAngle(microDirection.GetCosOpeningAngle(m_useOtherCluster ? currentAverageDirection : testAverageDirection));
         
         ///////////////
-        std::cout << "COS OPENING ANGLE: " << microDirection.GetCosOpeningAngle(m_useOtherCluster ? currentAverageDirection : testAverageDirection) << std::endl;
+        //std::cout << "COS OPENING ANGLE: " << microDirection.GetCosOpeningAngle(m_useOtherCluster ? currentAverageDirection : testAverageDirection) << std::endl;
         //testMicroFitResult.GetGlobalFitPosition(microIter->second.GetL(), testMergePosition);
         ///////////////
         
@@ -939,7 +939,7 @@ void EMTrackAlgorithm::GetClusterMergingCoordinates(const TwoDSlidingFitResult &
 
         if (goodPositionCount > testStabilityHitWindow)
         {
-            std::cout << "TEST POINT FOUND" << std::endl;
+	  //std::cout << "TEST POINT FOUND" << std::endl;
             break;
         }
 
@@ -950,15 +950,15 @@ void EMTrackAlgorithm::GetClusterMergingCoordinates(const TwoDSlidingFitResult &
         // if cannot find a point that is near the average (seems unlikely since thats how averages work...)
         if (i == maxLayer)
         {
-            std::cout << "ISOBEL: COULDN'T FIND TEST AVERAGE POINT" << std::endl;
+	  //std::cout << "ISOBEL: COULDN'T FIND TEST AVERAGE POINT" << std::endl;
             testMergePosition = testMicroFitResult.GetGlobalMinLayerPosition();
             testMergeDirection = testMicroFitResult.GetGlobalMinLayerDirection() * (-1.0);
         }
     }    
     
-    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &currentMergePosition, "CURRENT MERGE POSITION", BLUE, 2);
-    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &testMergePosition, "TEST MERGE POSITION", BLUE, 2);
-    PandoraMonitoringApi::Pause(this->GetPandora());
+    //PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &currentMergePosition, "CURRENT MERGE POSITION", BLUE, 2);
+    //PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &testMergePosition, "TEST MERGE POSITION", BLUE, 2);
+    //PandoraMonitoringApi::Pause(this->GetPandora());
     
 
 }
