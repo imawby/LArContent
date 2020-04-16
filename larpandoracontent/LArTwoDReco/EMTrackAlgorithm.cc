@@ -22,6 +22,7 @@ EMTrackAlgorithm::EMTrackAlgorithm() :
     m_caloHitListName(),
     m_caloHitToParentClusterMap(),
     m_minCaloHits(25),
+    m_minSeparationDistance(27),
     m_maxXSeparation(10),
     m_maxZSeparation(10),
     m_slidingFitWindow(20),
@@ -633,7 +634,8 @@ bool EMTrackAlgorithm::FindBestClusterAssociation(const Cluster *const pCurrentC
         }
         
         CartesianVector currentMergePoint(0.f, 0.f, 0.f), testMergePoint(0.f, 0.f, 0.f), currentMergeDirection(0.f, 0.f, 0.f), testMergeDirection(0.f, 0.f, 0.f);
-        this->GetClusterMergingCoordinates(currentMicroFitIter->second, currentMacroFitIter->second, currentMergePoint, currentMergeDirection, testMicroFitIter->second, testMacroFitIter->second, testMergePoint, testMergeDirection);
+        if (!this->GetClusterMergingCoordinates(currentMicroFitIter->second, currentMacroFitIter->second, currentMergePoint, currentMergeDirection, testMicroFitIter->second, testMacroFitIter->second, testMergePoint, testMergeDirection))
+            continue;
 
         if (!AreClustersAssociated(currentMergePoint, currentMergeDirection, testMergePoint, testMergeDirection))
             continue;
@@ -666,7 +668,7 @@ bool EMTrackAlgorithm::AreClustersAssociated(const CartesianVector &currentPoint
     }
     
     // check that clusters are reasonably far away
-    if (std::sqrt(currentPoint.GetDistanceSquared(testPoint)) < 27)
+    if (std::sqrt(currentPoint.GetDistanceSquared(testPoint)) < m_minSeparationDistance)
     {
         /*
         PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &currentPoint, "TOO CLOSE", RED, 2);
@@ -680,6 +682,7 @@ bool EMTrackAlgorithm::AreClustersAssociated(const CartesianVector &currentPoint
     
     // check that opening angle is not too large
     // ATTN - HAVE TURNED THE DIRECTION AROUND IN PREVIOUS FUNCTION
+    // this may be useless (if going to have it drop out at an earlier stage)
     if (currentDirection.GetCosOpeningAngle(testDirection * (-1.0)) < 0.99)
     {
         /*
@@ -739,7 +742,7 @@ bool EMTrackAlgorithm::AreClustersAssociated(const CartesianVector &currentPoint
         CartesianVector currentTL(currentPoint.GetX() - m_maxXSeparation, 0, currentPoint.GetZ() + m_maxZSeparation);
         CartesianVector currentBR(currentPoint.GetX() + m_maxXSeparation, 0, currentPoint.GetZ() - m_maxZSeparation);
         CartesianVector currentBL(currentPoint.GetX() - m_maxXSeparation, 0, currentPoint.GetZ() - m_maxZSeparation);
-    
+        
         PandoraMonitoringApi::AddLineToVisualization(this->GetPandora(), &currentTR, &currentTL, "CURRENT BOX", RED, 2, 2);
         PandoraMonitoringApi::AddLineToVisualization(this->GetPandora(), &currentTR, &currentBR, "CURRENT BOX", RED, 2, 2);
         PandoraMonitoringApi::AddLineToVisualization(this->GetPandora(), &currentTL, &currentBL, "CURRENT BOX", RED, 2, 2);
@@ -800,7 +803,7 @@ bool EMTrackAlgorithm::AreClustersAssociated(const CartesianVector &currentPoint
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void EMTrackAlgorithm::GetClusterMergingCoordinates(const TwoDSlidingFitResult &currentMicroFitResult, const TwoDSlidingFitResult &currentMacroFitResult, CartesianVector &currentMergePosition, CartesianVector &currentMergeDirection, const TwoDSlidingFitResult &testMicroFitResult, const TwoDSlidingFitResult &testMacroFitResult, CartesianVector &testMergePosition, CartesianVector &testMergeDirection)
+bool EMTrackAlgorithm::GetClusterMergingCoordinates(const TwoDSlidingFitResult &currentMicroFitResult, const TwoDSlidingFitResult &currentMacroFitResult, CartesianVector &currentMergePosition, CartesianVector &currentMergeDirection, const TwoDSlidingFitResult &testMicroFitResult, const TwoDSlidingFitResult &testMacroFitResult, CartesianVector &testMergePosition, CartesianVector &testMergeDirection)
 {
     //////////
     //CartesianVector origin(0.f,0.f,0.f);
@@ -880,9 +883,11 @@ void EMTrackAlgorithm::GetClusterMergingCoordinates(const TwoDSlidingFitResult &
         // if cannot find a point that is near the average (seems unlikely since thats how averages work...)
         if (i == minLayer)
         {
-	  //std::cout << "ISOBEL: COULDN'T FIND CURRENT AVERAGE POINT" << std::endl;
+            return false;
+            /*
             currentMergePosition = currentMicroFitResult.GetGlobalMaxLayerPosition();
             currentMergeDirection = currentMicroFitResult.GetGlobalMaxLayerDirection();
+            */
         }
     }
 
@@ -950,11 +955,16 @@ void EMTrackAlgorithm::GetClusterMergingCoordinates(const TwoDSlidingFitResult &
         // if cannot find a point that is near the average (seems unlikely since thats how averages work...)
         if (i == maxLayer)
         {
-	  //std::cout << "ISOBEL: COULDN'T FIND TEST AVERAGE POINT" << std::endl;
+            return false;
+            /*
+	        //std::cout << "ISOBEL: COULDN'T FIND TEST AVERAGE POINT" << std::endl;
             testMergePosition = testMicroFitResult.GetGlobalMinLayerPosition();
             testMergeDirection = testMicroFitResult.GetGlobalMinLayerDirection() * (-1.0);
+            */
         }
-    }    
+    }
+
+    return true;
     
     //PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &currentMergePosition, "CURRENT MERGE POSITION", BLUE, 2);
     //PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &testMergePosition, "TEST MERGE POSITION", BLUE, 2);
@@ -981,6 +991,9 @@ StatusCode EMTrackAlgorithm::ReadSettings(const TiXmlHandle xmlHandle)
 
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
         "MaxZSeparation", m_maxZSeparation));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
+        "MinSeparationDistance", m_minSeparationDistance));
 
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
         "LimitZ", m_limitZ));

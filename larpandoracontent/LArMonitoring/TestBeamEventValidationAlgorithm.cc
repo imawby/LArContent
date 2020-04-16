@@ -148,8 +148,8 @@ void TestBeamEventValidationAlgorithm::ProcessOutput(const ValidationInfo &valid
 
 	//ISOBEL - HACK FOR VIKTOR'S EVENTS
 	const int mcNuanceCode(3000);
-        const int isBeamParticle(0);
-        const int isCosmicRay(1);
+    const int isBeamParticle(0);
+    int isCosmicRay(1);
 
 
 
