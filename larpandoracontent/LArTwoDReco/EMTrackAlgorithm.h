@@ -106,6 +106,7 @@ public:
     unsigned int m_slidingFitWindow;
     bool m_limitZ;
     bool m_useOtherCluster;
+    bool m_abortIfNoPosition;
 
 };
 
