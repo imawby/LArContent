@@ -73,6 +73,8 @@ void StitchingCosmicRayMergingTool::Run(const MasterAlgorithm *const pAlgorithm,
     ThreeDPointingClusterMap pointingClusterMap;
     this->BuildPointingClusterMaps(primaryPfos, pfoToLArTPCMap, pointingClusterMap);
 
+    PandoraMonitoringApi::ViewEvent(this->GetPandora());
+
     LArTPCToPfoMap larTPCToPfoMap;
     this->BuildTPCMaps(primaryPfos, pfoToLArTPCMap, larTPCToPfoMap);
     
@@ -317,18 +319,18 @@ void StitchingCosmicRayMergingTool::CreatePfoMatches(const LArTPCToPfoMap &larTP
                 for (const ParticleFlowObject *const pPfo2 : pfoList2)
                 {
                     //////////
-                    /*
+                    
                     PfoList pfo1List, pfo2List;
                     pfo1List.push_back(pPfo1);
                     pfo2List.push_back(pPfo2);
                     PandoraMonitoringApi::VisualizeParticleFlowObjects(this->GetPandora(), &pfo1List, "PFO1", RED);
                     PandoraMonitoringApi::VisualizeParticleFlowObjects(this->GetPandora(), &pfo2List, "PFO2", VIOLET);
-                    */
+                    
                     //////////
                     
                     this->CreatePfoMatches(*pLArTPC1, *pLArTPC2, pPfo1, pPfo2, pointingClusterMap, pfoAssociationMatrix);
 
-                    //PandoraMonitoringApi::ViewEvent(this->GetPandora());
+                    PandoraMonitoringApi::ViewEvent(this->GetPandora());
                 }
             }
         }
@@ -353,7 +355,7 @@ void StitchingCosmicRayMergingTool::CreatePfoMatches(const LArTPC &larTPC1, cons
     if (pointingClusterMap.end() == iter1 || pointingClusterMap.end() == iter2)
         return;
 
-    //std::cout << "A" << std::endl;
+    std::cout << "A" << std::endl;
     
     const LArPointingCluster &pointingCluster1(iter1->second);
     const LArPointingCluster &pointingCluster2(iter2->second);
@@ -362,7 +364,7 @@ void StitchingCosmicRayMergingTool::CreatePfoMatches(const LArTPC &larTPC1, cons
     if (pointingCluster1.GetLengthSquared() < m_minLengthSquared || pointingCluster2.GetLengthSquared() < m_minLengthSquared)
         return;
 
-    //std::cout << "B" << std::endl;
+    std::cout << "B" << std::endl;
 
 
 
@@ -377,7 +379,7 @@ void StitchingCosmicRayMergingTool::CreatePfoMatches(const LArTPC &larTPC1, cons
     if (caloHitList3D1.size() < m_minNCaloHits3D || caloHitList3D2.size() < m_minNCaloHits3D)
         return;
 
-    //std::cout << "C" << std::endl;
+    std::cout << "C" << std::endl;
 
     // Get closest pair of vertices
     LArPointingCluster::Vertex pointingVertex1, pointingVertex2;
@@ -392,26 +394,26 @@ void StitchingCosmicRayMergingTool::CreatePfoMatches(const LArTPC &larTPC1, cons
     }
 
     //////////
-    /*
+    
     CartesianVector position1(pointingVertex1.GetPosition());
     CartesianVector position2(pointingVertex2.GetPosition());
     
     PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &position1, "VERTEX 1", DARKGREEN, 2);
     PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &position2, "VERTEX 2", BLACK, 2);
-    */
+    
     //////////
     
-    //std::cout << "D" << std::endl;
+    std::cout << "D" << std::endl;
     
     // Pointing clusters must have a parallel direction
     const float cosRelativeAngle(-pointingVertex1.GetDirection().GetDotProduct(pointingVertex2.GetDirection()));
 
-    //std::cout << "COS RELATIVE ANGLE: " << cosRelativeAngle << std::endl;
+    std::cout << "COS RELATIVE ANGLE: " << cosRelativeAngle << std::endl;
     
     if (cosRelativeAngle < m_relaxCosRelativeAngle)
         return;
 
-    //std::cout << "E" << std::endl;
+    std::cout << "E" << std::endl;
 
     // Pointing clusters must have a non-zero X direction (so that they point across drift volume boundary)
     const float pX1(std::fabs(pointingVertex1.GetDirection().GetX()));
@@ -420,7 +422,7 @@ void StitchingCosmicRayMergingTool::CreatePfoMatches(const LArTPC &larTPC1, cons
     if (pX1 < std::numeric_limits<float>::epsilon() || pX2 < std::numeric_limits<float>::epsilon())
         return;
 
-    //std::cout << "F" << std::endl;
+    std::cout << "F" << std::endl;
     
     // Pointing clusters must intersect at a drift volume boundary
     const float intersectX(0.5 * (pointingVertex1.GetPosition().GetX() + pointingVertex2.GetPosition().GetX()));
@@ -428,7 +430,7 @@ void StitchingCosmicRayMergingTool::CreatePfoMatches(const LArTPC &larTPC1, cons
     if (std::fabs(intersectX - boundaryCenterX) > maxLongitudinalDisplacementX)
         return;
 
-    //std::cout << "G" << std::endl;
+    std::cout << "G" << std::endl;
 
     // Impact parameters
     float rT1(0.f), rL1(0.f), rT2(0.f), rL2(0.f);
@@ -451,7 +453,7 @@ void StitchingCosmicRayMergingTool::CreatePfoMatches(const LArTPC &larTPC1, cons
         return;
     }
 
-    //std::cout << "H" << std::endl;
+    std::cout << "H" << std::endl;
 
     // Selection cuts on longitudinal impact parameters
     const float minL(-1.f);
@@ -462,7 +464,7 @@ void StitchingCosmicRayMergingTool::CreatePfoMatches(const LArTPC &larTPC1, cons
     const float maxL1(maxLongitudinalDisplacementX / dXdL1);
     const float maxL2(maxLongitudinalDisplacementX / dXdL2);
 
-    /*
+    
     std::cout << "minL: " << minL << std::endl;
     std::cout << "maxL1: " << maxL1 << std::endl;
     std::cout << "maxL2: " << maxL2 << std::endl;
@@ -471,7 +473,7 @@ void StitchingCosmicRayMergingTool::CreatePfoMatches(const LArTPC &larTPC1, cons
 
     std::cout << "rT1" << rT1 << std::endl;
     std::cout << "rT2" << rT2 << std::endl;
-    */
+    
 
 
     if (m_writeToTree)
@@ -515,7 +517,7 @@ void StitchingCosmicRayMergingTool::CreatePfoMatches(const LArTPC &larTPC1, cons
     if (m_writeToTree)
         PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Longitudinal", longFail));
     
-    //std::cout << "I" << std::endl;
+    std::cout << "I" << std::endl;
     
     // Selection cuts on transverse impact parameters
     const bool minPass(std::min(rT1, rT2) < m_relaxTransverseDisplacement && cosRelativeAngle > m_relaxCosRelativeAngle);
@@ -536,7 +538,7 @@ void StitchingCosmicRayMergingTool::CreatePfoMatches(const LArTPC &larTPC1, cons
         PANDORA_MONITORING_API(FillTree(this->GetPandora(), m_treeName));
     }
 
-    //std::cout << "J" << std::endl;
+    std::cout << "J" << std::endl;
 
     // Store this association
     const PfoAssociation::VertexType vertexType1(pointingVertex1.IsInnerVertex() ? PfoAssociation::INNER : PfoAssociation::OUTER);
