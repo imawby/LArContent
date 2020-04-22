@@ -31,17 +31,38 @@ StitchingCosmicRayMergingTool::StitchingCosmicRayMergingTool() :
     m_maxTransverseDisplacement(5.f),
     m_relaxCosRelativeAngle(0.906),
     m_relaxTransverseDisplacement(2.5f),
-    m_minNCaloHits3D(0)
+    m_minNCaloHits3D(0),
+    m_writeToTree(false),
+    m_fileName("ImpactParameters.root"),
+    m_treeName("ImpactParameterTree"),
+    m_eventNumber(0)
 {
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
+StitchingCosmicRayMergingTool::~StitchingCosmicRayMergingTool() 
+{
+    if(m_writeToTree) {
+        try {
+            PANDORA_MONITORING_API(SaveTree(this->GetPandora(), m_treeName, m_fileName, "UPDATE"));
+            std::cout << "TREE SAVED" << std::endl;
+        }
+        catch (const StatusCodeException &) {
+            std::cout << "UNABLE TO WRITE TREE" << std::endl;
+        }
+    }
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+    
 void StitchingCosmicRayMergingTool::Run(const MasterAlgorithm *const pAlgorithm, const PfoList *const pMultiPfoList, PfoToLArTPCMap &pfoToLArTPCMap, PfoToFloatMap &stitchedPfosToX0Map)
 {
     if (PandoraContentApi::GetSettings(*pAlgorithm)->ShouldDisplayAlgorithmInfo())
        std::cout << "----> Running Algorithm Tool: " << this->GetInstanceName() << ", " << this->GetType() << std::endl;
 
+    m_eventNumber++;
+    
     if (this->GetPandora().GetGeometry()->GetLArTPCMap().size() < 2)
         return;
 
@@ -593,9 +614,20 @@ void StitchingCosmicRayMergingTool::StitchPfos(const MasterAlgorithm *const pAlg
                 const float shiftSign(pfoToPointingVertexMap.at(pPfoToShift).GetPosition().GetX() < tpcBoundaryCenterX ? 1.f : -1.f);
                 const float signedX0(std::fabs(x0) * shiftSign);
                 pAlgorithm->ShiftPfoHierarchy(pPfoToShift, pfoToLArTPCMap, signedX0);
+
+                x0 *= t0Sign;
             }
         }
 
+        if (m_writeToTree)
+        {
+            int matchesSize(pfoVector.size());
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "APA_X0", x0));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Matches", matchesSize));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "EventNumber", m_eventNumber));
+            PANDORA_MONITORING_API(FillTree(this->GetPandora(), m_treeName));
+        }
+        
         for (const ParticleFlowObject *const pPfoToDelete : reducedPfoVector)
         {
             if (pSelectedPfoToEnlarge == pPfoToDelete)
@@ -877,6 +909,15 @@ StatusCode StitchingCosmicRayMergingTool::ReadSettings(const TiXmlHandle xmlHand
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
         "MinNCaloHits3D", m_minNCaloHits3D));
 
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
+        "WriteToTree", m_writeToTree));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
+        "TreeName", m_treeName));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
+        "FileName", m_fileName));
+    
     return STATUS_CODE_SUCCESS;
 }
 
