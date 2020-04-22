@@ -585,6 +585,7 @@ void StitchingCosmicRayMergingTool::StitchPfos(const MasterAlgorithm *const pAlg
         const float tpcBoundaryCenterX(LArStitchingHelper::GetTPCBoundaryCenterX(*stitchedLArTPCs.first, *stitchedLArTPCs.second));
         bool isCPAStitch(stitchedLArTPCs.first->GetCenterX() < tpcBoundaryCenterX ? !stitchedLArTPCs.first->IsDriftInPositiveX() : !stitchedLArTPCs.second->IsDriftInPositiveX());
 
+        float x0ToAdd(0);
         if (!m_useXcoordinate || m_alwaysApplyT0Calculation)
         {
             PfoToPointingVertexMap pfoToPointingVertexMap;
@@ -601,6 +602,9 @@ void StitchingCosmicRayMergingTool::StitchPfos(const MasterAlgorithm *const pAlg
             for (const ParticleFlowObject *const pPfoToShift : reducedPfoVector)
             {
                 const float t0Sign(isCPAStitch ? -1.f : 1.f);
+
+                x0ToAdd = x0 * (isCPAStitch ? -1.f : 1.f);
+                
                 object_creation::ParticleFlowObject::Metadata metadata;
                 metadata.m_propertiesToAdd["X0"] = x0 * t0Sign;
 
@@ -615,14 +619,14 @@ void StitchingCosmicRayMergingTool::StitchPfos(const MasterAlgorithm *const pAlg
                 const float signedX0(std::fabs(x0) * shiftSign);
                 pAlgorithm->ShiftPfoHierarchy(pPfoToShift, pfoToLArTPCMap, signedX0);
 
-                x0 *= t0Sign;
+                
             }
         }
 
         if (m_writeToTree)
         {
             int matchesSize(pfoVector.size());
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "APA_X0", x0));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "APA_X0", x0ToAdd));
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Matches", matchesSize));
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "EventNumber", m_eventNumber));
             PANDORA_MONITORING_API(FillTree(this->GetPandora(), m_treeName));
