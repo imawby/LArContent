@@ -553,7 +553,7 @@ void StitchingCosmicRayMergingTool::StitchPfos(const MasterAlgorithm *const pAlg
     for (const ParticleFlowObject *const pPfoToEnlarge : pfoVectorToEnlarge)
     {
         const PfoList &pfoList(pfoMerges.at(pPfoToEnlarge));
-
+        
         PfoVector pfoVector;
         for (const ParticleFlowObject *const pPfo : pfoList) pfoVector.push_back(pPfo);
         std::sort(pfoVector.begin(), pfoVector.end(), LArPfoHelper::SortByNHits);
@@ -631,6 +631,9 @@ void StitchingCosmicRayMergingTool::StitchPfos(const MasterAlgorithm *const pAlg
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "EventNumber", m_eventNumber));
             PANDORA_MONITORING_API(FillTree(this->GetPandora(), m_treeName));
         }
+
+        std::cout << "Matches: " << pfoVector.size() << std::endl;
+        std::cout << "X0: " << x0ToAdd << std::endl;
         
         for (const ParticleFlowObject *const pPfoToDelete : reducedPfoVector)
         {
