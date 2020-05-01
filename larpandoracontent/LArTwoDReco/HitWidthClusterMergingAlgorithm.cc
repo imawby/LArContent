@@ -59,12 +59,17 @@ void HitWidthClusterMergingAlgorithm::GetListOfCleanClusters(const ClusterList *
         clusterVector.push_back(pCluster);
     }
 
+    if (clusterVector.empty())
+      return;
+
     std::sort(clusterVector.begin(), clusterVector.end(), LArHitWidthHelper::SortByHigherXExtrema(m_clusterToParametersMap));
 
     //////////////////////////
+    /*
     ClusterList theClusters(clusterVector.begin(), clusterVector.end());
     PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &theClusters, "CLUSTERS", VIOLET);
     PandoraMonitoringApi::ViewEvent(this->GetPandora());
+    */
     //////////////////////////
 }
 
@@ -155,7 +160,6 @@ bool HitWidthClusterMergingAlgorithm::AreClustersAssociated(const LArHitWidthHel
     {
         testMergePoint = testFitParameters.GetLowerXExtrema();
     }
-
 
     CartesianVector currentClusterDirection(0.f, 0.f, 0.f), testClusterDirection(0.f, 0.f, 0.f);
     this->GetClusterDirection(currentFitParameters.GetConstituentHitVector(), currentClusterDirection, currentFitParameters.GetHigherXExtrema(), m_fittingWeight);
