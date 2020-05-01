@@ -21,7 +21,7 @@ namespace lar_content
 HitWidthClusterMergingAlgorithm::HitWidthClusterMergingAlgorithm() :
   m_maxConstituentHitWidth(0.5f),
   m_hitWidthScalingFactor(1.f),
-  m_fittingWeight(10.f),
+  m_fittingWeight(20.f),
   m_minClusterWeight(0.5f),      
   m_maxXMergeDistance(5.f),     
   m_maxZMergeDistance(2.f),     
@@ -64,13 +64,6 @@ void HitWidthClusterMergingAlgorithm::GetListOfCleanClusters(const ClusterList *
 
     std::sort(clusterVector.begin(), clusterVector.end(), LArHitWidthHelper::SortByHigherXExtrema(m_clusterToParametersMap));
 
-    //////////////////////////
-    /*
-    ClusterList theClusters(clusterVector.begin(), clusterVector.end());
-    PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &theClusters, "CLUSTERS", VIOLET);
-    PandoraMonitoringApi::ViewEvent(this->GetPandora());
-    */
-    //////////////////////////
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
