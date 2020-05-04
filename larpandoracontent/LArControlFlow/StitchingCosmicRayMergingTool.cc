@@ -14,6 +14,8 @@
 #include "larpandoracontent/LArHelpers/LArPfoHelper.h"
 #include "larpandoracontent/LArHelpers/LArStitchingHelper.h"
 
+#include "larpandoracontent/LArHelpers/LArHitWidthHelper.h"
+
 #include "larpandoracontent/LArControlFlow/StitchingCosmicRayMergingTool.h"
 
 using namespace pandora;
@@ -238,6 +240,7 @@ void StitchingCosmicRayMergingTool::SelectPrimaryPfos(const PfoList *pInputPfoLi
 
 void StitchingCosmicRayMergingTool::BuildPointingClusterMaps(const PfoList &inputPfoList, const PfoToLArTPCMap &pfoToLArTPCMap, ThreeDPointingClusterMap &pointingClusterMap) const
 {
+    float slidingFitPitch(0.f);
     for (const ParticleFlowObject *const pPfo : inputPfoList)
     {
         try
@@ -247,8 +250,9 @@ void StitchingCosmicRayMergingTool::BuildPointingClusterMaps(const PfoList &inpu
             if (pfoToLArTPCMap.end() == tpcIter)
                 throw StatusCodeException(STATUS_CODE_NOT_FOUND);
 
-            const float slidingFitPitch(tpcIter->second->GetWirePitchW());
-
+            //const float slidingFitPitch(tpcIter->second->GetWirePitchW());
+            slidingFitPitch = tpcIter->second->GetWirePitchW();
+            
             ClusterList clusterList;
             LArPfoHelper::GetThreeDClusterList(pPfo, clusterList);
 
@@ -260,19 +264,42 @@ void StitchingCosmicRayMergingTool::BuildPointingClusterMaps(const PfoList &inpu
         }
         catch (const StatusCodeException &) {}
     }
-    /*
+
+
+
+    
+    TwoDSlidingFitResultMap twoDSlidingFitResultMap;
     for (const ParticleFlowObject *const pPfo : inputPfoList)
     {
-        const auto iter(pfoToLArTPCMap.find(pPfo));
-        if (iter == pfoToLArTPCMap.end())
-            continue;
-        PfoList aList;
-        aList.push_back(pPfo);
-        PandoraMonitoringApi::VisualizeParticleFlowObjects(this->GetPandora(), &aList, "CLUSTERED", RED);
-    }
+        ClusterList uClusters;
+        LArPfoHelper::GetClusters(pPfo, TPC_VIEW_U, uClusters);
 
-    PandoraMonitoringApi::ViewEvent(this->GetPandora());
-    */
+        for (const Cluster *const pCluster : uClusters)
+        {
+            unsigned int proposedConstituentHits(LArHitWidthHelper::GetNProposedConstituentHits(pCluster, 0.5f, 1));
+            if (static_cast<float>(pCluster->GetNCaloHits()) / static_cast<float>(proposedConstituentHits) > 0.5)
+                continue;
+
+            try
+            {
+                const TwoDSlidingFitResult slidingFitResult(pCluster, 20, slidingFitPitch);
+                (void) twoDSlidingFitResultMap.insert(TwoDSlidingFitResultMap::value_type(pCluster, slidingFitResult));
+
+
+                ClusterList theCluster;
+                theCluster.push_back(pCluster);
+                PandoraMonitoringApi::
+
+                
+            }
+            
+            catch (const StatusCodeException &)
+            {
+                continue;
+            }
+        }
+    }
+    
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------

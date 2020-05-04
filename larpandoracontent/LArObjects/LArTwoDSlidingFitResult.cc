@@ -9,6 +9,7 @@
 #include "larpandoracontent/LArHelpers/LArClusterHelper.h"
 #include "larpandoracontent/LArHelpers/LArGeometryHelper.h"
 #include "larpandoracontent/LArHelpers/LArPcaHelper.h"
+#include "larpandoracontent/LArHelpers/LArHitWidthHelper.h"
 
 #include "larpandoracontent/LArObjects/LArTwoDSlidingFitResult.h"
 
@@ -30,8 +31,13 @@ TwoDSlidingFitResult::TwoDSlidingFitResult(const Cluster *const pCluster, const 
     m_axisDirection(0.f, 0.f, 0.f),
     m_orthoDirection(0.f, 0.f, 0.f)
 {
-    CartesianPointVector pointVector;
-    LArClusterHelper::GetCoordinateVector(pCluster, pointVector);
+    // TODO tuning! ATTN Note this can only work with calohit/cluster inputs, not point vectors
+    LArHitWidthHelper::ConstituentHitVector constituentHitVector(LArHitWidthHelper::GetConstituentHits(pCluster, 0.5f, 1.f, true));
+    const CartesianPointVector pointVector(LArHitWidthHelper::GetConstituentHitPositionVector(constituentHitVector));
+
+    //CartesianPointVector pointVector;
+    //LArClusterHelper::GetCoordinateVector(pCluster, pointVector);
+
     this->CalculateAxes(pointVector, layerPitch);
     this->FillLayerFitContributionMap(pointVector);
     this->PerformSlidingLinearFit();
@@ -65,8 +71,14 @@ TwoDSlidingFitResult::TwoDSlidingFitResult(const Cluster *const pCluster, const 
     m_axisDirection(axisDirection),
     m_orthoDirection(orthoDirection)
 {
-    CartesianPointVector pointVector;
-    LArClusterHelper::GetCoordinateVector(pCluster, pointVector);
+
+    // TODO tuning! ATTN Note this can only work with calohit/cluster inputs, not point vectors
+    LArHitWidthHelper::ConstituentHitVector constituentHitVector(LArHitWidthHelper::GetConstituentHits(pCluster, 0.5f, 1.f, true));
+    const CartesianPointVector pointVector(LArHitWidthHelper::GetConstituentHitPositionVector(constituentHitVector));
+
+    //CartesianPointVector pointVector;
+    //LArClusterHelper::GetCoordinateVector(pCluster, pointVector);
+    
     this->FillLayerFitContributionMap(pointVector);
     this->PerformSlidingLinearFit();
     this->FindSlidingFitSegments();
