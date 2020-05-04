@@ -226,7 +226,8 @@ private:
     bool m_writeToTree;
     std::string m_fileName;
     std::string m_treeName;
-    bool m_ignoreImpactParameterCut;
+    bool m_applyStandardImpactParameterCut;
+    bool m_applyGapImpactParameterCut;
 };
 
 } // namespace lar_content
