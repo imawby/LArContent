@@ -60,9 +60,10 @@ void HitWidthClusterMergingAlgorithm::GetListOfCleanClusters(const ClusterList *
     }
 
     if (clusterVector.empty())
-        return;
-    
+      return;
+
     std::sort(clusterVector.begin(), clusterVector.end(), LArHitWidthHelper::SortByHigherXExtrema(m_clusterToParametersMap));
+
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------

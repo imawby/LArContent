@@ -9,6 +9,7 @@
 #include "larpandoracontent/LArHelpers/LArClusterHelper.h"
 #include "larpandoracontent/LArHelpers/LArGeometryHelper.h"
 #include "larpandoracontent/LArHelpers/LArPcaHelper.h"
+#include "larpandoracontent/LArHelpers/LArHitWidthHelper.h"
 
 #include "larpandoracontent/LArObjects/LArTwoDSlidingFitResult.h"
 
@@ -30,10 +31,29 @@ TwoDSlidingFitResult::TwoDSlidingFitResult(const Cluster *const pCluster, const 
     m_axisDirection(0.f, 0.f, 0.f),
     m_orthoDirection(0.f, 0.f, 0.f)
 {
+    // TODO tuning! ATTN Note this can only work with calohit/cluster inputs, not point vectors
+    //LArHitWidthHelper::ConstituentHitVector constituentHitVector(LArHitWidthHelper::GetConstituentHits(pCluster, 0.5f, 1.f, true));
+    //const CartesianPointVector pointVector(LArHitWidthHelper::GetConstituentHitPositionVector(constituentHitVector));
+
     CartesianPointVector pointVector;
     LArClusterHelper::GetCoordinateVector(pCluster, pointVector);
+
     this->CalculateAxes(pointVector, layerPitch);
-    this->FillLayerFitContributionMap(pointVector);
+
+    const CartesianVector xAxis(1.f, 0.f, 0.f);
+    const float cosOpeningAngle(xAxis.GetCosOpeningAngle(m_axisDirection));
+
+    if (std::fabs(cosOpeningAngle) < 0.95)
+    {
+        this->FillLayerFitContributionMap(pointVector);
+    }
+    else
+    {
+        LArHitWidthHelper::ConstituentHitVector constituentHitVector(LArHitWidthHelper::GetConstituentHits(pCluster, 0.5f, 1.f, true));
+        const CartesianPointVector constituentHitPointVector(LArHitWidthHelper::GetConstituentHitPositionVector(constituentHitVector));
+        this->FillLayerFitContributionMap(constituentHitPointVector);
+    }
+ 
     this->PerformSlidingLinearFit();
     this->FindSlidingFitSegments();
 }
@@ -65,9 +85,27 @@ TwoDSlidingFitResult::TwoDSlidingFitResult(const Cluster *const pCluster, const 
     m_axisDirection(axisDirection),
     m_orthoDirection(orthoDirection)
 {
-    CartesianPointVector pointVector;
-    LArClusterHelper::GetCoordinateVector(pCluster, pointVector);
-    this->FillLayerFitContributionMap(pointVector);
+
+    // TODO tuning! ATTN Note this can only work with calohit/cluster inputs, not point vectors
+    //LArHitWidthHelper::ConstituentHitVector constituentHitVector(LArHitWidthHelper::GetConstituentHits(pCluster, 0.5f, 1.f, true));
+    //const CartesianPointVector pointVector(LArHitWidthHelper::GetConstituentHitPositionVector(constituentHitVector));
+
+    const CartesianVector xAxis(1.f, 0.f, 0.f);
+    const float cosOpeningAngle(xAxis.GetCosOpeningAngle(m_axisDirection));
+
+    if (std::fabs(cosOpeningAngle) < 0.95)
+    {
+        CartesianPointVector pointVector;
+        LArClusterHelper::GetCoordinateVector(pCluster, pointVector);
+        this->FillLayerFitContributionMap(pointVector);
+    }
+    else
+    {
+        LArHitWidthHelper::ConstituentHitVector constituentHitVector(LArHitWidthHelper::GetConstituentHits(pCluster, 0.5f, 1.f, true));
+        const CartesianPointVector constituentHitPointVector(LArHitWidthHelper::GetConstituentHitPositionVector(constituentHitVector));
+        this->FillLayerFitContributionMap(constituentHitPointVector);
+    }
+
     this->PerformSlidingLinearFit();
     this->FindSlidingFitSegments();
 }
