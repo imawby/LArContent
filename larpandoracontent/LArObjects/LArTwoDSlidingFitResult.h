@@ -46,7 +46,7 @@ public:
     template <typename T>
     TwoDSlidingFitResult(const T *const pT, const unsigned int layerFitHalfWindow, const float layerPitch, const pandora::CartesianVector &axisIntercept,
         const pandora::CartesianVector &axisDirection, const pandora::CartesianVector &orthoDirection);
-
+    
     /**
      *  @brief  Constructor using specified primary axis and layer fit contribution map. User is responsible for ensuring that
      *          z-pitch, axis intercept and axis direction agree with calculations used to fill the layer fit contribution map.

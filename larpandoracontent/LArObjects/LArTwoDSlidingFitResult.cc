@@ -32,14 +32,28 @@ TwoDSlidingFitResult::TwoDSlidingFitResult(const Cluster *const pCluster, const 
     m_orthoDirection(0.f, 0.f, 0.f)
 {
     // TODO tuning! ATTN Note this can only work with calohit/cluster inputs, not point vectors
-    LArHitWidthHelper::ConstituentHitVector constituentHitVector(LArHitWidthHelper::GetConstituentHits(pCluster, 0.5f, 1.f, true));
-    const CartesianPointVector pointVector(LArHitWidthHelper::GetConstituentHitPositionVector(constituentHitVector));
+    //LArHitWidthHelper::ConstituentHitVector constituentHitVector(LArHitWidthHelper::GetConstituentHits(pCluster, 0.5f, 1.f, true));
+    //const CartesianPointVector pointVector(LArHitWidthHelper::GetConstituentHitPositionVector(constituentHitVector));
 
-    //CartesianPointVector pointVector;
-    //LArClusterHelper::GetCoordinateVector(pCluster, pointVector);
+    CartesianPointVector pointVector;
+    LArClusterHelper::GetCoordinateVector(pCluster, pointVector);
 
     this->CalculateAxes(pointVector, layerPitch);
-    this->FillLayerFitContributionMap(pointVector);
+
+    const CartesianVector xAxis(1.f, 0.f, 0.f);
+    const float cosOpeningAngle(xAxis.GetCosOpeningAngle(m_axisDirection));
+
+    if (std::fabs(cosOpeningAngle) < 0.95)
+    {
+        this->FillLayerFitContributionMap(pointVector);
+    }
+    else
+    {
+        LArHitWidthHelper::ConstituentHitVector constituentHitVector(LArHitWidthHelper::GetConstituentHits(pCluster, 0.5f, 1.f, true));
+        const CartesianPointVector constituentHitPointVector(LArHitWidthHelper::GetConstituentHitPositionVector(constituentHitVector));
+        this->FillLayerFitContributionMap(constituentHitPointVector);
+    }
+ 
     this->PerformSlidingLinearFit();
     this->FindSlidingFitSegments();
 }
@@ -73,13 +87,25 @@ TwoDSlidingFitResult::TwoDSlidingFitResult(const Cluster *const pCluster, const 
 {
 
     // TODO tuning! ATTN Note this can only work with calohit/cluster inputs, not point vectors
-    LArHitWidthHelper::ConstituentHitVector constituentHitVector(LArHitWidthHelper::GetConstituentHits(pCluster, 0.5f, 1.f, true));
-    const CartesianPointVector pointVector(LArHitWidthHelper::GetConstituentHitPositionVector(constituentHitVector));
+    //LArHitWidthHelper::ConstituentHitVector constituentHitVector(LArHitWidthHelper::GetConstituentHits(pCluster, 0.5f, 1.f, true));
+    //const CartesianPointVector pointVector(LArHitWidthHelper::GetConstituentHitPositionVector(constituentHitVector));
 
-    //CartesianPointVector pointVector;
-    //LArClusterHelper::GetCoordinateVector(pCluster, pointVector);
-    
-    this->FillLayerFitContributionMap(pointVector);
+    const CartesianVector xAxis(1.f, 0.f, 0.f);
+    const float cosOpeningAngle(xAxis.GetCosOpeningAngle(m_axisDirection));
+
+    if (std::fabs(cosOpeningAngle) < 0.95)
+    {
+        CartesianPointVector pointVector;
+        LArClusterHelper::GetCoordinateVector(pCluster, pointVector);
+        this->FillLayerFitContributionMap(pointVector);
+    }
+    else
+    {
+        LArHitWidthHelper::ConstituentHitVector constituentHitVector(LArHitWidthHelper::GetConstituentHits(pCluster, 0.5f, 1.f, true));
+        const CartesianPointVector constituentHitPointVector(LArHitWidthHelper::GetConstituentHitPositionVector(constituentHitVector));
+        this->FillLayerFitContributionMap(constituentHitPointVector);
+    }
+
     this->PerformSlidingLinearFit();
     this->FindSlidingFitSegments();
 }

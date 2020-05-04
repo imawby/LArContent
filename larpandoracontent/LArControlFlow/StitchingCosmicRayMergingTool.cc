@@ -266,9 +266,8 @@ void StitchingCosmicRayMergingTool::BuildPointingClusterMaps(const PfoList &inpu
     }
 
 
-
-    
-    TwoDSlidingFitResultMap twoDSlidingFitResultMap;
+    //////////////////
+    /*
     for (const ParticleFlowObject *const pPfo : inputPfoList)
     {
         ClusterList uClusters;
@@ -277,28 +276,89 @@ void StitchingCosmicRayMergingTool::BuildPointingClusterMaps(const PfoList &inpu
         for (const Cluster *const pCluster : uClusters)
         {
             unsigned int proposedConstituentHits(LArHitWidthHelper::GetNProposedConstituentHits(pCluster, 0.5f, 1));
-            if (static_cast<float>(pCluster->GetNCaloHits()) / static_cast<float>(proposedConstituentHits) > 0.5)
+            if (static_cast<float>(pCluster->GetNCaloHits()) / static_cast<float>(proposedConstituentHits) > 1)
                 continue;
-
             try
             {
                 const TwoDSlidingFitResult slidingFitResult(pCluster, 20, slidingFitPitch);
-                (void) twoDSlidingFitResultMap.insert(TwoDSlidingFitResultMap::value_type(pCluster, slidingFitResult));
-
 
                 ClusterList theCluster;
                 theCluster.push_back(pCluster);
-                PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &theCluster, "CLUSTER", RED);
-                PandoraMonitoringApi::Pause(this->GetPandora());
+                //PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &theCluster, "CLUSTER", RED);
+
+                const CartesianVector& principalAxisDirection(slidingFitResult.GetAxisDirection());
+                const CartesianVector xAxis(1.f, 0.f, 0.f);
+                const float cosOpeningAngle(principalAxisDirection.GetCosOpeningAngle(xAxis));
+                std::cout << "U CLUSTERS COS OPENING ANGLE WITH X AXIS: " << cosOpeningAngle << std::endl;
                 
+                //PandoraMonitoringApi::Pause(this->GetPandora());
             }
-            
+            catch (const StatusCodeException &)
+            {
+                continue;
+            }
+        }
+
+        ClusterList vClusters;
+        LArPfoHelper::GetClusters(pPfo, TPC_VIEW_V, vClusters);
+
+        for (const Cluster *const pCluster : vClusters)
+        {
+            unsigned int proposedConstituentHits(LArHitWidthHelper::GetNProposedConstituentHits(pCluster, 0.5f, 1));
+            if (static_cast<float>(pCluster->GetNCaloHits()) / static_cast<float>(proposedConstituentHits) > 1)
+                continue;
+            try
+            {
+                const TwoDSlidingFitResult slidingFitResult(pCluster, 20, slidingFitPitch);
+
+                ClusterList theCluster;
+                theCluster.push_back(pCluster);
+                //PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &theCluster, "CLUSTER", RED);
+
+                const CartesianVector& principalAxisDirection(slidingFitResult.GetAxisDirection());
+                const CartesianVector xAxis(1.f, 0.f, 0.f);
+                const float cosOpeningAngle(principalAxisDirection.GetCosOpeningAngle(xAxis));
+                std::cout << "V CLUSTERS COS OPENING ANGLE WITH X AXIS: " << cosOpeningAngle << std::endl;
+                
+                //PandoraMonitoringApi::Pause(this->GetPandora());
+            }
+            catch (const StatusCodeException &)
+            {
+                continue;
+            }
+        }
+
+        ClusterList wClusters;
+        LArPfoHelper::GetClusters(pPfo, TPC_VIEW_W, wClusters);
+
+        for (const Cluster *const pCluster : wClusters)
+        {
+            unsigned int proposedConstituentHits(LArHitWidthHelper::GetNProposedConstituentHits(pCluster, 0.5f, 1));
+            if (static_cast<float>(pCluster->GetNCaloHits()) / static_cast<float>(proposedConstituentHits) > 1)
+                continue;
+            try
+            {
+                const TwoDSlidingFitResult slidingFitResult(pCluster, 20, slidingFitPitch);
+
+                ClusterList theCluster;
+                theCluster.push_back(pCluster);
+                //PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &theCluster, "CLUSTER", RED);
+
+                const CartesianVector& principalAxisDirection(slidingFitResult.GetAxisDirection());
+                const CartesianVector xAxis(1.f, 0.f, 0.f);
+                const float cosOpeningAngle(principalAxisDirection.GetCosOpeningAngle(xAxis));
+                std::cout << "W CLUSTERS COS OPENING ANGLE WITH X AXIS: " << cosOpeningAngle << std::endl;
+                
+                //PandoraMonitoringApi::Pause(this->GetPandora());
+            }
             catch (const StatusCodeException &)
             {
                 continue;
             }
         }
     }
+    */
+  
     
 }
 
