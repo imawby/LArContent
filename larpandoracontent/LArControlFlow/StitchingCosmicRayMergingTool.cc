@@ -288,8 +288,8 @@ void StitchingCosmicRayMergingTool::BuildPointingClusterMaps(const PfoList &inpu
 
                 ClusterList theCluster;
                 theCluster.push_back(pCluster);
-                PandoraMonitoringApi::
-
+                PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &theCluster, "CLUSTER", RED);
+                PandoraMonitoringApi::Pause(this->GetPandora());
                 
             }
             
