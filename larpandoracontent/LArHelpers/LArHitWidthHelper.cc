@@ -60,15 +60,6 @@ LArHitWidthHelper::ClusterParameters::ClusterParameters(const Cluster *const pCl
 //------------------------------------------------------------------------------------------------------------------------------------------
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-LArHitWidthHelper::SortByHigherXExtrema::SortByHigherXExtrema(const ClusterToParametersMap &clusterToParametersMap) :
-    m_clusterToParametersMap(clusterToParametersMap)
-{
-    if (m_clusterToParametersMap.empty())
-        throw StatusCodeException(STATUS_CODE_NOT_INITIALIZED);
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-
 bool LArHitWidthHelper::SortByHigherXExtrema::operator() (const Cluster *const pLhs, const Cluster *const pRhs)
 {
     const LArHitWidthHelper::ClusterParameters& lhsClusterParameters(LArHitWidthHelper::GetClusterParameters(pLhs, m_clusterToParametersMap));
@@ -84,7 +75,7 @@ const LArHitWidthHelper::ClusterParameters& LArHitWidthHelper::GetClusterParamet
 {
     if (clusterToParametersMap.empty())
         throw StatusCodeException(STATUS_CODE_NOT_INITIALIZED);
-
+    
     const auto clusterParametersIter(clusterToParametersMap.find(pCluster));
 
     if (clusterParametersIter == clusterToParametersMap.end())
