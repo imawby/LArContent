@@ -140,10 +140,15 @@ void TestBeamEventValidationAlgorithm::ProcessOutput(const ValidationInfo &valid
         const int nTargetPrimaries(associatedMCPrimaries.size());
         ++mcPrimaryIndex;
         const CaloHitList &mcPrimaryHitList(validationInfo.GetAllMCParticleToHitsMap().at(pMCPrimary));
-
+	/*
         const int mcNuanceCode(LArMCParticleHelper::GetNuanceCode(LArMCParticleHelper::GetParentMCParticle(pMCPrimary)));
         const int isBeamParticle(LArMCParticleHelper::IsBeamParticle(pMCPrimary));
         const int isCosmicRay(LArMCParticleHelper::IsCosmicRay(pMCPrimary));
+	*/
+	//ISOBEL - HACK FOR VIKTOR'S EVENTS
+	const int mcNuanceCode(3000);
+	const int isBeamParticle(0);
+	int isCosmicRay(1);
 #ifdef MONITORING
         const CartesianVector &targetVertex(LArMCParticleHelper::GetParentMCParticle(pMCPrimary)->GetVertex());
         const float targetVertexX(targetVertex.GetX()), targetVertexY(targetVertex.GetY()), targetVertexZ(targetVertex.GetZ());
@@ -310,7 +315,9 @@ void TestBeamEventValidationAlgorithm::ProcessOutput(const ValidationInfo &valid
 
         if (isBeamParticle || isCosmicRay)
         {
-            const LArInteractionTypeHelper::InteractionType interactionType(LArInteractionTypeHelper::GetInteractionType(associatedMCPrimaries));
+	  //isobel
+	    //const LArInteractionTypeHelper::InteractionType interactionType(LArInteractionTypeHelper::GetInteractionType(associatedMCPrimaries));
+	    const LArInteractionTypeHelper::InteractionType interactionType(LArInteractionTypeHelper::InteractionType::COSMIC_RAY_MU);
 #ifdef MONITORING
             const int interactionTypeInt(static_cast<int>(interactionType));
 #endif
