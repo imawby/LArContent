@@ -535,9 +535,9 @@ void StitchingCosmicRayMergingTool::StitchPfos(const MasterAlgorithm *const pAlg
     {
         const PfoList &pfoList(pfoMerges.at(pPfoToEnlarge));
         const PfoVector pfoVector(pfoList.begin(), pfoList.end());
-
-        float x0(0.f);
         PfoToPointingVertexMatrix pfoToPointingVertexMatrix;
+        float x0(0.f);
+        
         if (!m_useXcoordinate || m_alwaysApplyT0Calculation)
         {
             try
@@ -550,78 +550,35 @@ void StitchingCosmicRayMergingTool::StitchPfos(const MasterAlgorithm *const pAlg
             }
         }
 
-        // first shift the pfos one at a time
-        PfoList shiftedPfos;
+        // ATTN: shift the pfos one at a time
+        PfoSet shiftedPfos;
         for (PfoVector::const_iterator iterI = pfoVector.begin(); iterI != pfoVector.end(); ++iterI)
         {
             const ParticleFlowObject *const pPfoI(*iterI);
             const LArTPC *const pLArTPCI(pfoToLArTPCMap.at(pPfoI));
 
-            for (PfoVector::const_iterator iterJ = iterI; iterJ != pfoVector.end(); ++iterJ)
+            for (PfoVector::const_iterator iterJ = std::next(iterI); iterJ != pfoVector.end(); ++iterJ)
             {
-                if (iterI == iterJ)
-                    continue;
-
                 const ParticleFlowObject *const pPfoJ(*iterJ);
                 const LArTPC *const pLArTPCJ(pfoToLArTPCMap.at(pPfoJ));
 
                 if (!LArStitchingHelper::CanTPCsBeStitched(*pLArTPCI, *pLArTPCJ))
                     continue;
 
-                PfoList pfosToShift({pPfoI, pPfoJ});
-
-                for (const ParticleFlowObject *const pPfoToShift : pfosToShift)
+                if (std::find(shiftedPfos.begin(), shiftedPfos.end(), pPfoI) == shiftedPfos.end())
                 {
-                    // if pfo has already been shifted
-                    if (std::find(shiftedPfos.begin(), shiftedPfos.end(), pPfoToShift) != shiftedPfos.end())
-                        continue;
-
                     if (!m_useXcoordinate || m_alwaysApplyT0Calculation)
-                    {
-                        // get pfo stitching vertex
-                        const PfoToPointingVertexMatrix::iterator pfoToPointingVertexMatrixIter(pfoToPointingVertexMatrix.find(pPfoToShift));
-                        LArPointingCluster::Vertex stitchingVertex;
-                        for (const ParticleFlowObject *const pPfo : pfosToShift)
-                        {
-                            if (pPfo == pPfoToShift)
-                                continue;
-
-                            stitchingVertex = pfoToPointingVertexMatrixIter->second.at(pPfo);
-                        }
-
-                        // Determine shift sign from the relative position of stitching vertex and closest TPC boundary position
-                        const LArTPC *const pShiftLArTPC(pfoToLArTPCMap.at(pPfoToShift));
-                        const float tpcBoundaryCenterX(LArStitchingHelper::GetTPCBoundaryCenterX(*pLArTPCI, *pLArTPCJ));
-                        float tpcBoundaryX(0.f);
-
-                        if (pShiftLArTPC->GetCenterX() < tpcBoundaryCenterX)
-                        {
-                            tpcBoundaryX = pShiftLArTPC->GetCenterX() + (pShiftLArTPC->GetWidthX()/2);
-                        }
-                        else
-                        {
-                            tpcBoundaryX = pShiftLArTPC->GetCenterX() - (pShiftLArTPC->GetWidthX()/2);
-                        }
-
-                        const float positionShiftSign = stitchingVertex.GetPosition().GetX() < tpcBoundaryX ? 1.f : -1.f;
-
-                        // ATTN: No CPA/APA sign needed since x0 calculation is corresponds to an APA
-                        object_creation::ParticleFlowObject::Metadata metadata;
-                        metadata.m_propertiesToAdd["X0"] = x0;
-
-                        // ATTN: Set the X0 shift for all particles in hierarchy
-                        PfoList downstreamPfoList;
-                        LArPfoHelper::GetAllDownstreamPfos(pPfoToShift, downstreamPfoList);
-
-                        for (const ParticleFlowObject *const pHierarchyPfo : downstreamPfoList)
-                            PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::ParticleFlowObject::AlterMetadata(*pAlgorithm, pHierarchyPfo, metadata));
-
-                        const float signedX0(std::fabs(x0) * positionShiftSign);
-
-                        pAlgorithm->ShiftPfoHierarchy(pPfoToShift, pfoToLArTPCMap, signedX0);
-                    }
-
-                    shiftedPfos.push_back(pPfoToShift);
+                            this->ShiftPfo(pAlgorithm, pPfoI, pPfoJ, x0, pfoToLArTPCMap, pfoToPointingVertexMatrix);
+                    
+                    shiftedPfos.insert(pPfoI);
+                }
+                    
+                if (std::find(shiftedPfos.begin(), shiftedPfos.end(), pPfoJ) == shiftedPfos.end())
+                {
+                    if (!m_useXcoordinate || m_alwaysApplyT0Calculation)
+                        this->ShiftPfo(pAlgorithm, pPfoJ, pPfoI, x0, pfoToLArTPCMap, pfoToPointingVertexMatrix);
+                
+                    shiftedPfos.insert(pPfoJ);
                 }
             }
         }
@@ -641,6 +598,47 @@ void StitchingCosmicRayMergingTool::StitchPfos(const MasterAlgorithm *const pAlg
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
+void StitchingCosmicRayMergingTool::ShiftPfo(const MasterAlgorithm *const pAlgorithm, const ParticleFlowObject *const pPfoToShift, const ParticleFlowObject *const pMatchedPfo, const float x0, const PfoToLArTPCMap &pfoToLArTPCMap, const PfoToPointingVertexMatrix &pfoToPointingVertexMatrix) const
+{
+    // get stitching vertex for the pfo to be shifted
+    const PfoToPointingVertexMatrix::const_iterator pfoToPointingVertexMatrixIter(pfoToPointingVertexMatrix.find(pPfoToShift));
+    const LArPointingCluster::Vertex stitchingVertex(pfoToPointingVertexMatrixIter->second.at(pMatchedPfo));
+
+    const LArTPC *const pShiftLArTPC(pfoToLArTPCMap.at(pPfoToShift));
+    const LArTPC *const pMatchedLArTPC(pfoToLArTPCMap.at(pMatchedPfo));
+    
+    // determine shift sign from the relative position of stitching vertex and the relevant TPC boundary position
+    const float tpcBoundaryCenterX(LArStitchingHelper::GetTPCBoundaryCenterX(*pShiftLArTPC, *pMatchedLArTPC));
+    float tpcBoundaryX(0.f);
+
+    if (pShiftLArTPC->GetCenterX() < tpcBoundaryCenterX)
+    {
+        tpcBoundaryX = pShiftLArTPC->GetCenterX() + (pShiftLArTPC->GetWidthX() / 2.f);
+    }
+    else
+    {
+        tpcBoundaryX = pShiftLArTPC->GetCenterX() - (pShiftLArTPC->GetWidthX() / 2.f);
+    }
+
+    const float positionShiftSign = stitchingVertex.GetPosition().GetX() < tpcBoundaryX ? 1.f : -1.f;
+
+    // ATTN: No CPA/APA sign needed since x0 calculation is corresponds to an APA
+    object_creation::ParticleFlowObject::Metadata metadata;
+    metadata.m_propertiesToAdd["X0"] = x0;
+
+    // ATTN: Set the X0 shift for all particles in hierarchy
+    PfoList downstreamPfoList;
+    LArPfoHelper::GetAllDownstreamPfos(pPfoToShift, downstreamPfoList);
+
+    for (const ParticleFlowObject *const pHierarchyPfo : downstreamPfoList)
+        PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::ParticleFlowObject::AlterMetadata(*pAlgorithm, pHierarchyPfo, metadata));
+
+    const float signedX0(std::fabs(x0) * positionShiftSign);
+
+    pAlgorithm->ShiftPfoHierarchy(pPfoToShift, pfoToLArTPCMap, signedX0);    
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
 void StitchingCosmicRayMergingTool::CalculateX0(const PfoToLArTPCMap &pfoToLArTPCMap, const ThreeDPointingClusterMap &pointingClusterMap,
     const PfoVector &pfoVector, float &x0, PfoToPointingVertexMatrix &pfoToPointingVertexMatrix) const
 {
@@ -658,7 +656,7 @@ void StitchingCosmicRayMergingTool::CalculateX0(const PfoToLArTPCMap &pfoToLArTP
         const LArTPC *const pLArTPC1(tpcIter1->second);
         const LArPointingCluster &pointingCluster1(pointingIter1->second);
 
-        for (PfoVector::const_iterator iter2 = iter1; iter2 != iterEnd; ++iter2)
+        for (PfoVector::const_iterator iter2 = std::next(iter1); iter2 != iterEnd; ++iter2)
         {
             const ParticleFlowObject *const pPfo2(*iter2);
             PfoToLArTPCMap::const_iterator tpcIter2 = pfoToLArTPCMap.find(pPfo2);
@@ -680,16 +678,19 @@ void StitchingCosmicRayMergingTool::CalculateX0(const PfoToLArTPCMap &pfoToLArTP
                 LArStitchingHelper::GetClosestVertices(*pLArTPC1, *pLArTPC2, pointingCluster1, pointingCluster2,
                     pointingVertex1, pointingVertex2);
 
-                PfoToPointingVertexMatrix::iterator pfoToPointingVertexMatrixIter1(pfoToPointingVertexMatrix.find(pPfo1));
+                // Record pfo1 stitching vertex for pfo1<->pfo2 match, used to determine shifting direction in later step
+                const PfoToPointingVertexMatrix::iterator pfoToPointingVertexMatrixIter1(pfoToPointingVertexMatrix.find(pPfo1));
                 if (pfoToPointingVertexMatrixIter1 == pfoToPointingVertexMatrix.end())
                 {
-                    PfoToPointingVertexMap pfoToPointingVertexMap({{pPfo2, pointingVertex1}});
+                    // No matches present in map, add pfo1<->pfo2 match
+                    const PfoToPointingVertexMap pfoToPointingVertexMap({{pPfo2, pointingVertex1}});
                     (void) pfoToPointingVertexMatrix.insert(PfoToPointingVertexMatrix::value_type(pPfo1, pfoToPointingVertexMap));
                 }
                 else
                 {
-                    PfoToPointingVertexMap pfoToPointingVertexMap(pfoToPointingVertexMatrixIter1->second);
-                    PfoToPointingVertexMap::iterator pfoToPointingVertexMapIter(pfoToPointingVertexMap.find(pPfo2));
+                    // ATTN: another match for a different TPC boundary may be present, add pfo1<->pfo2 match 
+                    PfoToPointingVertexMap &pfoToPointingVertexMap(pfoToPointingVertexMatrixIter1->second);
+                    const PfoToPointingVertexMap::iterator pfoToPointingVertexMapIter(pfoToPointingVertexMap.find(pPfo2));
                     if(pfoToPointingVertexMapIter == pfoToPointingVertexMap.end())
                     {
                         (void) pfoToPointingVertexMap.insert(PfoToPointingVertexMap::value_type(pPfo2, pointingVertex1));
@@ -701,16 +702,19 @@ void StitchingCosmicRayMergingTool::CalculateX0(const PfoToLArTPCMap &pfoToLArTP
                     }
                 }
 
-                PfoToPointingVertexMatrix::iterator pfoToPointingVertexMatrixIter2(pfoToPointingVertexMatrix.find(pPfo2));
+                // Record pfo2 stitching vertex for pfo1<->pfo2 match, used to determine shifting direction in later step
+                const PfoToPointingVertexMatrix::iterator pfoToPointingVertexMatrixIter2(pfoToPointingVertexMatrix.find(pPfo2));
                 if (pfoToPointingVertexMatrixIter2 == pfoToPointingVertexMatrix.end())
                 {
-                    PfoToPointingVertexMap pfoToPointingVertexMap({{pPfo1, pointingVertex2}});
+                    // No matches present in map, add pfo1<->pfo2 match
+                    const PfoToPointingVertexMap pfoToPointingVertexMap({{pPfo1, pointingVertex2}});
                     (void) pfoToPointingVertexMatrix.insert(PfoToPointingVertexMatrix::value_type(pPfo2, pfoToPointingVertexMap));
                 }
                 else
                 {
-                    PfoToPointingVertexMap pfoToPointingVertexMap(pfoToPointingVertexMatrixIter2->second);
-                    PfoToPointingVertexMap::iterator pfoToPointingVertexMapIter(pfoToPointingVertexMap.find(pPfo1));
+                    // ATTN: another match for a different TPC boundary may be present, add pfo1<->pfo2 match                    
+                    PfoToPointingVertexMap &pfoToPointingVertexMap(pfoToPointingVertexMatrixIter2->second);
+                    const PfoToPointingVertexMap::iterator pfoToPointingVertexMapIter(pfoToPointingVertexMap.find(pPfo1));
                     if(pfoToPointingVertexMapIter == pfoToPointingVertexMap.end())
                     {
                         (void) pfoToPointingVertexMap.insert(PfoToPointingVertexMap::value_type(pPfo1, pointingVertex2));
@@ -723,7 +727,7 @@ void StitchingCosmicRayMergingTool::CalculateX0(const PfoToLArTPCMap &pfoToLArTP
                 }
 
                 const float tpcBoundaryCenterX(LArStitchingHelper::GetTPCBoundaryCenterX(*pLArTPC1, *pLArTPC2));
-                bool isCPAStitch(pLArTPC1->GetCenterX() < tpcBoundaryCenterX ? !pLArTPC1->IsDriftInPositiveX() : !pLArTPC2->IsDriftInPositiveX());
+                const bool isCPAStitch(pLArTPC1->GetCenterX() < tpcBoundaryCenterX ? !pLArTPC1->IsDriftInPositiveX() : !pLArTPC2->IsDriftInPositiveX());
                 float thisX0(LArStitchingHelper::CalculateX0(*pLArTPC1, *pLArTPC2, pointingVertex1, pointingVertex2));
 
                 thisX0 *= isCPAStitch ? -1.f : 1.f;
@@ -732,7 +736,7 @@ void StitchingCosmicRayMergingTool::CalculateX0(const PfoToLArTPCMap &pfoToLArTP
             catch (const pandora::StatusCodeException &statusCodeException)
             {
                 if (STATUS_CODE_FAILURE == statusCodeException.GetStatusCode())
-                    std::cout << "StitchingCosmicRayMergingTool: Attempting to stitch a pfo using multiple cluster pointing vertices" << std::endl;
+                    std::cout << "StitchingCosmicRayMergingTool: Attempting to stitch a pfo with multiple vertices for the same match" << std::endl;
             }
         }
     }
