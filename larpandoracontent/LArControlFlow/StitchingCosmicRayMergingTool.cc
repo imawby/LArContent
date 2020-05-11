@@ -623,18 +623,6 @@ void StitchingCosmicRayMergingTool::StitchPfos(const MasterAlgorithm *const pAlg
             }
         }
 
-        if (m_writeToTree)
-        {
-            int matchesSize(pfoVector.size());
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "APA_X0", x0ToAdd));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Matches", matchesSize));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "EventNumber", m_eventNumber));
-            PANDORA_MONITORING_API(FillTree(this->GetPandora(), m_treeName));
-        }
-
-        std::cout << "Matches: " << pfoVector.size() << std::endl;
-        std::cout << "X0: " << x0ToAdd << std::endl;
-        
         for (const ParticleFlowObject *const pPfoToDelete : reducedPfoVector)
         {
             if (pSelectedPfoToEnlarge == pPfoToDelete)
@@ -643,6 +631,17 @@ void StitchingCosmicRayMergingTool::StitchPfos(const MasterAlgorithm *const pAlg
             pAlgorithm->StitchPfos(pSelectedPfoToEnlarge, pPfoToDelete, pfoToLArTPCMap);
             stitchedPfosToX0Map.insert(PfoToFloatMap::value_type(pSelectedPfoToEnlarge, x0));
         }
+
+        if (m_writeToTree)
+        {
+            int matchesSize(pfoVector.size());
+            const PropertiesMap &propertiesMap(pPfoToEnlarge->GetPropertiesMap());
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "APA_X0", propertiesMap.at("X0")));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Matches", matchesSize));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "EventNumber", m_eventNumber));
+            PANDORA_MONITORING_API(FillTree(this->GetPandora(), m_treeName));
+        }
+
     }
 }
 
