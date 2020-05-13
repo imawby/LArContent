@@ -274,24 +274,55 @@ void StitchingCosmicRayMergingTool::CreatePfoMatches(const LArTPC &larTPC1, cons
     }
 
     // Selection cuts on longitudinal impact parameters
-    const float minL(-1.f);
-    const float dXdL1(m_useXcoordinate ? pX1 :
-        (1.f - pX1 * pX1 > std::numeric_limits<float>::epsilon()) ? pX1 / std::sqrt(1.f - pX1 * pX1) : minL);
-    const float dXdL2(m_useXcoordinate ? pX2 :
-        (1.f - pX2 * pX2 > std::numeric_limits<float>::epsilon()) ? pX2 / std::sqrt(1.f - pX2 * pX2) : minL);
-    const float maxL1(maxLongitudinalDisplacementX / dXdL1);
-    const float maxL2(maxLongitudinalDisplacementX / dXdL2);
+    ///////////////////////
+    CartesianVector position1(pointingVertex1.GetPosition());
+    CartesianVector position2(pointingVertex2.GetPosition());
+    
+    /*
+    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &position1, "VERTEX 1", DARKGREEN, 2);
+    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &position2, "VERTEX 2", BLACK, 2);
 
-    if (rL1 < minL || rL1 > maxL1 || rL2 < minL || rL2 > maxL2)
-        return;
+    PfoList thePfo1, thePfo2;
+    thePfo1.push_back(pPfo1);
+    thePfo2.push_back(pPfo2);
+    PandoraMonitoringApi::VisualizeParticleFlowObjects(this->GetPandora(), &thePfo1, "pfo1", DARKGREEN);
+    PandoraMonitoringApi::VisualizeParticleFlowObjects(this->GetPandora(), &thePfo2, "pfo2", BLACK);
+    */
+    
+    bool isInGap3D_1(LArGeometryHelper::IsInGap(this->GetPandora(), position1,  TPC_VIEW_U, 0.f) && LArGeometryHelper::IsInGap(this->GetPandora(), position1,  TPC_VIEW_V, 0.f) && LArGeometryHelper::IsInGap(this->GetPandora(), position1,  TPC_VIEW_W, 0.f));
+    
+    bool isInGap3D_2(LArGeometryHelper::IsInGap(this->GetPandora(), position2,  TPC_VIEW_U, 0.f) && LArGeometryHelper::IsInGap(this->GetPandora(), position2,  TPC_VIEW_V, 0.f) && LArGeometryHelper::IsInGap(this->GetPandora(), position2,  TPC_VIEW_W, 0.f));
 
-    // Selection cuts on transverse impact parameters
-    const bool minPass(std::min(rT1, rT2) < m_relaxTransverseDisplacement && cosRelativeAngle > m_relaxCosRelativeAngle);
-    const bool maxPass(std::max(rT1, rT2) < m_maxTransverseDisplacement && cosRelativeAngle > m_minCosRelativeAngle);
+    /*
+    std::cout << "isInGap3D_1: " << isInGap3D_1 << std::endl;
+    std::cout << "isInGap3D_2: " << isInGap3D_2 << std::endl;
+    PandoraMonitoringApi::ViewEvent(this->GetPandora());
+    */
+    ////////////////////////////
 
-    if (!minPass && !maxPass)
-        return;
+    //IF IN GAP THEN SKIP IMPACT PARAMETER CUT
+    if (!isInGap3D_1 && !isInGap3D_2)
+    {
+        //std::cout << "NOT SKIPPING THE CUT" << std::endl;
+        const float minL(-1.f);
+        const float dXdL1(m_useXcoordinate ? pX1 :
+            (1.f - pX1 * pX1 > std::numeric_limits<float>::epsilon()) ? pX1 / std::sqrt(1.f - pX1 * pX1) : minL);
+        const float dXdL2(m_useXcoordinate ? pX2 :
+            (1.f - pX2 * pX2 > std::numeric_limits<float>::epsilon()) ? pX2 / std::sqrt(1.f - pX2 * pX2) : minL);
+        const float maxL1(maxLongitudinalDisplacementX / dXdL1);
+        const float maxL2(maxLongitudinalDisplacementX / dXdL2);
 
+        if (rL1 < minL || rL1 > maxL1 || rL2 < minL || rL2 > maxL2)
+            return;
+
+        // Selection cuts on transverse impact parameters
+        const bool minPass(std::min(rT1, rT2) < m_relaxTransverseDisplacement && cosRelativeAngle > m_relaxCosRelativeAngle);
+        const bool maxPass(std::max(rT1, rT2) < m_maxTransverseDisplacement && cosRelativeAngle > m_minCosRelativeAngle);
+
+        if (!minPass && !maxPass)
+            return;
+    }
+    
     // Store this association
     const PfoAssociation::VertexType vertexType1(pointingVertex1.IsInnerVertex() ? PfoAssociation::INNER : PfoAssociation::OUTER);
     const PfoAssociation::VertexType vertexType2(pointingVertex2.IsInnerVertex() ? PfoAssociation::INNER : PfoAssociation::OUTER);
