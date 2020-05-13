@@ -31,8 +31,27 @@ StitchingCosmicRayMergingTool::StitchingCosmicRayMergingTool() :
     m_maxTransverseDisplacement(5.f),
     m_relaxCosRelativeAngle(0.906),
     m_relaxTransverseDisplacement(2.5f),
-    m_minNCaloHits3D(0)
+    m_minNCaloHits3D(0),
+    m_writeToTree(false),
+    m_fileName("ThreeMatches.root"),
+    m_treeName("ThreeMatchesTree"),
+    m_eventNumber(0)
 {
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+StitchingCosmicRayMergingTool::~StitchingCosmicRayMergingTool() 
+{
+    if(m_writeToTree) {
+        try {
+            PANDORA_MONITORING_API(SaveTree(this->GetPandora(), m_treeName, m_fileName, "UPDATE"));
+            std::cout << "TREE SAVED" << std::endl;
+        }
+        catch (const StatusCodeException &) {
+            std::cout << "UNABLE TO WRITE TREE" << std::endl;
+        }
+    }
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -42,6 +61,8 @@ void StitchingCosmicRayMergingTool::Run(const MasterAlgorithm *const pAlgorithm,
     if (PandoraContentApi::GetSettings(*pAlgorithm)->ShouldDisplayAlgorithmInfo())
        std::cout << "----> Running Algorithm Tool: " << this->GetInstanceName() << ", " << this->GetType() << std::endl;
 
+    m_eventNumber++;
+    
     if (this->GetPandora().GetGeometry()->GetLArTPCMap().size() < 2)
         return;
 
@@ -530,19 +551,21 @@ void StitchingCosmicRayMergingTool::StitchPfos(const MasterAlgorithm *const pAlg
     PfoVector pfoVectorToEnlarge;
     for (const auto &mapEntry : pfoMerges) pfoVectorToEnlarge.push_back(mapEntry.first);
     std::sort(pfoVectorToEnlarge.begin(), pfoVectorToEnlarge.end(), LArPfoHelper::SortByNHits);
-
+    
     for (const ParticleFlowObject *const pPfoToEnlarge : pfoVectorToEnlarge)
     {
         const PfoList &pfoList(pfoMerges.at(pPfoToEnlarge));
         const PfoVector pfoVector(pfoList.begin(), pfoList.end());
         PfoToPointingVertexMatrix pfoToPointingVertexMatrix;
         float x0(0.f);
-        
+
         if (!m_useXcoordinate || m_alwaysApplyT0Calculation)
         {
             try
             {
-                this->CalculateX0(pfoToLArTPCMap, pointingClusterMap, pfoVector, x0, pfoToPointingVertexMatrix);
+                // If stitching contributions are inconsistent, abort
+                if(!this->CalculateX0(pfoToLArTPCMap, pointingClusterMap, pfoVector, x0, pfoToPointingVertexMatrix))
+                    continue;
             }
             catch (const pandora::StatusCodeException &)
             {
@@ -593,6 +616,16 @@ void StitchingCosmicRayMergingTool::StitchPfos(const MasterAlgorithm *const pAlg
         }
 
         stitchedPfosToX0Map.insert(PfoToFloatMap::value_type(pPfoToEnlarge, x0));
+        
+        if (m_writeToTree)
+        {
+            int matchesSize(pfoVector.size());
+            const PropertiesMap &propertiesMap(pPfoToEnlarge->GetPropertiesMap());
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "APA_X0", propertiesMap.at("X0")));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "EventNumber", m_eventNumber));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName, "Matches", matchesSize));
+            PANDORA_MONITORING_API(FillTree(this->GetPandora(), m_treeName));
+        }        
     }
 }
 
@@ -639,7 +672,7 @@ void StitchingCosmicRayMergingTool::ShiftPfo(const MasterAlgorithm *const pAlgor
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
-void StitchingCosmicRayMergingTool::CalculateX0(const PfoToLArTPCMap &pfoToLArTPCMap, const ThreeDPointingClusterMap &pointingClusterMap,
+bool StitchingCosmicRayMergingTool::CalculateX0(const PfoToLArTPCMap &pfoToLArTPCMap, const ThreeDPointingClusterMap &pointingClusterMap,
     const PfoVector &pfoVector, float &x0, PfoToPointingVertexMatrix &pfoToPointingVertexMatrix) const
 {
     float sumX(0.f), sumN(0.f);
@@ -731,7 +764,18 @@ void StitchingCosmicRayMergingTool::CalculateX0(const PfoToLArTPCMap &pfoToLArTP
                 float thisX0(LArStitchingHelper::CalculateX0(*pLArTPC1, *pLArTPC2, pointingVertex1, pointingVertex2));
 
                 thisX0 *= isCPAStitch ? -1.f : 1.f;
+
+                // Check if stitching contribution is consistent
+                if (sumN > std::numeric_limits<float>::epsilon())
+                {
+                    float fractionalDiff(std::fabs((sumX - (thisX0 * sumN)) / sumX));
+
+                    if ((fractionalDiff > 0.3f) && (std::fabs(sumX / sumN) > 10.f))
+                        return false;
+                }
+
                 sumX += thisX0; sumN += 1.f;
+
             }
             catch (const pandora::StatusCodeException &statusCodeException)
             {
@@ -745,6 +789,8 @@ void StitchingCosmicRayMergingTool::CalculateX0(const PfoToLArTPCMap &pfoToLArTP
         throw StatusCodeException(STATUS_CODE_NOT_FOUND);
 
     x0 = (sumX / sumN);
+    
+    return true;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -814,6 +860,16 @@ StatusCode StitchingCosmicRayMergingTool::ReadSettings(const TiXmlHandle xmlHand
 
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
         "MinNCaloHits3D", m_minNCaloHits3D));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
+        "WriteToTree", m_writeToTree));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
+        "TreeName", m_treeName));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
+        "FileName", m_fileName));
+    
 
     return STATUS_CODE_SUCCESS;
 }
