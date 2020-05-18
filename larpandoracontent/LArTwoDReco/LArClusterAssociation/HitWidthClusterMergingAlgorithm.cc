@@ -154,9 +154,16 @@ bool HitWidthClusterMergingAlgorithm::AreClustersAssociated(const LArHitWidthHel
     }
 
     CartesianVector currentClusterDirection(0.f, 0.f, 0.f), testClusterDirection(0.f, 0.f, 0.f);
-    this->GetClusterDirection(currentFitParameters.GetConstituentHitVector(), currentClusterDirection, currentFitParameters.GetHigherXExtrema(), m_fittingWeight);
-    this->GetClusterDirection(testFitParameters.GetConstituentHitVector(), testClusterDirection, testMergePoint, m_fittingWeight);
-
+    try
+    {
+        this->GetClusterDirection(currentFitParameters.GetConstituentHitVector(), currentClusterDirection, currentFitParameters.GetHigherXExtrema(), m_fittingWeight);
+        this->GetClusterDirection(testFitParameters.GetConstituentHitVector(), testClusterDirection, testMergePoint, m_fittingWeight);
+    }
+    catch (const StatusCodeException &)
+    {
+        return false;
+    }
+ 
     // check clusters have a similar direction
     if (currentClusterDirection.GetCosOpeningAngle(testClusterDirection) < m_minMergeCosOpeningAngle)
         return false;
@@ -167,7 +174,14 @@ bool HitWidthClusterMergingAlgorithm::AreClustersAssociated(const LArHitWidthHel
 
     const CartesianVector midpoint((currentFitParameters.GetHigherXExtrema() + testMergePoint) * 0.5);
     CartesianVector newClusterDirection(0.f, 0.f, 0.f);
-    this->GetClusterDirection(newConstituentHitVector, newClusterDirection, midpoint, m_fittingWeight);
+    try
+    {
+        this->GetClusterDirection(newConstituentHitVector, newClusterDirection, midpoint, m_fittingWeight);
+    }
+    catch (const StatusCodeException &)
+    {
+        return false;
+    } 
 
     if (newClusterDirection.GetCosOpeningAngle(currentClusterDirection) < m_minDirectionDeviationCosAngle ||
         newClusterDirection.GetCosOpeningAngle(testClusterDirection) < m_minDirectionDeviationCosAngle)
