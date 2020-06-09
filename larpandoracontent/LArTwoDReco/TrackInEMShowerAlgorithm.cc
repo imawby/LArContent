@@ -591,8 +591,15 @@ void TrackInEMShowerAlgorithm::AddHitsToCluster(const ClusterAssociation &cluste
     const Cluster *const pClusterToDelete(clusterAssociation.GetDownstreamCluster());
 
     this->UpdateForClusterDeletion(pClusterToDelete, clusterVector, microSlidingFitResultMap, macroSlidingFitResultMap);    
-    PandoraContentApi::MergeAndDeleteClusters(*this, pClusterToEnlarge, pClusterToDelete); // NO NEED TO UPDATE SINCE WILL DO THIS AT THE END
+    PandoraContentApi::MergeAndDeleteClusters(*this, pClusterToEnlarge, pClusterToDelete); 
 
+    if (clusterToCaloHitListMap.empty())
+    {
+        this->UpdateAfterClusterModification(pClusterToEnlarge, clusterVector, microSlidingFitResultMap, macroSlidingFitResultMap);
+        std::cout << "EMPTY!" << std::endl;
+        return;
+    }
+    
     ClusterVector clustersToFragment;
     for (const auto &entry : clusterToCaloHitListMap)
         clustersToFragment.push_back(entry.first);
