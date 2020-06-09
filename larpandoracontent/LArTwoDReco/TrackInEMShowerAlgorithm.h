@@ -272,7 +272,7 @@ public:
      *  @param  caloHitList the input calo hit list
      *  @param  clusterVector the vector of 'relevant' clusters
      */
-    void CreateClusters(const pandora::CaloHitList &caloHitList, pandora::ClusterVector &clusterVector) const;
+    bool CreateClusters(const pandora::CaloHitList &caloHitList, pandora::ClusterVector &clusterVector) const;
 
     /**
      *  @brief  Update the sliding fit maps and cluster vector after a cluster modification

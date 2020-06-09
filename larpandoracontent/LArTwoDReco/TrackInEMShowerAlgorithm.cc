@@ -572,29 +572,6 @@ const Cluster* TrackInEMShowerAlgorithm::RefineTrack(const Cluster *const pClust
     this->CreateClusters(caloHitsAboveTrack, clusterVector);
     this->CreateClusters(caloHitsBelowTrack, clusterVector);
 
-    ClusterList theCluster({pCluster});
-    PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &theCluster, "THE CLUSTER", VIOLET);
-
-    for (const CaloHit *const pCaloHit : mainTrackParameters.m_caloHitList)
-    {
-        CartesianVector position(pCaloHit->GetPositionVector());
-        PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &position, "MAIN HIT", RED, 2);
-    }
-
-    for (const CaloHit *const pCaloHit : caloHitsAboveTrack)
-    {
-        CartesianVector position(pCaloHit->GetPositionVector());
-        PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &position, "ABOVE HIT", BLUE, 2);
-    }
-
-    for (const CaloHit *const pCaloHit : caloHitsBelowTrack)
-    {
-        CartesianVector position(pCaloHit->GetPositionVector());
-        PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &position, "BELOW HIT", GREEN, 2);
-    }
-
-    PandoraMonitoringApi::ViewEvent(this->GetPandora());
-
     //UPDATE FOR CLUSTER DELETION
     this->UpdateForClusterDeletion(pCluster, clusterVector, microFitResultMap, macroFitResultMap);
 
@@ -627,7 +604,9 @@ void TrackInEMShowerAlgorithm::AddHitsToCluster(const ClusterAssociation &cluste
     const ClusterList clustersToFragmentList(clustersToFragment.begin(), clustersToFragment.end());
     PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::InitializeFragmentation(*this, clustersToFragmentList, originalListName, fragmentListName));
 
-    //CaloHitList caloHitsToMerge;
+    CaloHitList allCaloHitsToMerge;
+    bool madeCluster(false);
+    
     for (const Cluster *const pCluster : clustersToFragment)
     {
         // UPDATE FOR CLUSTER DELETION
@@ -635,6 +614,7 @@ void TrackInEMShowerAlgorithm::AddHitsToCluster(const ClusterAssociation &cluste
 
         CaloHitList caloHitsToRecluster;
         const CaloHitList &caloHitsToMerge(clusterToCaloHitListMap.at(pCluster));
+        
         OrderedCaloHitList orderedCaloHitList(pCluster->GetOrderedCaloHitList());
         for (const OrderedCaloHitList::value_type &mapEntry : orderedCaloHitList)
         {
@@ -645,11 +625,20 @@ void TrackInEMShowerAlgorithm::AddHitsToCluster(const ClusterAssociation &cluste
             }
         }
 
-        PandoraContentApi::AddToCluster(*this, pClusterToEnlarge, &caloHitsToMerge);
-        this->CreateClusters(caloHitsToRecluster, clusterVector);        
+        allCaloHitsToMerge.insert(allCaloHitsToMerge.begin(), caloHitsToMerge.begin(), caloHitsToMerge.end());
+        madeCluster += this->CreateClusters(caloHitsToRecluster, clusterVector);        
     }
 
-    PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::EndFragmentation(*this, fragmentListName, originalListName));
+    if (madeCluster)
+    {
+        PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::EndFragmentation(*this, fragmentListName, originalListName));
+    }
+    else
+    {
+        PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::EndFragmentation(*this, originalListName, fragmentListName));
+    }
+    
+    PandoraContentApi::AddToCluster(*this, pClusterToEnlarge, &allCaloHitsToMerge);
     
     this->UpdateAfterClusterModification(pClusterToEnlarge, clusterVector, microSlidingFitResultMap, macroSlidingFitResultMap);
 
@@ -657,10 +646,10 @@ void TrackInEMShowerAlgorithm::AddHitsToCluster(const ClusterAssociation &cluste
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void TrackInEMShowerAlgorithm::CreateClusters(const CaloHitList &caloHitList, ClusterVector &clusterVector) const
+bool TrackInEMShowerAlgorithm::CreateClusters(const CaloHitList &caloHitList, ClusterVector &clusterVector) const
 {    
     if (caloHitList.empty())
-        return;
+        return false;
 
     ClusterList createdClusters;
     const Cluster *pCluster(nullptr);
@@ -704,6 +693,8 @@ void TrackInEMShowerAlgorithm::CreateClusters(const CaloHitList &caloHitList, Cl
     }
 
     this->SelectCleanClusters(&createdClusters, clusterVector);
+
+    return true;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
