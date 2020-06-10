@@ -604,8 +604,11 @@ void TrackInEMShowerAlgorithm::MergeCluster(const Cluster *const pCluster, const
                 }
             }
         }
-
-        this->FragmentCluster(pCluster, clusterVector);
+        
+        if (LArClusterHelper::GetLengthSquared(pCluster) > 100.f)
+        {
+            this->FragmentCluster(pCluster, clusterVector);
+        }
     }
 }
 
