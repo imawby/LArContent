@@ -606,37 +606,40 @@ void TrackInEMShowerAlgorithm::AddHitsToCluster(const ClusterAssociation &cluste
 
     std::sort(clustersToFragment.begin(), clustersToFragment.end(), LArClusterHelper::SortByNHits);
 
+    for (const Cluster *const pCluster : clustersToFragment)
+        this->FragmentCluster(pCluster, pClusterToEnlarge, clusterToCaloHitListMap, clusterVector, microSlidingFitResultMap, macroSlidingFitResultMap);
+
+    this->UpdateAfterClusterModification(pClusterToEnlarge, clusterVector, microSlidingFitResultMap, macroSlidingFitResultMap);
+
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void TrackInEMShowerAlgorithm::FragmentCluster(const Cluster *const pCluster, const Cluster *const pClusterToEnlarge, const ClusterToCaloHitListMap &clusterToCaloHitListMap,
+    ClusterVector &clusterVector, TwoDSlidingFitResultMap &microSlidingFitResultMap, TwoDSlidingFitResultMap &macroSlidingFitResultMap) const
+{
+    // UPDATE FOR CLUSTER DELETION
+    this->UpdateForClusterDeletion(pCluster, clusterVector, microSlidingFitResultMap, macroSlidingFitResultMap);
+
     // BEGIN FRAGMENTATION
     std::string originalListName, fragmentListName;
-    const ClusterList clustersToFragmentList(clustersToFragment.begin(), clustersToFragment.end());
+    const ClusterList clustersToFragmentList(1, pCluster);
     PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::InitializeFragmentation(*this, clustersToFragmentList, originalListName, fragmentListName));
 
-    CaloHitList allCaloHitsToMerge;
-    bool madeCluster(false);
-    
-    for (const Cluster *const pCluster : clustersToFragment)
+    CaloHitList caloHitsToRecluster;
+    const CaloHitList &caloHitsToMerge(clusterToCaloHitListMap.at(pCluster));
+
+    OrderedCaloHitList orderedCaloHitList(pCluster->GetOrderedCaloHitList());
+    for (const OrderedCaloHitList::value_type &mapEntry : orderedCaloHitList)
     {
-        // UPDATE FOR CLUSTER DELETION
-        this->UpdateForClusterDeletion(pCluster, clusterVector, microSlidingFitResultMap, macroSlidingFitResultMap);
-
-        CaloHitList caloHitsToRecluster;
-        const CaloHitList &caloHitsToMerge(clusterToCaloHitListMap.at(pCluster));
-        
-        OrderedCaloHitList orderedCaloHitList(pCluster->GetOrderedCaloHitList());
-        for (const OrderedCaloHitList::value_type &mapEntry : orderedCaloHitList)
-        {
-            for (const CaloHit *const pCaloHit : *mapEntry.second) 
-            {                
-                if (std::find(caloHitsToMerge.begin(), caloHitsToMerge.end(), pCaloHit) == caloHitsToMerge.end()) 
-                    caloHitsToRecluster.push_back(pCaloHit);
-            }
+        for (const CaloHit *const pCaloHit : *mapEntry.second) 
+        {                
+            if (std::find(caloHitsToMerge.begin(), caloHitsToMerge.end(), pCaloHit) == caloHitsToMerge.end()) 
+                caloHitsToRecluster.push_back(pCaloHit);
         }
-
-        allCaloHitsToMerge.insert(allCaloHitsToMerge.begin(), caloHitsToMerge.begin(), caloHitsToMerge.end());
-        madeCluster += this->CreateClusters(caloHitsToRecluster, clusterVector);        
     }
 
-    if (madeCluster)
+    if (this->CreateClusters(caloHitsToRecluster, clusterVector))
     {
         PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::EndFragmentation(*this, fragmentListName, originalListName));
     }
@@ -645,10 +648,10 @@ void TrackInEMShowerAlgorithm::AddHitsToCluster(const ClusterAssociation &cluste
         PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::EndFragmentation(*this, originalListName, fragmentListName));
     }
     
-    PandoraContentApi::AddToCluster(*this, pClusterToEnlarge, &allCaloHitsToMerge);
+    PandoraContentApi::AddToCluster(*this, pClusterToEnlarge, &caloHitsToMerge);
+        
     
     this->UpdateAfterClusterModification(pClusterToEnlarge, clusterVector, microSlidingFitResultMap, macroSlidingFitResultMap);
-
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------

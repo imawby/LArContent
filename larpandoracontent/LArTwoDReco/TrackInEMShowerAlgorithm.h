@@ -325,6 +325,9 @@ public:
      */
     void AddHitsToCluster(const ClusterAssociation &clusterAssociation, const ClusterToCaloHitListMap &clusterToCaloHitListMap,
         pandora::ClusterVector &clusterVector, TwoDSlidingFitResultMap &microSlidingFitResultMap, TwoDSlidingFitResultMap &macroSlidingFitResultMap) const;
+
+    void FragmentCluster(const pandora::Cluster *const pCluster, const pandora::Cluster *const pClusterToEnlarge, const ClusterToCaloHitListMap &clusterToCaloHitListMap,
+        pandora::ClusterVector &clusterVector, TwoDSlidingFitResultMap &microSlidingFitResultMap, TwoDSlidingFitResultMap &macroSlidingFitResultMap) const;
     
     unsigned int m_minCaloHits;                                ///< The threshold number of calo hits 
     float m_minSeparationDistance;                             ///< The threshold separation distance between associated clusters 
