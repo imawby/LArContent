@@ -105,7 +105,6 @@ public:
      */
     TrackInEMShowerAlgorithm();
 
-    typedef std::unordered_map<const pandora::CaloHit*, const pandora::Cluster*> CaloHitToParentClusterMap;
     typedef std::unordered_map<const pandora::Cluster*, pandora::CaloHitList> ClusterToCaloHitListMap;
     
  private:
@@ -341,7 +340,6 @@ public:
     unsigned int m_maxTrackGaps;                               ///< The maximum number of graps allowed in the extrapolated hit vector
     float m_lineSegmentLength;                                 ///< The length of a track gap
     float m_maxHitDistanceFromCluster;                         ///< The threshold separation between a hit and cluster for the hit to be merged into the cluster
-    unsigned int m_globalSlidingFitWindow;
     
 };
 
