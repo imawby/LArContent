@@ -253,8 +253,16 @@ public:
      *  @param  macroFitResultMap the mapping [cluster -> TwoDSlidingFitResult] where fits correspond to global gradients
      *  @param  isUpstream whether the cluster is the upstream cluster wrt the associated vector
      */
-    const pandora::Cluster* RefineTrack(const pandora::Cluster *const pCluster, const pandora::CartesianVector &splitPosition, TwoDSlidingFitResultMap &microFitResultMap,
-        TwoDSlidingFitResultMap &macroFitResultMap, const bool isUpstream, pandora::ClusterVector &clusterVector, pandora::CaloHitVector &extrapolatedCaloHitVector) const;
+    const pandora::Cluster* RefineTrack(const pandora::Cluster *const pCluster, const pandora::CartesianVector &splitPosition, const pandora::CaloHitVector &extrapolatedCaloHitVector,
+        const bool isUpstream, TwoDSlidingFitResultMap &microFitResultMap, TwoDSlidingFitResultMap &macroFitResultMap, pandora::ClusterVector &clusterVector) const;
+
+    void MergeHits(const ClusterAssociation &clusterAssociation, const ClusterToCaloHitListMap &clusterToCaloHitListMap, TwoDSlidingFitResultMap &microFitResultMap,
+        TwoDSlidingFitResultMap &macroFitResultMap, pandora::ClusterVector &clusterVector) const;
+
+    void MergeCluster(const pandora::Cluster *const pCluster, const pandora::Cluster *const pClusterToEnlarge, const pandora::CaloHitList &caloHitsToMerge,
+        pandora::ClusterVector &clusterVector) const;
+
+    void FragmentCluster(const pandora::Cluster *const pCluster, pandora::ClusterVector &clusterVector) const;
 
     /**
      *  @brief  Remove clusters not found in an input cluster vector from sliding fit maps
@@ -264,14 +272,6 @@ public:
      *  @param  macroFitResultMap the mapping [cluster -> TwoDSlidingFitResult] where fits correspond to global gradients
      */
     void UpdateSlidingFitResultMap(const pandora::ClusterVector &clusterVector, TwoDSlidingFitResultMap &microSlidingFitResultMap, TwoDSlidingFitResultMap &macroSlidingFitResultMap) const;
-
-    /**
-     *  @brief  Cluster calo hits into groups motivated by their spatial separation
-     *
-     *  @param  caloHitList the input calo hit list
-     *  @param  clusterVector the vector of 'relevant' clusters
-     */
-    bool CreateClusters(const pandora::CaloHitList &caloHitList, pandora::ClusterVector &clusterVector) const;
 
     /**
      *  @brief  Update the sliding fit maps and cluster vector after a cluster modification
@@ -322,11 +322,6 @@ public:
      *  @param  microSlidingFitResultMap the mapping [cluster -> TwoDSlidingFitResult] where fits correspond to local gradients
      *  @param  macroFitResultMap the mapping [cluster -> TwoDSlidingFitResult] where fits correspond to global gradients
      */
-    void AddHitsToCluster(const ClusterAssociation &clusterAssociation, const ClusterToCaloHitListMap &clusterToCaloHitListMap,
-        pandora::ClusterVector &clusterVector, TwoDSlidingFitResultMap &microSlidingFitResultMap, TwoDSlidingFitResultMap &macroSlidingFitResultMap) const;
-
-    void FragmentCluster(const pandora::Cluster *const pCluster, const pandora::Cluster *const pClusterToEnlarge, const ClusterToCaloHitListMap &clusterToCaloHitListMap,
-        pandora::ClusterVector &clusterVector, TwoDSlidingFitResultMap &microSlidingFitResultMap, TwoDSlidingFitResultMap &macroSlidingFitResultMap) const;
     
     unsigned int m_minCaloHits;                                ///< The threshold number of calo hits 
     float m_minSeparationDistance;                             ///< The threshold separation distance between associated clusters 
