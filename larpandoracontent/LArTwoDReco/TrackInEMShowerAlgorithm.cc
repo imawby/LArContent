@@ -46,6 +46,20 @@ TrackInEMShowerAlgorithm::ClusterAssociation::ClusterAssociation() :
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 //------------------------------------------------------------------------------------------------------------------------------------------
+
+bool TrackInEMShowerAlgorithm::SortByDistanceAlongLine::operator() (const pandora::CaloHit *const pLhs, const pandora::CaloHit *const pRhs)
+{
+    const CartesianVector lhsDistanceVector(pLhs->GetPositionVector() - m_startPoint);
+    const CartesianVector rhsDistanceVector(pRhs->GetPositionVector() - m_startPoint);
+
+    const float lhsProjectedDistance(lhsDistanceVector.GetDotProduct(m_lineDirection));
+    const float rhsProjectedDistance(rhsDistanceVector.GetDotProduct(m_lineDirection));
+
+    return (lhsProjectedDistance < rhsProjectedDistance);
+}
+ 
+//------------------------------------------------------------------------------------------------------------------------------------------
+//------------------------------------------------------------------------------------------------------------------------------------------
     
 TrackInEMShowerAlgorithm::TrackInEMShowerAlgorithm() :
     m_minCaloHits(25), 
@@ -58,23 +72,10 @@ TrackInEMShowerAlgorithm::TrackInEMShowerAlgorithm() :
     m_distanceFromLine(0.35),
     m_maxTrackGaps(2),
     m_lineSegmentLength(7.f),
-    m_maxHitDistanceFromCluster(3.f),
-    m_maxHitsToRecluster(4),
-    m_minModificationFractionToRecluster(0.8)
+    m_maxHitDistanceFromCluster(4.f),
+    m_maxHitSeparationForConnectedCluster(4.f),
+    m_maxDistanceFromMainTrack(0.75)
 {
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-    
-bool TrackInEMShowerAlgorithm::SortByDistanceAlongLine::operator() (const pandora::CaloHit *const pLhs, const pandora::CaloHit *const pRhs)
-{
-    const CartesianVector lhsDistanceVector(pLhs->GetPositionVector() - m_startPoint);
-    const CartesianVector rhsDistanceVector(pRhs->GetPositionVector() - m_startPoint);
-
-    const float lhsProjectedDistance(lhsDistanceVector.GetDotProduct(m_lineDirection));
-    const float rhsProjectedDistance(rhsDistanceVector.GetDotProduct(m_lineDirection));
-
-    return (lhsProjectedDistance < rhsProjectedDistance);
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -111,19 +112,8 @@ StatusCode TrackInEMShowerAlgorithm::Run()
         
         if (!this->IsTrackContinuous(clusterAssociation, extrapolatedCaloHitVector))
             break;
-
-        ClusterList innerCluster({clusterAssociation.GetUpstreamCluster()}), outerCluster({clusterAssociation.GetDownstreamCluster()});
-        PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &innerCluster, "CLUSTER", BLACK);
-        PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &outerCluster, "CLUSTER", BLACK);
         
         this->RefineTracks(clusterAssociation, microSlidingFitResultMap, macroSlidingFitResultMap, clusterVector, extrapolatedCaloHitVector);
-
-        for (const CaloHit *const pCaloHit : extrapolatedCaloHitVector)
-        {
-            const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
-            PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, "EXTRAPOLATED HIT", GREEN, 2);
-        }
-
         
         this->MergeHits(clusterAssociation, clusterToCaloHitListMap, microSlidingFitResultMap, macroSlidingFitResultMap, clusterVector);
 
@@ -221,7 +211,7 @@ bool TrackInEMShowerAlgorithm::FindBestClusterAssociation(ClusterVector &cluster
             {
                 continue;
             }
-
+            
             if ((isCurrentUpstream && !this->AreClustersAssociated(currentMergePoint, currentMergeDirection, testMergePoint, testMergeDirection)) ||
                 (!isCurrentUpstream && !this->AreClustersAssociated(testMergePoint, testMergeDirection, currentMergePoint, currentMergeDirection)))
             {
@@ -344,27 +334,25 @@ void TrackInEMShowerAlgorithm::GetExtrapolatedCaloHits(const ClusterAssociation 
     const CartesianVector &upstreamPoint(clusterAssociation.GetUpstreamMergePoint()), &downstreamPoint(clusterAssociation.GetDownstreamMergePoint());
     const float minX(std::min(upstreamPoint.GetX(), downstreamPoint.GetX())), maxX(std::max(upstreamPoint.GetX(), downstreamPoint.GetX()));
 
-    // ATTN: consider hits from merging clusters as merging point may not be cluster end
+    // ATTN: Consider hits from merging clusters as merging point may not be cluster end but do not put them in clusterToCaloHitListMap
     for (const Cluster *const pCluster : *pClusterList) 
     {
-        OrderedCaloHitList orderedCaloHitList(pCluster->GetOrderedCaloHitList());
+        const OrderedCaloHitList &orderedCaloHitList(pCluster->GetOrderedCaloHitList());
         for (const OrderedCaloHitList::value_type &mapEntry : orderedCaloHitList)
         {
             for (const CaloHit *const pCaloHit : *mapEntry.second) 
             {
                 const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
-
                 if ((hitPosition.GetX() < minX) || (hitPosition.GetX() > maxX) || (hitPosition.GetZ() < upstreamPoint.GetZ()) || (hitPosition.GetZ() > downstreamPoint.GetZ()))
                     continue;
                 
                 const float distanceFromLine(clusterAssociation.GetConnectingLineDirection().GetCrossProduct(hitPosition - upstreamPoint).GetMagnitude());
-                
                 if (distanceFromLine > m_distanceFromLine)
                     continue;
                 
                 extrapolatedCaloHitVector.push_back(pCaloHit);
 
-                if ((pCluster != clusterAssociation.GetUpstreamCluster()) && pCluster != clusterAssociation.GetDownstreamCluster())
+                if ((pCluster != clusterAssociation.GetUpstreamCluster()) && (pCluster != clusterAssociation.GetDownstreamCluster()))
                     clusterToCaloHitListMap[pCluster].push_back(pCaloHit);
             }
         }
@@ -379,12 +367,12 @@ bool TrackInEMShowerAlgorithm::IsTrackContinuous(const ClusterAssociation &clust
     const CartesianVector &trackDirection(clusterAssociation.GetConnectingLineDirection());
     const CartesianVector trackStep(trackDirection * m_lineSegmentLength);
 
-    // to handle final segment - merge track remainder with preceding segment and if track remainder is more than half trackstep split into two
+    // To handle final segment - merge track remainder with preceding segment and if track remainder was more than half trackstep split into two
     const float trackLength((downstreamMergePoint - upstreamMergePoint).GetMagnitude());
     const unsigned int fullSegments(floor(trackLength / m_lineSegmentLength));
     const float lengthOfTrackRemainder(trackLength - (fullSegments * m_lineSegmentLength));
 
-    // sort hits by projected distance from the upstreamMergePoint
+    // Sort hits by projected distance from the upstreamMergePoint
     std::sort(extrapolatedCaloHitVector.begin(), extrapolatedCaloHitVector.end(), SortByDistanceAlongLine(upstreamMergePoint, trackDirection));
 
     unsigned int segmentsWithoutHits(0);
@@ -396,8 +384,10 @@ bool TrackInEMShowerAlgorithm::IsTrackContinuous(const ClusterAssociation &clust
         if (caloHitIter == extrapolatedCaloHitVector.end())
         {
             ++segmentsWithoutHits;
+            
             if (segmentsWithoutHits > m_maxTrackGaps)
                 return false;
+            
             continue;
         }
 
@@ -487,14 +477,15 @@ const Cluster* TrackInEMShowerAlgorithm::RefineTrack(const Cluster *const pClust
     const float clusterGradient(averageDirection.GetZ()/averageDirection.GetX());           
     const float clusterIntercept(splitPosition.GetZ() - (clusterGradient * splitPosition.GetX()));
 
-    // FRAGMENTATION INITIALISATION
+    // Fragmentation initialisation
     std::string originalListName, fragmentListName;
     const ClusterList originalClusterList(1, pCluster);    
     PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::InitializeFragmentation(*this, originalClusterList, originalListName, fragmentListName));
 
     const Cluster *pMainTrackCluster(nullptr), *pToFragmentCluster(nullptr);
     CaloHitList aboveHitList, belowHitList;
-    
+
+    // Identify clustering error hits and note their position relative to the cosmic ray track
     const OrderedCaloHitList &orderedCaloHitList(pCluster->GetOrderedCaloHitList());
     for (const OrderedCaloHitList::value_type &mapEntry : orderedCaloHitList)
     {
@@ -518,7 +509,7 @@ const Cluster* TrackInEMShowerAlgorithm::RefineTrack(const Cluster *const pClust
             
             if (pClusterToModify)
             {
-                PandoraContentApi::AddToCluster(*this, pClusterToModify, pCaloHit);
+                PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::AddToCluster(*this, pClusterToModify, pCaloHit));
             }
             else
             {
@@ -529,6 +520,7 @@ const Cluster* TrackInEMShowerAlgorithm::RefineTrack(const Cluster *const pClust
         }
     }
 
+    // End fragmentation
     if (!pToFragmentCluster)
     {
         PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::EndFragmentation(*this, originalListName, fragmentListName));
@@ -541,43 +533,33 @@ const Cluster* TrackInEMShowerAlgorithm::RefineTrack(const Cluster *const pClust
     }
 
     ClusterList mainTrackClusterList({pMainTrackCluster});
-    this->SelectCleanClusters(&mainTrackClusterList, clusterVector);
-    
-    const bool fragmentAbove(!aboveHitList.empty());
-    const bool fragmentBelow(!belowHitList.empty());
-    
+
+    // Recluster clustering error hits
+    const bool fragmentAbove(!aboveHitList.empty()), fragmentBelow(!belowHitList.empty());
     this->FragmentCluster(pToFragmentCluster, pMainTrackCluster, aboveHitList, belowHitList, fragmentAbove, fragmentBelow);
-            
+
+    this->SelectCleanClusters(&mainTrackClusterList, clusterVector);
+        
     return pMainTrackCluster;
 }
-
-//////////////////////
-/*
-    std::cout << "NUMBER OF ABOVE HITS: " << aboveHitList.size() << std::endl;
-    std::cout << "NUMBER OF BELOW HITS: " << belowHitList.size() << std::endl;
-    PandoraMonitoringApi::VisualizeCaloHits(this->GetPandora(), &aboveHitList, "ABOVE TRACK HITS", GREEN);
-    PandoraMonitoringApi::VisualizeCaloHits(this->GetPandora(), &belowHitList, "BELOW TRACK HITS", DARKGREEN);
-
-    PandoraMonitoringApi::ViewEvent(this->GetPandora());
-*/
-//////////////////////
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 void TrackInEMShowerAlgorithm::FragmentCluster(const Cluster *const pCluster, const Cluster *const pClusterToEnlarge, const CaloHitList &aboveTrackList,
     const CaloHitList &belowTrackList, const bool fragmentAbove, const bool fragmentBelow) const
 {
+    const FragmentationInfo fragmentationInfo({{&aboveTrackList, fragmentAbove}, {&belowTrackList, fragmentBelow}});
     
-    std::vector<std::pair<const CaloHitList*, bool>> fragmentationInfo({{&aboveTrackList, fragmentAbove}, {&belowTrackList, fragmentBelow}});
-    
-    // FRAGMENTATION INITIALISATION
+    // Fragmentation initialisation
     std::string originalListName, fragmentListName;
     const ClusterList originalClusterList(1, pCluster);    
     PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::InitializeFragmentation(*this, originalClusterList, originalListName, fragmentListName));
 
-    ClusterList createdClusters;
+    ClusterList allCreatedClusters;
     for (auto &fragmentPair : fragmentationInfo)
     {
+        ClusterList createdClusters;
+        
         if (!fragmentPair.second && !fragmentPair.first->empty())
         {
             const Cluster *pNewCluster(nullptr);
@@ -585,11 +567,14 @@ void TrackInEMShowerAlgorithm::FragmentCluster(const Cluster *const pCluster, co
             PandoraContentApi::Cluster::Parameters parameters;
             parameters.m_caloHitList = *fragmentPair.first;
             PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::Cluster::Create(*this, parameters, pNewCluster));
-            createdClusters.push_back(pNewCluster);
+            allCreatedClusters.push_back(pNewCluster);
             continue;
         }
+
+        CaloHitVector caloHitVector(fragmentPair.first->begin(), fragmentPair.first->end());
+        std::sort(caloHitVector.begin(), caloHitVector.end(), LArClusterHelper::SortHitsByPosition);
         
-        for (const CaloHit *const pCaloHit : *fragmentPair.first) 
+        for (const CaloHit *const pCaloHit : caloHitVector) 
         {
             const Cluster *pClosestCluster(nullptr);
             
@@ -620,12 +605,14 @@ void TrackInEMShowerAlgorithm::FragmentCluster(const Cluster *const pCluster, co
                 createdClusters.push_back(pClosestCluster);
             }
         }
+
+        allCreatedClusters.insert(allCreatedClusters.begin(), createdClusters.begin(), createdClusters.end());
     }
 
-    // END FRAGMENTATION PROCESS
+    // End fragmentation
     PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::EndFragmentation(*this, fragmentListName, originalListName)); 
-
-    for (const Cluster *const pCreatedCluster : createdClusters)
+    
+    for (const Cluster *const pCreatedCluster : allCreatedClusters)
     {
         if (pCreatedCluster->GetNCaloHits() == 1)
             this->AddToNearestCluster(pCreatedCluster, pClusterToEnlarge);
@@ -634,34 +621,24 @@ void TrackInEMShowerAlgorithm::FragmentCluster(const Cluster *const pCluster, co
     // ATTN: Do not add clusters that now pass the 'clean cluster' threshold into the cluster vector, since these are unlikely to be a muon track
 }
 
-/////////////////////////
-/*
-            std::cout << "ADDED HIT TO THE NEAREST CLUSTER..." << std::endl;
-
-    for (const Cluster *const pCreatedCluster : createdClusters)
-    {
-        ClusterList theCreatedCluster({pCreatedCluster});
-        PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &theCreatedCluster, "CREATED CLUSTER", AUTO);
-    }
-*/
-/////////////////////////
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 void TrackInEMShowerAlgorithm::MergeHits(const ClusterAssociation &clusterAssociation, const ClusterToCaloHitListMap &clusterToCaloHitListMap,
     TwoDSlidingFitResultMap &microSlidingFitResultMap, TwoDSlidingFitResultMap &macroSlidingFitResultMap,  ClusterVector &clusterVector) const
 {
-    // FIRST DEAL WITH MAIN CLUSTER PAIR
+    // Merge together cosmic ray muon pair
     const Cluster *const pClusterToEnlarge(clusterAssociation.GetUpstreamCluster());
     const Cluster *const pClusterToDelete(clusterAssociation.GetDownstreamCluster());
 
     this->UpdateForClusterDeletion(pClusterToDelete, clusterVector, microSlidingFitResultMap, macroSlidingFitResultMap);    
-    PandoraContentApi::MergeAndDeleteClusters(*this, pClusterToEnlarge, pClusterToDelete); 
+    PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::MergeAndDeleteClusters(*this, pClusterToEnlarge, pClusterToDelete));
 
-    // NEXT ADD IN ALL OTHER CLUSTERS
+    // Merge in all collected hits from shower region between the pair
     ClusterVector clustersToFragment;
     for (const auto &entry : clusterToCaloHitListMap)
         clustersToFragment.push_back(entry.first);
-        
+
+    // In the case of a delta ray split
     if (clustersToFragment.empty())
     {
         this->UpdateAfterClusterModification(pClusterToEnlarge, clusterVector, microSlidingFitResultMap, macroSlidingFitResultMap);
@@ -669,7 +646,6 @@ void TrackInEMShowerAlgorithm::MergeHits(const ClusterAssociation &clusterAssoci
     }
 
     std::sort(clustersToFragment.begin(), clustersToFragment.end(), LArClusterHelper::SortByNHits);
-
     for (const Cluster *const pCluster : clustersToFragment)
     {
         this->UpdateForClusterDeletion(pCluster, clusterVector, microSlidingFitResultMap, macroSlidingFitResultMap);
@@ -686,10 +662,9 @@ void TrackInEMShowerAlgorithm::MergeHits(const ClusterAssociation &clusterAssoci
 void TrackInEMShowerAlgorithm::MergeCluster(const Cluster *const pCluster, const Cluster *const pClusterToEnlarge, const CaloHitList &caloHitsToMerge,
     const ClusterAssociation &clusterAssociation) const
 {
-    
     if (pCluster->GetNCaloHits() == caloHitsToMerge.size())
     {
-        PandoraContentApi::MergeAndDeleteClusters(*this, pClusterToEnlarge, pCluster);
+        PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::MergeAndDeleteClusters(*this, pClusterToEnlarge, pCluster));
         return;
     }
 
@@ -725,28 +700,15 @@ void TrackInEMShowerAlgorithm::MergeCluster(const Cluster *const pCluster, const
     }
 
     const bool fragmentAbove(this->IsClusterRemnantDisconnected(aboveTrackHits)), fragmentBelow(this->IsClusterRemnantDisconnected(belowTrackHits));
-
     this->FragmentCluster(pCluster, pClusterToEnlarge, aboveTrackHits, belowTrackHits, fragmentAbove, fragmentBelow);
 }
-
-////////////////////////
-/*
-    std::cout << "NUMBER OF ABOVE HITS: " << aboveTrackHits.size() << std::endl;
-    std::cout << "NUMBER OF BELOW HITS: " << belowTrackHits.size() << std::endl;
-    PandoraMonitoringApi::VisualizeCaloHits(this->GetPandora(), &aboveTrackHits, "ABOVE TRACK HITS", GREEN);
-    PandoraMonitoringApi::VisualizeCaloHits(this->GetPandora(), &belowTrackHits, "BELOW TRACK HITS", DARKGREEN);
-    PandoraMonitoringApi::ViewEvent(this->GetPandora());
-*/
-////////////////////////
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 bool TrackInEMShowerAlgorithm::IsClusterRemnantDisconnected(const CaloHitList &trackHits) const
 {
     if (trackHits.size() < 2)
-    {
         return false;
-    }
         
     CaloHitVector trackHitsVector(trackHits.begin(), trackHits.end());
     std::sort(trackHitsVector.begin(), trackHitsVector.end(), LArClusterHelper::SortHitsByPosition);
@@ -761,7 +723,7 @@ bool TrackInEMShowerAlgorithm::IsClusterRemnantDisconnected(const CaloHitList &t
             maxSeparationDistance = separationDistance;
     }
 
-    if (maxSeparationDistance > 5.f)
+    if (maxSeparationDistance > m_maxHitSeparationForConnectedCluster)
         return true;
 
     return false;
@@ -786,7 +748,7 @@ void TrackInEMShowerAlgorithm::AddToNearestCluster(const Cluster *const pCluster
 
         if (separationDistance < closestDistance)
         {
-            if ((pCluster == pClusterToEnlarge) && (separationDistance > 0.75))
+            if ((pCluster == pClusterToEnlarge) && (separationDistance > m_maxDistanceFromMainTrack))
                 continue;
             
             pClosestCluster = pCluster;
@@ -794,9 +756,9 @@ void TrackInEMShowerAlgorithm::AddToNearestCluster(const Cluster *const pCluster
         }
     }
 
-    PandoraContentApi::MergeAndDeleteClusters(*this, pClosestCluster, pClusterToMerge); 
-        
+    PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::MergeAndDeleteClusters(*this, pClosestCluster, pClusterToMerge));
 }
+
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 void TrackInEMShowerAlgorithm::UpdateAfterClusterModification(const Cluster *const pCluster, ClusterVector &clusterVector, TwoDSlidingFitResultMap &microSlidingFitResultMap,
@@ -881,7 +843,6 @@ void TrackInEMShowerAlgorithm::UpdateSlidingFitResultMap(const ClusterVector &cl
     }
 }
 
-
 //------------------------------------------------------------------------------------------------------------------------------------------
     
 StatusCode TrackInEMShowerAlgorithm::ReadSettings(const TiXmlHandle xmlHandle)
@@ -917,10 +878,10 @@ StatusCode TrackInEMShowerAlgorithm::ReadSettings(const TiXmlHandle xmlHandle)
         "LineSegmentLength", m_lineSegmentLength));
 
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
-        "MaxHitsToRecluster", m_maxHitsToRecluster));
+        "m_maxHitSeparationForConnectedCluster", m_maxHitSeparationForConnectedCluster));
 
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
-        "MinModificationFractionToRecluster", m_minModificationFractionToRecluster));
+        "m_maxDistanceFromMainTrack", m_maxDistanceFromMainTrack));        
     
     return STATUS_CODE_SUCCESS;
 }
