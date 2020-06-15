@@ -260,9 +260,11 @@ public:
         TwoDSlidingFitResultMap &macroFitResultMap, pandora::ClusterVector &clusterVector) const;
 
     void MergeCluster(const pandora::Cluster *const pCluster, const pandora::Cluster *const pClusterToEnlarge, const pandora::CaloHitList &caloHitsToMerge,
-        pandora::ClusterVector &clusterVector) const;
+        const ClusterAssociation &clusterAssociation) const;
 
-    void FragmentCluster(const pandora::Cluster *const pCluster, pandora::ClusterVector &clusterVector) const;
+    void FragmentCluster(const pandora::Cluster *const pCluster, const pandora::Cluster *const pClusterToEnlarge, const pandora::CaloHitList &aboveTrackList, const pandora::CaloHitList &belowTrackList, const bool fragmentAbove, const bool fragmentBelow) const;
+    
+    bool IsClusterRemnantDisconnected(const pandora::CaloHitList &trackHits) const;
 
     /**
      *  @brief  Remove clusters not found in an input cluster vector from sliding fit maps
@@ -311,6 +313,12 @@ public:
      */
     void RemoveClusterFromClusterVector(const pandora::Cluster *const pCluster, pandora::ClusterVector &clusterVector) const;
 
+
+    void AddToNearestCluster(const pandora::Cluster *const pCluster, const pandora::Cluster *const pClusterToEnlarge) const;
+
+
+    void AddToNearestCluster(const pandora::CaloHit *const pCaloHitToMerge, const pandora::Cluster *const pParentCluster, const pandora::Cluster *const pClusterToEnlarge) const;
+    
     /**
      *  @brief  Merge the clusters in the clusterAssociation together alongside the hits within the extrapolatedCaloHitVector. In this process 'deleted' clusters are removed from the 
      *          cached sliding fit result maps and cluster vector but left in the caloHitToParentClusterMap
@@ -335,6 +343,8 @@ public:
     unsigned int m_maxTrackGaps;                               ///< The maximum number of graps allowed in the extrapolated hit vector
     float m_lineSegmentLength;                                 ///< The length of a track gap
     float m_maxHitDistanceFromCluster;                         ///< The threshold separation between a hit and cluster for the hit to be merged into the cluster
+    unsigned int m_maxHitsToRecluster;
+    float m_minModificationFractionToRecluster;
     
 };
 
