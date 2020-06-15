@@ -279,7 +279,6 @@ bool TrackInEMShowerAlgorithm::GetClusterMergingCoordinates(const TwoDSlidingFit
             if (goodPositionCount == 0)
             {
                 // so that direction vectors face one another
-                // ISOBEL WHY ARE YOU USING THE AVERAGE DIRECTION???????
                 currentMergeDirection = currentAverageDirection * (isUpstream ? 1.f : -1.f);
                 currentMicroFitResult.GetGlobalFitPosition(microIter->second.GetL(), currentMergePosition);
             }
@@ -477,7 +476,6 @@ void TrackInEMShowerAlgorithm::RefineTracks(ClusterAssociation &clusterAssociati
 const Cluster* TrackInEMShowerAlgorithm::RefineTrack(const Cluster *const pCluster, const CartesianVector &splitPosition, const CaloHitVector &extrapolatedCaloHitVector,
     const bool isUpstream, TwoDSlidingFitResultMap &microSlidingFitResultMap, TwoDSlidingFitResultMap &macroSlidingFitResultMap, ClusterVector &clusterVector) const
 {
-    // Get the split position fitting coordinates
     float rL(0.f), rT(0.f);
     const TwoDSlidingFitResult &microFitResult(microSlidingFitResultMap.at(pCluster));
     microFitResult.GetLocalPosition(splitPosition, rL, rT);
@@ -548,8 +546,7 @@ const Cluster* TrackInEMShowerAlgorithm::RefineTrack(const Cluster *const pClust
     const bool fragmentAbove(!aboveHitList.empty());
     const bool fragmentBelow(!belowHitList.empty());
     
-    if (fragmentAbove || fragmentBelow)
-        this->FragmentCluster(pToFragmentCluster, pMainTrackCluster, aboveHitList, belowHitList, fragmentAbove, fragmentBelow);
+    this->FragmentCluster(pToFragmentCluster, pMainTrackCluster, aboveHitList, belowHitList, fragmentAbove, fragmentBelow);
             
     return pMainTrackCluster;
 }
@@ -676,9 +673,8 @@ void TrackInEMShowerAlgorithm::MergeHits(const ClusterAssociation &clusterAssoci
     for (const Cluster *const pCluster : clustersToFragment)
     {
         this->UpdateForClusterDeletion(pCluster, clusterVector, microSlidingFitResultMap, macroSlidingFitResultMap);
-
+        
         const CaloHitList &caloHitsToMerge(clusterToCaloHitListMap.at(pCluster));
-
         this->MergeCluster(pCluster, pClusterToEnlarge, caloHitsToMerge, clusterAssociation);
     }
         
@@ -690,16 +686,14 @@ void TrackInEMShowerAlgorithm::MergeHits(const ClusterAssociation &clusterAssoci
 void TrackInEMShowerAlgorithm::MergeCluster(const Cluster *const pCluster, const Cluster *const pClusterToEnlarge, const CaloHitList &caloHitsToMerge,
     const ClusterAssociation &clusterAssociation) const
 {
-
+    
     if (pCluster->GetNCaloHits() == caloHitsToMerge.size())
     {
         PandoraContentApi::MergeAndDeleteClusters(*this, pClusterToEnlarge, pCluster);
         return;
     }
 
-    CaloHitList aboveTrackHits;
-    CaloHitList belowTrackHits;
-
+    CaloHitList aboveTrackHits, belowTrackHits;
     const float connectingLineGradient(clusterAssociation.GetConnectingLineDirection().GetZ()/clusterAssociation.GetConnectingLineDirection().GetX());         
     const float connectingLineIntercept(clusterAssociation.GetUpstreamMergePoint().GetZ() - (connectingLineGradient * clusterAssociation.GetUpstreamMergePoint().GetX()));
 
@@ -771,40 +765,6 @@ bool TrackInEMShowerAlgorithm::IsClusterRemnantDisconnected(const CaloHitList &t
         return true;
 
     return false;
-}
-
-
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-
-void TrackInEMShowerAlgorithm::AddToNearestCluster(const CaloHit *const pCaloHitToMerge, const Cluster *const pParentCluster, const Cluster *const pClusterToEnlarge) const
-{
-    const ClusterList *pClusterList = NULL;
-    PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetCurrentList(*this, pClusterList));
-
-    const CartesianVector &caloHitToMergePosition(pCaloHitToMerge->GetPositionVector());
-    
-    float closestDistance(std::numeric_limits<float>::max());
-    const Cluster *pClosestCluster(nullptr);
-    
-    for (const Cluster *const pCluster : *pClusterList)
-    {
-        if (pCluster == pParentCluster)
-            continue;
-        
-        float separationDistance(LArClusterHelper::GetClosestDistance(caloHitToMergePosition, pCluster));
-
-        if (separationDistance < closestDistance)
-        {
-            if ((pCluster == pClusterToEnlarge) && (separationDistance > 0.75))
-                continue;
-            
-            pClosestCluster = pCluster;
-            closestDistance = separationDistance;
-        }
-    }
-
-    PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::AddToCluster(*this, pClusterToEnlarge, pCaloHitToMerge));
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------

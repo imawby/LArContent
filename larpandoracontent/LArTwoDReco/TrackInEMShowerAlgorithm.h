@@ -316,9 +316,6 @@ public:
 
     void AddToNearestCluster(const pandora::Cluster *const pCluster, const pandora::Cluster *const pClusterToEnlarge) const;
 
-
-    void AddToNearestCluster(const pandora::CaloHit *const pCaloHitToMerge, const pandora::Cluster *const pParentCluster, const pandora::Cluster *const pClusterToEnlarge) const;
-    
     /**
      *  @brief  Merge the clusters in the clusterAssociation together alongside the hits within the extrapolatedCaloHitVector. In this process 'deleted' clusters are removed from the 
      *          cached sliding fit result maps and cluster vector but left in the caloHitToParentClusterMap
