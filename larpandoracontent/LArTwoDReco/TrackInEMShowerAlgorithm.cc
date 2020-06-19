@@ -689,6 +689,10 @@ void TrackInEMShowerAlgorithm::FragmentRemnantCluster(const Cluster *const pRemn
 
 void TrackInEMShowerAlgorithm::AddToNearestCluster(const Cluster *const pClusterToMerge, const Cluster *const pClusterToEnlarge, const ClusterList *const pClusterList) const
 {
+    //PandoraMonitoringApi::SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_DEFAULT, -1.f, 1.f, 1.f);
+    //const CartesianVector &hitPosition((*pClusterToMerge->GetOrderedCaloHitList().begin()->second->begin())->GetPositionVector());
+    //PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, "HIT POSITION", VIOLET, 2);
+    
     float closestDistance(std::numeric_limits<float>::max());
     const Cluster *pClosestCluster(nullptr);
 
@@ -699,6 +703,11 @@ void TrackInEMShowerAlgorithm::AddToNearestCluster(const Cluster *const pCluster
         
         float separationDistance(LArClusterHelper::GetClosestDistance(pClusterToMerge, pCluster));
 
+        /*
+        if (pCluster == pClusterToEnlarge)
+            std::cout << "DISTANCE FROM MAIN CLUSTER: " << separationDistance << std::endl;
+        */
+        
         if (separationDistance < closestDistance)
         {
             if ((pCluster == pClusterToEnlarge) && (separationDistance > m_maxDistanceFromMainTrack))
@@ -709,7 +718,15 @@ void TrackInEMShowerAlgorithm::AddToNearestCluster(const Cluster *const pCluster
         }
     }
 
-    PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::MergeAndDeleteClusters(*this, pClosestCluster, pClusterToMerge));
+    if (closestDistance < m_maxHitDistanceFromCluster)
+    {
+        PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::MergeAndDeleteClusters(*this, pClosestCluster, pClusterToMerge));
+    }
+
+    //std::cout << "CLOSEST DISTANCE: " << closestDistance << std::endl;
+    //PandoraMonitoringApi::ViewEvent(this->GetPandora());
+
+
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
