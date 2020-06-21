@@ -11,6 +11,9 @@
 #include "larpandoracontent/LArHelpers/LArInteractionTypeHelper.h"
 #include "larpandoracontent/LArHelpers/LArMonitoringHelper.h"
 #include "larpandoracontent/LArHelpers/LArPfoHelper.h"
+#include "larpandoracontent/LArObjects/LArPointingCluster.h"
+
+#include "larpandoracontent/LArHelpers/LArGeometryHelper.h"
 
 #include "larpandoracontent/LArMonitoring/TestBeamEventValidationAlgorithm.h"
 
@@ -124,7 +127,7 @@ void TestBeamEventValidationAlgorithm::ProcessOutput(const ValidationInfo &valid
     IntVector bestMatchPfoId, bestMatchPfoPdg, bestMatchPfoIsTB;
     IntVector bestMatchPfoNHitsTotal, bestMatchPfoNHitsU, bestMatchPfoNHitsV, bestMatchPfoNHitsW;
     IntVector bestMatchPfoNSharedHitsTotal, bestMatchPfoNSharedHitsU, bestMatchPfoNSharedHitsV, bestMatchPfoNSharedHitsW;
-    FloatVector bestMatchPfoX0;
+    FloatVector bestMatchPfoX0, bestMatchPfoTrackLength;
 
     std::stringstream targetSS;
 
@@ -139,10 +142,14 @@ void TestBeamEventValidationAlgorithm::ProcessOutput(const ValidationInfo &valid
         associatedMCPrimaries.push_back(pMCPrimary);
         ++mcPrimaryIndex;
         const CaloHitList &mcPrimaryHitList(validationInfo.GetAllMCParticleToHitsMap().at(pMCPrimary));
-
+        /*
         const int mcNuanceCode(LArMCParticleHelper::GetNuanceCode(LArMCParticleHelper::GetParentMCParticle(pMCPrimary)));
         const int isBeamParticle(LArMCParticleHelper::IsBeamParticle(pMCPrimary));
         const int isCosmicRay(LArMCParticleHelper::IsCosmicRay(pMCPrimary));
+        */
+          const int mcNuanceCode(3000);
+          const int isBeamParticle(0);
+          int isCosmicRay(1);
 #ifdef MONITORING
         const int nTargetPrimaries(associatedMCPrimaries.size());
         const CartesianVector &targetVertex(LArMCParticleHelper::GetParentMCParticle(pMCPrimary)->GetVertex());
@@ -194,6 +201,24 @@ void TestBeamEventValidationAlgorithm::ProcessOutput(const ValidationInfo &valid
 
             if (0 == matchIndex++)
             {
+                try
+                {
+                    const float slidingFitPitch(LArGeometryHelper::GetWireZPitch(this->GetPandora()));
+                    ClusterList clusterList;
+                    LArPfoHelper::GetThreeDClusterList(pfoToSharedHits.first, clusterList);
+
+                    if (1 != clusterList.size())
+                        throw StatusCodeException(STATUS_CODE_INVALID_PARAMETER);
+
+                    const ThreeDSlidingFitResult slidingFitResult(clusterList.front(), 20, slidingFitPitch);
+                    LArPointingCluster pointingCluster(slidingFitResult);
+                    bestMatchPfoTrackLength.push_back(pointingCluster.GetLength());
+                }
+                catch (const StatusCodeException &)
+                {
+                    bestMatchPfoTrackLength.push_back(0.f);
+                }
+                
                 bestMatchPfoId.push_back(pfoId);
                 bestMatchPfoPdg.push_back(pfoToSharedHits.first->GetParticleId());
                 bestMatchPfoIsTB.push_back(isRecoTestBeam ? 1 : 0);
@@ -246,6 +271,7 @@ void TestBeamEventValidationAlgorithm::ProcessOutput(const ValidationInfo &valid
             bestMatchPfoNHitsV.push_back(0); bestMatchPfoNHitsW.push_back(0); bestMatchPfoNSharedHitsTotal.push_back(0);
             bestMatchPfoNSharedHitsU.push_back(0); bestMatchPfoNSharedHitsV.push_back(0); bestMatchPfoNSharedHitsW.push_back(0);
             bestMatchPfoX0.push_back(std::numeric_limits<float>::max());
+            bestMatchPfoTrackLength.push_back(0.f);
         }
 
         nPrimaryMatchedPfos.push_back(nPrimaryMatches);
@@ -300,6 +326,7 @@ void TestBeamEventValidationAlgorithm::ProcessOutput(const ValidationInfo &valid
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "bestMatchPfoNSharedHitsV", &bestMatchPfoNSharedHitsV));
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "bestMatchPfoNSharedHitsW", &bestMatchPfoNSharedHitsW));
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "bestMatchPfoX0", &bestMatchPfoX0));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "bestMatchPfoTrackLength", &bestMatchPfoTrackLength));
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "nTargetMatches", nTargetMatches));
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "nTargetTBMatches", nTargetTBMatches));
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "nTargetCRMatches", nTargetCRMatches));
@@ -308,7 +335,8 @@ void TestBeamEventValidationAlgorithm::ProcessOutput(const ValidationInfo &valid
 
         if (isBeamParticle || isCosmicRay)
         {
-            const LArInteractionTypeHelper::InteractionType interactionType(LArInteractionTypeHelper::GetInteractionType(associatedMCPrimaries));
+            //const LArInteractionTypeHelper::InteractionType interactionType(LArInteractionTypeHelper::GetInteractionType(associatedMCPrimaries));
+            const LArInteractionTypeHelper::InteractionType interactionType(LArInteractionTypeHelper::InteractionType::COSMIC_RAY_MU);
 #ifdef MONITORING
             const int interactionTypeInt(static_cast<int>(interactionType));
 #endif
@@ -368,7 +396,7 @@ void TestBeamEventValidationAlgorithm::ProcessOutput(const ValidationInfo &valid
             bestMatchPfoId.clear(); bestMatchPfoPdg.clear(); bestMatchPfoIsTB.clear();
             bestMatchPfoNHitsTotal.clear(); bestMatchPfoNHitsU.clear(); bestMatchPfoNHitsV.clear(); bestMatchPfoNHitsW.clear();
             bestMatchPfoNSharedHitsTotal.clear(); bestMatchPfoNSharedHitsU.clear(); bestMatchPfoNSharedHitsV.clear(); bestMatchPfoNSharedHitsW.clear();
-            bestMatchPfoX0.clear();
+            bestMatchPfoX0.clear(); bestMatchPfoTrackLength.clear();
         }
     }
 
