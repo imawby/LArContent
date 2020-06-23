@@ -123,7 +123,7 @@ void TestBeamEventValidationAlgorithm::ProcessOutput(const ValidationInfo &valid
     IntVector mcPrimaryId, mcPrimaryPdg, nMCHitsTotal, nMCHitsU, nMCHitsV, nMCHitsW;
     FloatVector mcPrimaryE, mcPrimaryPX, mcPrimaryPY, mcPrimaryPZ;
     FloatVector mcPrimaryVtxX, mcPrimaryVtxY, mcPrimaryVtxZ, mcPrimaryEndX, mcPrimaryEndY, mcPrimaryEndZ;
-    IntVector nPrimaryMatchedPfos, nPrimaryMatchedTBPfos, nPrimaryMatchedCRPfos;
+    IntVector nPrimaryMatchedPfos, nPrimaryMatchedTBPfos, nPrimaryMatchedCRPfos, nAllPrimaryMatchedPfos;
     IntVector bestMatchPfoId, bestMatchPfoPdg, bestMatchPfoIsTB;
     IntVector bestMatchPfoNHitsTotal, bestMatchPfoNHitsU, bestMatchPfoNHitsV, bestMatchPfoNHitsW;
     IntVector bestMatchPfoNSharedHitsTotal, bestMatchPfoNSharedHitsU, bestMatchPfoNSharedHitsV, bestMatchPfoNSharedHitsW;
@@ -185,7 +185,7 @@ void TestBeamEventValidationAlgorithm::ProcessOutput(const ValidationInfo &valid
         nMCHitsV.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_V, mcPrimaryHitList));
         nMCHitsW.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_W, mcPrimaryHitList));
 
-        int matchIndex(0), nPrimaryMatches(0), nPrimaryTBMatches(0), nPrimaryCRMatches(0), nPrimaryGoodNuMatches(0);
+        int matchIndex(0), nPrimaryMatches(0), nPrimaryTBMatches(0), nPrimaryCRMatches(0), nPrimaryGoodNuMatches(0), nAllPrimaryMatches(0);
 #ifdef MONITORING
         float recoVertexX(std::numeric_limits<float>::max()), recoVertexY(std::numeric_limits<float>::max()), recoVertexZ(std::numeric_limits<float>::max());
 #endif
@@ -244,9 +244,10 @@ void TestBeamEventValidationAlgorithm::ProcessOutput(const ValidationInfo &valid
             }
 
             if (isGoodMatch) ++nPrimaryMatches;
-
             if (isRecoTestBeam && isGoodMatch) ++nPrimaryTBMatches;
             if (!isRecoTestBeam && isGoodMatch) ++nPrimaryCRMatches;
+
+            ++nAllPrimaryMatches;
 
             targetSS << "-" << (!isGoodMatch ? "(Below threshold) " : "")
                      << "MatchedPfoId " << pfoId
@@ -277,6 +278,7 @@ void TestBeamEventValidationAlgorithm::ProcessOutput(const ValidationInfo &valid
         nPrimaryMatchedPfos.push_back(nPrimaryMatches);
         nPrimaryMatchedTBPfos.push_back(nPrimaryTBMatches);
         nPrimaryMatchedCRPfos.push_back(nPrimaryCRMatches);
+        nAllPrimaryMatchedPfos.push_back(nAllPrimaryMatches);
         nTargetMatches += nPrimaryMatches;
         nTargetTBMatches += nPrimaryTBMatches;
         nTargetCRMatches += nPrimaryCRMatches;
@@ -315,6 +317,7 @@ void TestBeamEventValidationAlgorithm::ProcessOutput(const ValidationInfo &valid
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "nPrimaryMatchedPfos", &nPrimaryMatchedPfos));
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "nPrimaryMatchedTBPfos", &nPrimaryMatchedTBPfos));
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "nPrimaryMatchedCRPfos", &nPrimaryMatchedCRPfos));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "nAllPrimaryMatchedPfos", &nAllPrimaryMatchedPfos));
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "bestMatchPfoId", &bestMatchPfoId));
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "bestMatchPfoPdg", &bestMatchPfoPdg));
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "bestMatchPfoNHitsTotal", &bestMatchPfoNHitsTotal));
@@ -392,7 +395,7 @@ void TestBeamEventValidationAlgorithm::ProcessOutput(const ValidationInfo &valid
             mcPrimaryId.clear(); mcPrimaryPdg.clear(); nMCHitsTotal.clear(); nMCHitsU.clear(); nMCHitsV.clear(); nMCHitsW.clear();
             mcPrimaryE.clear(); mcPrimaryPX.clear(); mcPrimaryPY.clear(); mcPrimaryPZ.clear();
             mcPrimaryVtxX.clear(); mcPrimaryVtxY.clear(); mcPrimaryVtxZ.clear(); mcPrimaryEndX.clear(); mcPrimaryEndY.clear(); mcPrimaryEndZ.clear();
-            nPrimaryMatchedPfos.clear(); nPrimaryMatchedTBPfos.clear(); nPrimaryMatchedCRPfos.clear();
+            nPrimaryMatchedPfos.clear(); nPrimaryMatchedTBPfos.clear(); nPrimaryMatchedCRPfos.clear(); nAllPrimaryMatchedPfos.clear();
             bestMatchPfoId.clear(); bestMatchPfoPdg.clear(); bestMatchPfoIsTB.clear();
             bestMatchPfoNHitsTotal.clear(); bestMatchPfoNHitsU.clear(); bestMatchPfoNHitsV.clear(); bestMatchPfoNHitsW.clear();
             bestMatchPfoNSharedHitsTotal.clear(); bestMatchPfoNSharedHitsU.clear(); bestMatchPfoNSharedHitsV.clear(); bestMatchPfoNSharedHitsW.clear();
