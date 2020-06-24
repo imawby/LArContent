@@ -67,9 +67,25 @@ StatusCode TrackInEMShowerAlgorithm::Run()
         this->GetExtrapolatedCaloHits(clusterAssociation, pClusterList, clusterToCaloHitListMap);
 
         if (!this->IsTrackContinuous(clusterAssociation, clusterToCaloHitListMap))
+        {
+            /*
+                    ClusterList theUpstream({clusterAssociation.GetUpstreamCluster()}), theDownstream({clusterAssociation.GetDownstreamCluster()});
+        PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &theUpstream, "UPSTREAM", BLUE);
+        PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &theDownstream, "DOWNSTREAM", BLUE);
+        std::cout << "NOT CONTINUOUS" << std::endl;
+        PandoraMonitoringApi::ViewEvent(this->GetPandora());
+            */
             break;
-        
+        }
+        /*
+        ClusterList theUpstream({clusterAssociation.GetUpstreamCluster()}), theDownstream({clusterAssociation.GetDownstreamCluster()});
+        PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &theUpstream, "UPSTREAM", BLUE);
+        PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &theDownstream, "DOWNSTREAM", BLUE);
+        PandoraMonitoringApi::ViewEvent(this->GetPandora());
+        */
         this->CreateMainTrack(clusterAssociation, clusterToCaloHitListMap, pClusterList, microSlidingFitResultMap, macroSlidingFitResultMap, clusterVector);
+
+        //PandoraMonitoringApi::ViewEvent(this->GetPandora());        
         
         mergeMade = true;
         
@@ -320,7 +336,13 @@ bool TrackInEMShowerAlgorithm::IsTrackContinuous(const ClusterAssociation &clust
     
     std::sort(extrapolatedCaloHitVector.begin(), extrapolatedCaloHitVector.end(), SortByDistanceAlongLine(clusterAssociation.GetUpstreamMergePoint(),
         clusterAssociation.GetConnectingLineDirection()));
-
+    /*
+    for (const CaloHit *const pCaloHit : extrapolatedCaloHitVector)
+    {
+        const CartesianVector &position(pCaloHit->GetPositionVector());
+        PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &position, "POSITION", GREEN, 2);
+    }
+    */
     CartesianPointVector trackSegmentBoundaries;
     this->GetTrackSegmentBoundaries(clusterAssociation, trackSegmentBoundaries);
     
@@ -445,12 +467,16 @@ void TrackInEMShowerAlgorithm::CreateMainTrack(const ClusterAssociation &cluster
     {
         const CaloHitList &caloHitsToMerge(clusterToCaloHitListMap.at(pShowerCluster));
         
-        this->UpdateForClusterDeletion(pShowerCluster, clusterVector, microSlidingFitResultMap, macroSlidingFitResultMap);
+        this->UpdateForClusterDeletion(pShowerCluster, clusterVector, microSlidingFitResultMap, macroSlidingFitResultMap); //ISOBEL MOVE THIS SO WE CAN KEEP MUON TRACKS IN THE CV??
         this->AddHitsToMainTrack(pShowerCluster, pMainTrackCluster, caloHitsToMerge, clusterAssociation, remnantClusterList);
     }
 
     this->ProcessRemnantClusters(remnantClusterList, pMainTrackCluster, pClusterList);
     this->UpdateAfterMainTrackCreation(pMainTrackCluster, clusterVector, microSlidingFitResultMap, macroSlidingFitResultMap);
+    /*
+    ClusterList theMain({pMainTrackCluster});
+    PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &theMain, "THE MAIN", BLACK);
+    */
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -530,6 +556,10 @@ const Cluster *TrackInEMShowerAlgorithm::RemoveOffAxisHitsFromTrack(const Cluste
 void TrackInEMShowerAlgorithm::AddHitsToMainTrack(const Cluster *const pShowerCluster, const Cluster *const pMainTrackCluster, const CaloHitList &caloHitsToMerge,
     const ClusterAssociation &clusterAssociation, ClusterList &remnantClusterList) const
 {
+    // To ignore crossing CR muon tracks
+    if ((static_cast<float>(caloHitsToMerge.size()) / static_cast<float>(pShowerCluster->GetNCaloHits())) < 0.05)
+        return;
+    
     if (pShowerCluster->GetNCaloHits() == caloHitsToMerge.size())
     {
         PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::MergeAndDeleteClusters(*this, pMainTrackCluster, pShowerCluster));
@@ -548,6 +578,13 @@ void TrackInEMShowerAlgorithm::AddHitsToMainTrack(const Cluster *const pShowerCl
     const float connectingLineIntercept(isVertical ? clusterAssociation.GetUpstreamMergePoint().GetX() :
         clusterAssociation.GetUpstreamMergePoint().GetZ() - (connectingLineGradient * clusterAssociation.GetUpstreamMergePoint().GetX()));
 
+    /*
+    ClusterList theShowerCluster({pShowerCluster});
+    PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &theShowerCluster, "SHOWER", RED);
+    */
+    //const int originalHitNumber(pShowerCluster->GetNCaloHits());
+    //int hitsRemoved(0);
+    
     const OrderedCaloHitList orderedCaloHitList(pShowerCluster->GetOrderedCaloHitList()); 
     for (const OrderedCaloHitList::value_type &mapEntry : orderedCaloHitList)
     {
@@ -556,6 +593,7 @@ void TrackInEMShowerAlgorithm::AddHitsToMainTrack(const Cluster *const pShowerCl
             const bool isAnExtrapolatedHit(std::find(caloHitsToMerge.begin(), caloHitsToMerge.end(), pCaloHit) != caloHitsToMerge.end());
             if (isAnExtrapolatedHit)
             {
+                //++hitsRemoved;
                 PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::RemoveFromCluster(*this, pShowerCluster, pCaloHit));
                 PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::AddToCluster(*this, pMainTrackCluster, pCaloHit));
             }
@@ -580,7 +618,11 @@ void TrackInEMShowerAlgorithm::AddHitsToMainTrack(const Cluster *const pShowerCl
             }
         }
     }
-
+    /*
+    std::cout << "PERCENTAGE OF HITS REMOVED: " << static_cast<float>(hitsRemoved)/static_cast<float>(originalHitNumber) << std::endl;
+    std::cout << "TOTAL HITS: " << originalHitNumber << std::endl;
+    PandoraMonitoringApi::ViewEvent(this->GetPandora());
+    */
     PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::EndFragmentation(*this, fragmentListName, originalListName));
 }
 
