@@ -78,7 +78,7 @@ private:
      *  @param clustersToRebuild  the list of hits to be added to clusters
      *  @param unavailableClusters the list of modified clusters
      */
-    pandora::StatusCode AddHitsToClusters(const ClusterToHitMap &clustersToRebuild, pandora::ClusterSet &unavailableClusters) const;
+    pandora::StatusCode AddHitsToClusters(const ClusterToHitMap &clustersToRebuild, const ClusterToHitMap &clustersToContract, pandora::ClusterSet &unavailableClusters) const;
 
     /**
      *  @brief Re-build clusters
@@ -92,6 +92,8 @@ private:
     float        m_minTrackLength;             ///< Minimum length of track clusters to consolidate
     float        m_maxClusterLength;           ///< Maximum length of shower clusters to use in re-building
     unsigned int m_halfWindowLayers;           ///< Size of layer window for sliding fit results
+    bool         m_reclusterApproach;          ///< ISOBEL
+    bool         m_defaultToShower;            ///< ISOBEL
 };
 
 } // namespace lar_content

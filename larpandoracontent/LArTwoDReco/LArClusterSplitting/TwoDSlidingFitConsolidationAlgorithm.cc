@@ -21,7 +21,9 @@ namespace lar_content
 TwoDSlidingFitConsolidationAlgorithm::TwoDSlidingFitConsolidationAlgorithm() :
     m_minTrackLength(7.5f),
     m_maxClusterLength(15.f),
-    m_halfWindowLayers(25)
+    m_halfWindowLayers(25),
+    m_reclusterApproach(false),
+    m_defaultToShower(false)
 {
 }
 
@@ -29,6 +31,11 @@ TwoDSlidingFitConsolidationAlgorithm::TwoDSlidingFitConsolidationAlgorithm() :
 
 StatusCode TwoDSlidingFitConsolidationAlgorithm::Run()
 {
+
+    //std::cout << "DEFAULT TO SHOWER: " << m_defaultToShower << std::endl;
+    //std::cout << "RECLUSTER APPROACH: " << m_reclusterApproach << std::endl;
+
+    
     const ClusterList *pClusterList = NULL;
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetCurrentList(*this, pClusterList));
 
@@ -47,7 +54,7 @@ StatusCode TwoDSlidingFitConsolidationAlgorithm::Run()
     // Consolidate and re-build clusters
     ClusterSet unavailableClusters;
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, this->RemoveHitsFromClusters(clustersToContract, unavailableClusters));
-    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, this->AddHitsToClusters(clustersToExpand, unavailableClusters));
+    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, this->AddHitsToClusters(clustersToExpand, clustersToContract, unavailableClusters));
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, this->RebuildClusters(clustersToContract, unavailableClusters));
 
     return STATUS_CODE_SUCCESS;
@@ -64,10 +71,24 @@ void TwoDSlidingFitConsolidationAlgorithm::SortInputClusters(const ClusterList *
 
         const float thisLengthSquared(LArClusterHelper::GetLengthSquared(pCluster));
 
+        bool isTrack(false), isShower(false);
+        
         if (thisLengthSquared < m_maxClusterLength * m_maxClusterLength)
+            isShower = true;
+               
+        if (thisLengthSquared > m_minTrackLength * m_minTrackLength)
+            isTrack = true;
+
+        if (m_defaultToShower)
+        {
+            if (isTrack && isShower)
+                isTrack = false;
+        }
+
+        if (isShower)
             showerClusters.push_back(pCluster);
 
-        if (thisLengthSquared > m_minTrackLength * m_minTrackLength)
+        if (isTrack)
             trackClusters.push_back(pCluster);
     }
 
@@ -142,7 +163,7 @@ StatusCode TwoDSlidingFitConsolidationAlgorithm::RemoveHitsFromClusters(const Cl
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-StatusCode TwoDSlidingFitConsolidationAlgorithm::AddHitsToClusters(const ClusterToHitMap &clustersToExpand, ClusterSet &unavailableClusters) const
+StatusCode TwoDSlidingFitConsolidationAlgorithm::AddHitsToClusters(const ClusterToHitMap &clustersToExpand, const ClusterToHitMap &clustersToContract, ClusterSet &unavailableClusters) const
 {
     ClusterList clusterList;
     for (const auto &mapEntry : clustersToExpand)
@@ -163,7 +184,23 @@ StatusCode TwoDSlidingFitConsolidationAlgorithm::AddHitsToClusters(const Cluster
         if (unavailableClusters.count(pCluster))
             continue;
 
-        unavailableClusters.insert(pCluster);
+        if (m_reclusterApproach)
+        {
+            /////
+            // Whether cluster has hits removed from it as well as added to it
+            bool isAmbiguous(false);
+            if (clustersToContract.find(pCluster) != clustersToContract.end())
+                isAmbiguous = true;
+            /////
+
+            if (!isAmbiguous)
+                unavailableClusters.insert(pCluster);
+        }
+        else
+        {
+            unavailableClusters.insert(pCluster);
+        }
+        
 
         for (const CaloHit *const pCaloHit : caloHitList)
         {
@@ -229,6 +266,12 @@ StatusCode TwoDSlidingFitConsolidationAlgorithm::ReadSettings(const TiXmlHandle 
 
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
         "SlidingFitHalfWindow", m_halfWindowLayers));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
+        "ReclusterApproach", m_reclusterApproach));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
+        "DefaultToShower", m_defaultToShower));
 
     return STATUS_CODE_SUCCESS;
 }
