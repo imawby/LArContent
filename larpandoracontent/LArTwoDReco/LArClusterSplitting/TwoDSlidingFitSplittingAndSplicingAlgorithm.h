@@ -188,6 +188,7 @@ private:
     float         m_minClusterLength;               ///<
     float         m_vetoDisplacement;               ///<
     bool          m_runCosmicMode;                  ///<
+    std::string   m_reclusteringAlgorithmName;
 };
 
 //------------------------------------------------------------------------------------------------------------------------------------------

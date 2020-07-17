@@ -7,6 +7,7 @@
  */
 
 #include "larpandoracontent/LArHelpers/LArClusterHelper.h"
+#include "PandoraMonitoringApi.h"
 
 #include <algorithm>
 #include <cmath>
@@ -782,5 +783,33 @@ bool LArClusterHelper::SortCoordinatesByPosition(const CartesianVector &lhs, con
 
     return (deltaPosition.GetY() > std::numeric_limits<float>::epsilon());
 }
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+float LArClusterHelper::GetAverageHitSeparation(const Cluster *const pCluster, const Pandora &/*pandora*/)
+{
+    if (pCluster->GetNCaloHits() == 1)
+        return 0.f;
+
+    const OrderedCaloHitList &orderedCaloHitList(pCluster->GetOrderedCaloHitList());
+    const CaloHit *pPreviousCaloHit(orderedCaloHitList.begin()->second->front());
+
+    float separationSum(0.f);
+    for (const OrderedCaloHitList::value_type &mapEntry : orderedCaloHitList)
+    {
+        for (const CaloHit *const pCaloHit : *mapEntry.second)
+        {
+            if (pCaloHit == pPreviousCaloHit)
+                continue;
+
+            separationSum += std::sqrt(pCaloHit->GetPositionVector().GetDistanceSquared(pPreviousCaloHit->GetPositionVector()));
+            pPreviousCaloHit = pCaloHit;
+        }
+    }
+
+    return (separationSum / pCluster->GetNCaloHits());
+
+}
+    
 
 } // namespace lar_content

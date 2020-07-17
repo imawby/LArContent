@@ -410,6 +410,31 @@ StatusCode TwoDSlidingFitSplittingAndSplicingAlgorithm::ReplaceBranch(const Clus
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::Cluster::Create(*this, residualParameters, pResidualCluster));
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::EndFragmentation(*this, clusterListToSaveName, clusterListToDeleteName));
 
+    if (pResidualCluster)
+    {
+        if (LArClusterHelper::GetAverageHitSeparation(pResidualCluster, this->GetPandora()) > 2.f)
+        {
+
+            ClusterList theCluster({pResidualCluster});
+            PandoraMonitoringApi::SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_DEFAULT, -1.f, 1.f, 1.f);
+            PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &theCluster, "PROBLEM CLUSTER", VIOLET);
+            PandoraMonitoringApi::ViewEvent(this->GetPandora());
+                
+            std::string currentClusterListName;
+            PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetCurrentListName<Cluster>(*this, currentClusterListName));
+            PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::Delete<Cluster>(*this, pResidualCluster));
+
+            const ClusterList *pClusterList = NULL;
+            std::string newClusterListName;
+            PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::RunClusteringAlgorithm(*this, m_reclusteringAlgorithmName,
+                                                                                                        pClusterList, newClusterListName));
+
+            PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::SaveList<Cluster>(*this, newClusterListName, currentClusterListName));
+            PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::ReplaceCurrentList<Cluster>(*this, currentClusterListName));
+
+        }
+    }
+
     return STATUS_CODE_SUCCESS;
 }
 
@@ -431,6 +456,9 @@ StatusCode TwoDSlidingFitSplittingAndSplicingAlgorithm::ReadSettings(const TiXml
 
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
         "CosmicMode", m_runCosmicMode));
+
+    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ProcessAlgorithm(*this, xmlHandle,
+        "ClusterRebuilding", m_reclusteringAlgorithmName));
 
     return STATUS_CODE_SUCCESS;
 }

@@ -365,6 +365,8 @@ public:
      *  @param  rhs second point
      */
     static bool SortCoordinatesByPosition(const pandora::CartesianVector &lhs, const pandora::CartesianVector &rhs);
+
+    static float GetAverageHitSeparation(const pandora::Cluster *const pCluster, const pandora::Pandora &pandora);
 };
 
 } // namespace lar_content
