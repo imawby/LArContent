@@ -415,10 +415,10 @@ StatusCode TwoDSlidingFitSplittingAndSplicingAlgorithm::ReplaceBranch(const Clus
         if (LArClusterHelper::GetAverageHitSeparation(pResidualCluster, this->GetPandora()) > 2.f)
         {
 
-            ClusterList theCluster({pResidualCluster});
-            PandoraMonitoringApi::SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_DEFAULT, -1.f, 1.f, 1.f);
-            PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &theCluster, "PROBLEM CLUSTER", VIOLET);
-            PandoraMonitoringApi::ViewEvent(this->GetPandora());
+	  //ClusterList theCluster({pResidualCluster});
+	  //PandoraMonitoringApi::SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_DEFAULT, -1.f, 1.f, 1.f);
+	  //PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &theCluster, "PROBLEM CLUSTER", VIOLET);
+	  //PandoraMonitoringApi::ViewEvent(this->GetPandora());
                 
             std::string currentClusterListName;
             PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetCurrentListName<Cluster>(*this, currentClusterListName));
