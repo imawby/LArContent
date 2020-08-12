@@ -29,6 +29,7 @@ class LArMCParticleParameters : public object_creation::MCParticle::Parameters
 public:
     pandora::InputInt   m_nuanceCode;               ///< The nuance code
     pandora::InputFloat m_t0;                       ///< The t0
+    pandora::InputBool  m_isDR;
 };
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -60,9 +61,12 @@ public:
      */
     float GetT0() const;
 
+    bool GetIsDR() const;
+
 private:
     int                 m_nuanceCode;               ///< The nuance code
     float               m_t0;                       ///< The t0
+    bool                m_isDR;
 };
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -111,7 +115,8 @@ public:
 inline LArMCParticle::LArMCParticle(const LArMCParticleParameters &parameters) :
     object_creation::MCParticle::Object(parameters),
     m_nuanceCode(parameters.m_nuanceCode.Get()),
-    m_t0(parameters.m_t0.Get())
+    m_t0(parameters.m_t0.Get()),
+    m_isDR(parameters.m_isDR.Get())
 {
 }
 
@@ -128,6 +133,13 @@ inline float LArMCParticle::GetT0() const
 {
     return m_t0;
 }
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+inline bool LArMCParticle::GetIsDR() const
+{
+    return m_isDR;
+}    
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -154,18 +166,21 @@ inline pandora::StatusCode LArMCParticleFactory::Read(Parameters &parameters, pa
     // ATTN: To receive this call-back must have already set file reader mc particle factory to this factory
     int nuanceCode(0);
     float t0(std::numeric_limits<float>::max());
+    bool isDR(false);
 
     if (pandora::BINARY == fileReader.GetFileType())
     {
         pandora::BinaryFileReader &binaryFileReader(dynamic_cast<pandora::BinaryFileReader&>(fileReader));
         PANDORA_RETURN_RESULT_IF(pandora::STATUS_CODE_SUCCESS, !=, binaryFileReader.ReadVariable(nuanceCode));
         PANDORA_RETURN_RESULT_IF(pandora::STATUS_CODE_SUCCESS, !=, binaryFileReader.ReadVariable(t0));
+        PANDORA_RETURN_RESULT_IF(pandora::STATUS_CODE_SUCCESS, !=, binaryFileReader.ReadVariable(isDR));        
     }
     else if (pandora::XML == fileReader.GetFileType())
     {
         pandora::XmlFileReader &xmlFileReader(dynamic_cast<pandora::XmlFileReader&>(fileReader));
         PANDORA_RETURN_RESULT_IF(pandora::STATUS_CODE_SUCCESS, !=, xmlFileReader.ReadVariable("NuanceCode", nuanceCode));
         PANDORA_RETURN_RESULT_IF(pandora::STATUS_CODE_SUCCESS, !=, xmlFileReader.ReadVariable("T0", t0));
+        PANDORA_RETURN_RESULT_IF(pandora::STATUS_CODE_SUCCESS, !=, xmlFileReader.ReadVariable("IsDR", isDR));
     }
     else
     {
@@ -175,6 +190,7 @@ inline pandora::StatusCode LArMCParticleFactory::Read(Parameters &parameters, pa
     LArMCParticleParameters &larMCParticleParameters(dynamic_cast<LArMCParticleParameters&>(parameters));
     larMCParticleParameters.m_nuanceCode = nuanceCode;
     larMCParticleParameters.m_t0 = t0;
+    larMCParticleParameters.m_isDR = isDR;
 
     return pandora::STATUS_CODE_SUCCESS;
 }
@@ -194,12 +210,14 @@ inline pandora::StatusCode LArMCParticleFactory::Write(const Object *const pObje
         pandora::BinaryFileWriter &binaryFileWriter(dynamic_cast<pandora::BinaryFileWriter&>(fileWriter));
         PANDORA_RETURN_RESULT_IF(pandora::STATUS_CODE_SUCCESS, !=, binaryFileWriter.WriteVariable(pLArMCParticle->GetNuanceCode()));
         PANDORA_RETURN_RESULT_IF(pandora::STATUS_CODE_SUCCESS, !=, binaryFileWriter.WriteVariable(pLArMCParticle->GetT0()));
+        PANDORA_RETURN_RESULT_IF(pandora::STATUS_CODE_SUCCESS, !=, binaryFileWriter.WriteVariable(pLArMCParticle->GetIsDR()));        
     }
     else if (pandora::XML == fileWriter.GetFileType())
     {
         pandora::XmlFileWriter &xmlFileWriter(dynamic_cast<pandora::XmlFileWriter&>(fileWriter));
         PANDORA_RETURN_RESULT_IF(pandora::STATUS_CODE_SUCCESS, !=, xmlFileWriter.WriteVariable("NuanceCode", pLArMCParticle->GetNuanceCode()));
         PANDORA_RETURN_RESULT_IF(pandora::STATUS_CODE_SUCCESS, !=, xmlFileWriter.WriteVariable("T0", pLArMCParticle->GetT0()));
+        PANDORA_RETURN_RESULT_IF(pandora::STATUS_CODE_SUCCESS, !=, xmlFileWriter.WriteVariable("IsDR", pLArMCParticle->GetIsDR()));        
     }
     else
     {
