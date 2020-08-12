@@ -40,6 +40,22 @@ StatusCode MCParticleMonitoringAlgorithm::Run()
     const CaloHitList *pCaloHitList = nullptr;
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetList(*this, m_caloHitListName, pCaloHitList));
 
+    MCParticleList DRList, otherList;
+    for (const MCParticle *cont pMCParticle : *pMCParticleList)
+    {
+        if (pMCParticle->GetIsDR())
+        {
+            DRList.push_back(pMCParticle);
+        }
+        else
+        {
+            otherList.push_back(pMCParticle);
+        }
+    }
+
+    PandoraMonitoringApi::VisualizeMCParticles(this->GetPandora(), &DRList, "DeltaRays", RED);
+    PandoraMonitoringApi::VisualizeMCParticles(this->GetPandora(), &otherList, "Not DeltaRays", BLUE);
+
     LArMCParticleHelper::PrimaryParameters parameters;
     parameters.m_minHitSharingFraction = 0.f;
 
@@ -74,6 +90,8 @@ StatusCode MCParticleMonitoringAlgorithm::Run()
 
     std::cout << "------------------------------------------------------------------------------------------------" << std::endl;
 
+    PandoraMonitoringApi::ViewEvent(this->GetPandora());
+    
     return STATUS_CODE_SUCCESS;
 }
 
