@@ -41,6 +41,7 @@ StatusCode MCParticleMonitoringAlgorithm::Run()
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetList(*this, m_caloHitListName, pCaloHitList));
 
     MCParticleList DRList, otherList;
+    std::cout << "ISOBEL MCParticleList size: " << pMCParticleList->size() << std::endl;
     for (const MCParticle *const pMCParticle : *pMCParticleList)
     {
         const LArMCParticle *const pLArMCParticle(dynamic_cast<const LArMCParticle*>(pMCParticle));
