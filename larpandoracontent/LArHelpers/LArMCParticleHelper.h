@@ -109,6 +109,11 @@ public:
     static bool IsCosmicRay(const pandora::MCParticle *const pMCParticle);
 
     /**
+     *  @brief  Return true if passed a DR tagged MCParticle 
+     */    
+    static bool IsDeltaRay(const pandora::MCParticle *const pMCParticle);    
+
+    /**
      *  @brief  Get the nuance code of an MCParticle
      */
     static unsigned int GetNuanceCode(const pandora::MCParticle *const pMCParticle);

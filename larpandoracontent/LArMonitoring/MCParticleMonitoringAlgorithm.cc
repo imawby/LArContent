@@ -40,28 +40,6 @@ StatusCode MCParticleMonitoringAlgorithm::Run()
     const CaloHitList *pCaloHitList = nullptr;
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetList(*this, m_caloHitListName, pCaloHitList));
 
-    MCParticleList DRList, otherList;
-    std::cout << "ISOBEL MCParticleList size: " << pMCParticleList->size() << std::endl;
-    for (const MCParticle *const pMCParticle : *pMCParticleList)
-    {
-        const LArMCParticle *const pLArMCParticle(dynamic_cast<const LArMCParticle*>(pMCParticle));
-
-
-        std::cout << "to: " << pLArMCParticle->GetT0() << std::endl;
-        if (pLArMCParticle->GetIsDR())
-        {
-            std::cout << "WE HAVE A DR" << std::endl;
-            DRList.push_back(pMCParticle);
-        }
-        else
-        {
-            otherList.push_back(pMCParticle);
-        }
-    }
-
-    //PandoraMonitoringApi::VisualizeMCParticles(this->GetPandora(), &DRList, "DeltaRays", RED);
-    //PandoraMonitoringApi::VisualizeMCParticles(this->GetPandora(), &otherList, "Not DeltaRays", BLUE);
-
     LArMCParticleHelper::PrimaryParameters parameters;
     parameters.m_minHitSharingFraction = 0.f;
 

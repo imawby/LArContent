@@ -111,6 +111,14 @@ bool LArMCParticleHelper::IsCosmicRay(const MCParticle *const pMCParticle)
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
+bool LArMCParticleHelper::IsDeltaRay(const MCParticle *const pMCParticle)
+{
+    const LArMCParticle *const pLArMCParticle(dynamic_cast<const LArMCParticle*>(pMCParticle));
+    return pLArMCParticle->GetIsDR();
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------    
+
 unsigned int LArMCParticleHelper::GetNuanceCode(const MCParticle *const pMCParticle)
 {
     const LArMCParticle *const pLArMCParticle(dynamic_cast<const LArMCParticle*>(pMCParticle));
