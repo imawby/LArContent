@@ -125,7 +125,7 @@ bool TrackRefinementBaseAlgorithm::GetClusterMergingCoordinates(const TwoDSlidin
     const LayerFitResultMap &clusterMicroLayerFitResultMap(clusterMicroFitResult.GetLayerFitResultMap());
     const int startLayer(isEndUpstream ? clusterMicroFitResult.GetMinLayer() : clusterMicroFitResult.GetMaxLayer());
     const int endLayer(isEndUpstream ? clusterMicroFitResult.GetMaxLayer() : clusterMicroFitResult.GetMinLayer());
-    const int loopTerminationLayer(endLayer + (isEndUpstream ? 1 : +1));
+    const int loopTerminationLayer(endLayer + (isEndUpstream ? 1 : -1));
     const int step(isEndUpstream ? 1 : -1);
 
     // ATTN: Search for stable region for which the local layer gradient agrees well with associated cluster global gradient
