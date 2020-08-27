@@ -498,6 +498,8 @@ void LArMCParticleHelper::GetMCParticleToCaloHitMatches(const CaloHitList *const
                 throw statusCodeException;
         }
     }
+
+    std::cout << "size of mc to hit map: " << mcToTrueHitListMap.size() << std::endl;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------

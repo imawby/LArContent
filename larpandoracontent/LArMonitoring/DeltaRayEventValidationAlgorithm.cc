@@ -34,10 +34,66 @@ DeltaRayEventValidationAlgorithm::~DeltaRayEventValidationAlgorithm()
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 void DeltaRayEventValidationAlgorithm::FillValidationInfo(const MCParticleList *const pMCParticleList, const CaloHitList *const pCaloHitList,
-    const PfoList *const pPfoList, ValidationInfo &validationInfo) const
+                                                          const PfoList *const pPfoList, ValidationInfo &validationInfo) const
 {
 
+    PandoraMonitoringApi::SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_DEFAULT, -1.f, 1.f, 1.f);
+    
     std::cout << "MCParticle list size: " << pMCParticleList->size() << std::endl;
+    std::cout << "pPfoList size: " << pPfoList->size() << std::endl;
+
+    /*
+    CartesianPointVector deltaRayHits, cosmicRayHits;
+    for (const CaloHit *const pCaloHit : *pCaloHitList)
+    {
+        const MCParticle *pMCParticle(nullptr);
+        
+        try
+        {
+            pMCParticle = MCParticleHelper::GetMainMCParticle(pCaloHit);
+        }
+        catch (StatusCodeException&)
+        {
+        }
+
+        if (pMCParticle)
+        {
+            if ( LArMCParticleHelper::IsCosmicRay(pMCParticle) && LArMCParticleHelper::IsDeltaRay(pMCParticle))
+            {
+                std::cout << " hit belongs to both a cosmic ray and a delta ray!" << std::endl;
+                continue;
+            }
+
+            if (LArMCParticleHelper::IsCosmicRay(pMCParticle))
+                cosmicRayHits.push_back(pCaloHit->GetPositionVector());
+
+            if (LArMCParticleHelper::IsDeltaRay(pMCParticle))
+                deltaRayHits.push_back(pCaloHit->GetPositionVector());
+
+        }
+    }
+
+    for (const CartesianVector &point : deltaRayHits)
+    {
+        PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "DR", RED, 2);
+    }
+
+    for (const CartesianVector &point : cosmicRayHits)
+    {
+        PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "CR", BLUE, 2);
+    }
+
+    PandoraMonitoringApi::ViewEvent(this->GetPandora());
+    */
+    
+    
+    for (const CaloHit *const pCaloHit : *pCaloHitList)
+    {
+        std::cout << "calo hit map size: " << pCaloHit->GetMCParticleWeightMap().size() << std::endl;
+    }
+
+    PandoraMonitoringApi::Create(this->GetPandora());
+    PandoraMonitoringApi::SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_DEFAULT, -1.f, 1.f, 1.f);
     
     if (pMCParticleList && pCaloHitList)
     {
@@ -70,18 +126,65 @@ void DeltaRayEventValidationAlgorithm::FillValidationInfo(const MCParticleList *
     LArMCParticleHelper::GetPfoMCParticleHitSharingMaps(validationInfo.GetPfoToHitsMap(), {validationInfo.GetAllMCParticleToHitsMap()}, pfoToMCHitSharingMap, mcToPfoHitSharingMap);
     validationInfo.SetMCToPfoHitSharingMap(mcToPfoHitSharingMap);
 
+    LArMCParticleHelper::MCParticleToPfoHitSharingMap interpretedMCToPfoHitSharingMap;
+    this->InterpretMatching(validationInfo, interpretedMCToPfoHitSharingMap);
+    validationInfo.SetInterpretedMCToPfoHitSharingMap(interpretedMCToPfoHitSharingMap);
+    
+    std::cout << "Map size: " << interpretedMCToPfoHitSharingMap.size() << std::endl;
+    
     PfoList cosmicRays, deltaRays;
-    for (const auto &entry : mcToPfoHitSharingMap)
+    unsigned int count_DR(0), hasMatch_DR(0);
+    for (const auto &entry : interpretedMCToPfoHitSharingMap)
     {
         if (LArMCParticleHelper::IsCosmicRay(entry.first))
-            cosmicRays.push_back(entry.second.begin()->first);
+        {
+            if (!entry.second.empty())
+            {
+                cosmicRays.push_back(entry.second.begin()->first);
+            }
+        }
 
+ 
         if (LArMCParticleHelper::IsDeltaRay(entry.first))
-            deltaRays.push_back(entry.second.begin()->first);
+        {
+            count_DR++;
+
+            if (!entry.second.empty())
+            {
+                hasMatch_DR++;
+                deltaRays.push_back(entry.second.begin()->first);
+            }
+        }
     }
 
-    PandoraMonitoringApi::VisualizeParticleFlowObjects(this->GetPandora(), &cosmicRays, "cosmicRays", BLUE);
-    PandoraMonitoringApi::VisualizeParticleFlowObjects(this->GetPandora(), &deltaRays, "deltaRays", RED);
+    for (const ParticleFlowObject *const pCosmicRay : cosmicRays)
+    {
+        CartesianPointVector position;
+        LArPfoHelper::GetCoordinateVector(pCosmicRay, TPC_3D, position);
+
+        for (const CartesianVector &point : position)
+            PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "CR", BLUE, 2);
+    }
+
+    for (const ParticleFlowObject *const pDeltaRay : deltaRays)
+    {
+
+        const ParticleFlowObject *pParentMuon(LArPfoHelper::GetParentPfo(pDeltaRay));
+
+        
+        CartesianPointVector position;
+        LArPfoHelper::GetCoordinateVector(pDeltaRay, TPC_3D, position);
+
+        for (const CartesianVector &point : position)
+            PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "DR", RED, 2);
+    }    
+    
+
+    std::cout << "count_DR: " << count_DR << std::endl;
+    std::cout << "hasMatch_DR: " << hasMatch_DR << std::endl;
+    
+    //PandoraMonitoringApi::VisualizeParticleFlowObjects(this->GetPandora(), &cosmicRays, "cosmicRays", BLUE);
+    //PandoraMonitoringApi::VisualizeParticleFlowObjects(this->GetPandora(), &deltaRays, "deltaRays", RED);
     PandoraMonitoringApi::ViewEvent(this->GetPandora());
 }
 
