@@ -114,7 +114,31 @@ bool LArMCParticleHelper::IsCosmicRay(const MCParticle *const pMCParticle)
 bool LArMCParticleHelper::IsDeltaRay(const MCParticle *const pMCParticle)
 {
     const LArMCParticle *const pLArMCParticle(dynamic_cast<const LArMCParticle*>(pMCParticle));
-    return pLArMCParticle->GetIsDR();
+
+    // If not ionisation from muon
+    if (!pLArMCParticle->GetIsDR())
+        return false;
+    /*
+    const MCParticle *const pParentMuon(LArMCParticleHelper::GetPrimaryMCParticle(pMCParticle));
+
+    // Sanity check
+    if (std::fabs(pParentMuon->GetParticleId()) != 13)
+        return false;
+
+    const CartesianVector &muonEndpoint(pParentMuon->GetEndpoint());
+    const CartesianVector &muonVertex(pParentMuon->GetVertex());
+    const CartesianVector &mcParticleVertex(pMCParticle->GetVertex());
+
+    // If parent muon is short
+    if ((muonEndpoint - muonVertex).GetMagnitude() < 10.f)
+        return false;
+
+    // Reject michel electrons
+    if (((muonEndpoint - mcParticleVertex).GetMagnitude() < 2.f) || ((muonVertex - mcParticleVertex).GetMagnitude() < 2.f))
+        return false;
+    */
+    
+    return true;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------    
