@@ -523,7 +523,7 @@ void LArMCParticleHelper::GetMCParticleToCaloHitMatches(const CaloHitList *const
         }
     }
 
-    std::cout << "size of mc to hit map: " << mcToTrueHitListMap.size() << std::endl;
+    //std::cout << "size of mc to hit map: " << mcToTrueHitListMap.size() << std::endl;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------

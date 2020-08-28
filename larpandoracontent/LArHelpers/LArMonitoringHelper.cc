@@ -85,6 +85,29 @@ void LArMonitoringHelper::GetOrderedMCParticleVector(const LArMCParticleHelper::
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
+void LArMonitoringHelper::GetOrderedMCParticleVector(const LArMCParticleHelper::MCContributionMap &selectedMCParticleToGoodHitsMap, MCParticleVector &orderedMCParticleVector)
+{
+    // Sort by number of hits descending
+    std::sort(orderedMCParticleVector.begin(), orderedMCParticleVector.end(), [&] (const MCParticle *const &lhs, const MCParticle *const &rhs) -> bool
+    {
+        const unsigned int lhsHits(selectedMCParticleToGoodHitsMap.at(lhs).size());
+        const unsigned int rhsHits(selectedMCParticleToGoodHitsMap.at(rhs).size());
+
+        if (std::fabs(lhsHits - rhsHits) > std::numeric_limits<float>::epsilon())
+            return (lhsHits > rhsHits);
+
+        // Default to normal MCParticle sorting
+        return LArMCParticleHelper::SortByMomentum(lhs, rhs);
+    });
+
+    // Check that all elements of the vector are unique
+    const unsigned int nMCParticles(orderedMCParticleVector.size());
+    if (std::distance(orderedMCParticleVector.begin(), std::unique(orderedMCParticleVector.begin(), orderedMCParticleVector.end())) != nMCParticles)
+        throw StatusCodeException(STATUS_CODE_ALREADY_PRESENT);
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------    
+
 void LArMonitoringHelper::GetOrderedPfoVector(const LArMCParticleHelper::PfoContributionMap &pfoToReconstructable2DHitsMap, pandora::PfoVector &orderedPfoVector)
 {
     // Copy map contents to vector it can be sorted

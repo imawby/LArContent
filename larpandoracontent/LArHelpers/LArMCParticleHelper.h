@@ -47,6 +47,8 @@ public:
     typedef std::map<const pandora::ParticleFlowObject*, MCParticleToSharedHitsVector> PfoToMCParticleHitSharingMap;
     typedef std::map<const pandora::MCParticle*, PfoToSharedHitsVector> MCParticleToPfoHitSharingMap;
 
+    typedef std::unordered_map<const pandora::MCParticle*, pandora::MCParticleVector> CRToChildDRMap;
+
     /**
      *  @brief   PrimaryParameters class
      */

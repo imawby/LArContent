@@ -39,6 +39,8 @@ public:
      */
     static void GetOrderedMCParticleVector(const LArMCParticleHelper::MCContributionMapVector &selectedMCParticleToGoodHitsMaps, pandora::MCParticleVector &orderedMCParticleVector);
 
+    static void GetOrderedMCParticleVector(const LArMCParticleHelper::MCContributionMap &selectedMCParticleToGoodHitsMap, pandora::MCParticleVector &orderedMCParticleVector);
+
     /**
      *  @brief  Order input Pfos by their number of hits.
      *
