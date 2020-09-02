@@ -65,18 +65,7 @@ void DeltaRayEventValidationAlgorithm::FillValidationInfo(const MCParticleList *
     LArMCParticleHelper::PfoToMCParticleHitSharingMap pfoToMCHitSharingMap;
     LArMCParticleHelper::MCParticleToPfoHitSharingMap mcToPfoHitSharingMap;
     LArMCParticleHelper::GetPfoMCParticleHitSharingMaps(validationInfo.GetPfoToHitsMap(), {validationInfo.GetAllMCParticleToHitsMap()}, pfoToMCHitSharingMap, mcToPfoHitSharingMap);
-
-    MCParticleVector mcPrimaryVector;
-    LArMonitoringHelper::GetOrderedMCParticleVector({validationInfo.GetAllMCParticleToHitsMap()}, mcPrimaryVector);
-    for (const MCParticle *pMCParticle : mcPrimaryVector)
-    {
-        if (mcToPfoHitSharingMap.find(pMCParticle) == mcToPfoHitSharingMap.end())
-        {
-            LArMCParticleHelper::PfoToSharedHitsVector pfoToSharedHitsVector;
-            mcToPfoHitSharingMap.insert(LArMCParticleHelper::MCParticleToPfoHitSharingMap::value_type(pMCParticle, pfoToSharedHitsVector));
-        }
-    }
-
+    
     validationInfo.SetMCToPfoHitSharingMap(mcToPfoHitSharingMap);
 
     LArMCParticleHelper::MCParticleToPfoHitSharingMap interpretedMCToPfoHitSharingMap;
@@ -90,8 +79,11 @@ void DeltaRayEventValidationAlgorithm::FillValidationInfo(const MCParticleList *
 
     for (auto &entry : validationInfo.GetTargetMCParticleToHitsMap())
     {
-        if (mcToPfoHitSharingMap.find(entry.first) != mcToPfoHitSharingMap.end())
-            std::cout << "JAM" << std::endl;
+        if (mcToPfoHitSharingMap.find(entry.first) == mcToPfoHitSharingMap.end())
+            continue;
+
+        std::cout << "HITS: " << entry.second.size() << std::endl;
+        
     }
     
     PfoList cosmicRays, deltaRays;
@@ -125,18 +117,13 @@ void DeltaRayEventValidationAlgorithm::FillValidationInfo(const MCParticleList *
 
     for (const ParticleFlowObject *const pDeltaRay : deltaRays)
     {
-        
         CartesianPointVector position;
-        LArPfoHelper::GetCoordinateVector(pDeltaRay, TPC_3D, position);
-        
+        LArPfoHelper::GetCoordinateVector(pDeltaRay, TPC_3D, position);   
 
         for (const CartesianVector &point : position)
             PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "DR", RED, 2);
     }    
     
-    
-    //PandoraMonitoringApi::VisualizeParticleFlowObjects(this->GetPandora(), &cosmicRays, "cosmicRays", BLUE);
-    //PandoraMonitoringApi::VisualizeParticleFlowObjects(this->GetPandora(), &deltaRays, "deltaRays", RED);
     PandoraMonitoringApi::ViewEvent(this->GetPandora());
 }
 
