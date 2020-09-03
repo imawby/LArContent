@@ -50,19 +50,21 @@ StatusCode TrackExtensionRefinementAlgorithm::Run()
     
     this->InitialiseContainers(pClusterList, SortByDistanceToTPCBoundary(m_tpcMinXEdge), clusterVector, slidingFitResultMapPair);
 
+    std::cout << "HERE" << std::endl;
+    
     // ATTN: Keep track of created main track clusters so their hits can be protected in future iterations
     ClusterList createdMainTrackClusters;
     for (unsigned int isHigherXBoundary = 0; isHigherXBoundary < 2; ++isHigherXBoundary)
     {
         std::cout << "\033[31m" << "TrackExtension: isHigherXBoundary: " << isHigherXBoundary << "\033[0m"  << std::endl;
-        
+        /*
         const float nearestTPCBoundaryX(isHigherXBoundary ? m_tpcMaxXEdge : m_tpcMinXEdge);
         if ((std::fabs(nearestTPCBoundaryX - m_detectorMinXEdge) < std::numeric_limits<float>::epsilon()) ||
             (std::fabs(nearestTPCBoundaryX - m_detectorMaxXEdge) < std::numeric_limits<float>::epsilon()))
         {
             continue;
         }
-
+        */
         // ATTN: Keep track of clusters removed from clusterVector so that they can be added back in when considering the other endpoint
         ClusterList consideredClusters;
         unsigned int loopIterations(0);
