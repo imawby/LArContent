@@ -42,10 +42,17 @@ unsigned int LArMonitoringHelper::CountHitsByType(const HitType hitType, const C
 
 void LArMonitoringHelper::GetOrderedMCParticleVector(const LArMCParticleHelper::MCContributionMapVector &selectedMCParticleToGoodHitsMaps, MCParticleVector &orderedMCParticleVector)
 {
+
+    std::cout << "HERE A" << std::endl;
+    std::cout << "ORDERED FUNCTION INPUT VECTOR SIZE: " << selectedMCParticleToGoodHitsMaps.size() << std::endl;
+    
     for (const LArMCParticleHelper::MCContributionMap &mcParticleToGoodHitsMap : selectedMCParticleToGoodHitsMaps)
     {
         if (mcParticleToGoodHitsMap.empty())
+        {
+            std::cout << "EMPTY" << std::endl;
             continue;
+        }
 
         // Copy map contents to vector it can be sorted
         std::vector<LArMCParticleHelper::MCParticleCaloHitListPair> mcParticleToGoodHitsVect;
@@ -87,6 +94,10 @@ void LArMonitoringHelper::GetOrderedMCParticleVector(const LArMCParticleHelper::
 
 void LArMonitoringHelper::GetOrderedMCParticleVector(const LArMCParticleHelper::MCContributionMap &selectedMCParticleToGoodHitsMap, MCParticleVector &orderedMCParticleVector)
 {
+    // Copy map contents to vector it can be sorted
+    for (auto &entry : selectedMCParticleToGoodHitsMap)
+        orderedMCParticleVector.push_back(entry.first);
+
     // Sort by number of hits descending
     std::sort(orderedMCParticleVector.begin(), orderedMCParticleVector.end(), [&] (const MCParticle *const &lhs, const MCParticle *const &rhs) -> bool
     {

@@ -57,14 +57,16 @@ void DeltaRayEventValidationAlgorithm::FillValidationInfo(const MCParticleList *
     if (pPfoList)
     {
         LArMCParticleHelper::PfoContributionMap pfoToHitsMap;
-        LArMCParticleHelper::GetPfoToReconstructable2DHitsMap(*pPfoList, validationInfo.GetAllMCParticleToHitsMap(), pfoToHitsMap, m_primaryParameters.m_foldBackHierarchy);
+        //LArMCParticleHelper::GetPfoToReconstructable2DHitsMap(*pPfoList, validationInfo.GetAllMCParticleToHitsMap(), pfoToHitsMap, m_primaryParameters.m_foldBackHierarchy);
+        LArMCParticleHelper::GetPfoToReconstructable2DHitsMap(*pPfoList, validationInfo.GetTargetMCParticleToHitsMap(), pfoToHitsMap, m_primaryParameters.m_foldBackHierarchy);
 
         validationInfo.SetPfoToHitsMap(pfoToHitsMap);
     }
 
     LArMCParticleHelper::PfoToMCParticleHitSharingMap pfoToMCHitSharingMap;
     LArMCParticleHelper::MCParticleToPfoHitSharingMap mcToPfoHitSharingMap;
-    LArMCParticleHelper::GetPfoMCParticleHitSharingMaps(validationInfo.GetPfoToHitsMap(), {validationInfo.GetAllMCParticleToHitsMap()}, pfoToMCHitSharingMap, mcToPfoHitSharingMap);
+    //LArMCParticleHelper::GetPfoMCParticleHitSharingMaps(validationInfo.GetPfoToHitsMap(), {validationInfo.GetAllMCParticleToHitsMap()}, pfoToMCHitSharingMap, mcToPfoHitSharingMap);
+    LArMCParticleHelper::GetPfoMCParticleHitSharingMaps(validationInfo.GetPfoToHitsMap(), {validationInfo.GetTargetMCParticleToHitsMap()}, pfoToMCHitSharingMap, mcToPfoHitSharingMap);
     
     validationInfo.SetMCToPfoHitSharingMap(mcToPfoHitSharingMap);
 
@@ -77,6 +79,7 @@ void DeltaRayEventValidationAlgorithm::FillValidationInfo(const MCParticleList *
     std::cout << "Matching Map size: " << mcToPfoHitSharingMap.size() << std::endl;
     std::cout << "Interpretted Matching Map size: " << interpretedMCToPfoHitSharingMap.size() << std::endl;
 
+    /*
     for (auto &entry : validationInfo.GetTargetMCParticleToHitsMap())
     {
         if (mcToPfoHitSharingMap.find(entry.first) == mcToPfoHitSharingMap.end())
@@ -85,6 +88,7 @@ void DeltaRayEventValidationAlgorithm::FillValidationInfo(const MCParticleList *
         std::cout << "HITS: " << entry.second.size() << std::endl;
         
     }
+    */
     
     PfoList cosmicRays, deltaRays;
     for (const auto &entry : interpretedMCToPfoHitSharingMap)

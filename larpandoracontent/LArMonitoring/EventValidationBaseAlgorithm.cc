@@ -69,6 +69,7 @@ StatusCode EventValidationBaseAlgorithm::Run()
     ValidationInfo validationInfo;
     this->FillValidationInfo(pMCParticleList, pCaloHitList, pPfoList, validationInfo);
 
+    /*
     if (m_printAllToScreen)
         this->PrintAllMatches(validationInfo);
 
@@ -77,6 +78,7 @@ StatusCode EventValidationBaseAlgorithm::Run()
 
     if (m_writeToTree)
         this->WriteInterpretedMatches(validationInfo);
+    */
 
     return STATUS_CODE_SUCCESS;
 }
@@ -87,7 +89,11 @@ void EventValidationBaseAlgorithm::InterpretMatching(const ValidationInfo &valid
 {
     MCParticleVector mcPrimaryVector;
     LArMonitoringHelper::GetOrderedMCParticleVector({validationInfo.GetAllMCParticleToHitsMap()}, mcPrimaryVector);
+    //LArMonitoringHelper::GetOrderedMCParticleVector(validationInfo.GetAllMCParticleToHitsMap(), mcPrimaryVector);
 
+
+    std::cout << "mcPrimaryVector size: " << mcPrimaryVector.size() << std::endl;
+    
     PfoSet usedPfos;
     while (this->GetStrongestPfoMatch(validationInfo, mcPrimaryVector, usedPfos, interpretedMCToPfoHitSharingMap)) {}
     this->GetRemainingPfoMatches(validationInfo, mcPrimaryVector, usedPfos, interpretedMCToPfoHitSharingMap);
@@ -99,6 +105,8 @@ void EventValidationBaseAlgorithm::InterpretMatching(const ValidationInfo &valid
         std::sort(pfoHitPairs.begin(), pfoHitPairs.end(), [] (const LArMCParticleHelper::PfoCaloHitListPair &a, const LArMCParticleHelper::PfoCaloHitListPair &b) -> bool {
             return ((a.second.size() != b.second.size()) ? a.second.size() > b.second.size() : LArPfoHelper::SortByNHits(a.first, b.first)); });
     }
+
+    std::cout << "map size: " << interpretedMCToPfoHitSharingMap.size() << std::endl;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
