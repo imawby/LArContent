@@ -154,6 +154,14 @@ StatusCode MasterAlgorithm::Run()
 {
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, this->Reset());
 
+    std::cout << "m_shouldRunAllHitsCosmicReco: " << m_shouldRunAllHitsCosmicReco << std::endl;
+    std::cout << "m_shouldRunStitching: " << m_shouldRunStitching << std::endl;
+    std::cout << "m_shouldRunCosmicHitRemoval: " << m_shouldRunCosmicHitRemoval << std::endl;
+    std::cout << "m_shouldRunSlicing: " << m_shouldRunSlicing << std::endl;
+    std::cout << "m_shouldRunNeutrinoRecoOption: " << m_shouldRunNeutrinoRecoOption << std::endl;
+    std::cout << "m_shouldRunCosmicRecoOption: " << m_shouldRunCosmicRecoOption << std::endl;
+    std::cout << "m_shouldPerformSliceId: " << m_shouldPerformSliceId << std::endl;
+
     if (!m_workerInstancesInitialized)
         PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, this->InitializeWorkerInstances());
 

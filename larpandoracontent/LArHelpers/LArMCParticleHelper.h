@@ -109,12 +109,7 @@ public:
      *  @brief  Return true if passed a primary cosmic ray MCParticle
      */
     static bool IsCosmicRay(const pandora::MCParticle *const pMCParticle);
-
-    /**
-     *  @brief  Return true if passed a DR tagged MCParticle 
-     */    
-    static bool IsDeltaRay(const pandora::MCParticle *const pMCParticle);    
-
+    
     /**
      *  @brief  Get the nuance code of an MCParticle
      */
@@ -189,8 +184,6 @@ public:
      *  @return address of the primary parent mc particle
      */
     static const pandora::MCParticle *GetPrimaryMCParticle(const pandora::MCParticle *const pMCParticle);
-
-    static const pandora::MCParticle *GetLeadingDeltaRay(const pandora::MCParticle *const pMCParticle);
 
     /**
      *  @brief  Get the leading particle in the hierarchy, for use at ProtoDUNE
@@ -268,8 +261,6 @@ public:
      */
     static void GetMCToSelfMap(const pandora::MCParticleList *const pMCParticleList, MCRelationMap &mcToSelfMap);
 
-    static void GetMCToLeadingDeltaRayMap(const pandora::MCParticleList *const pMCParticleList, const unsigned int maximumContributingTier, MCRelationMap &mcToLeadingDeltaRayMap);
-    
     /**
      *  @brief  Find the mc particle making the largest contribution to 2D clusters in a specified pfo
      *
@@ -392,6 +383,18 @@ public:
     static void SelectCaloHits(const pandora::CaloHitList *const pCaloHitList, const MCRelationMap &mcToTargetMCMap,
         pandora::CaloHitList &selectedCaloHitList, const bool selectInputHits, const float maxPhotonPropagation);
 
+    /**
+     *  @brief  Filter an input vector of MCParticles to ensure they have sufficient good hits to be reconstructable
+     *
+     *  @param  candidateTargets candidate reconstructable MCParticles
+     *  @param  mcToTrueHitListMap mapping from candidates reconstructable MCParticles to their true hits
+     *  @param  mcToTargetMCMap the mc particle to target (primary or self) mc particle map
+     *  @param  parameters validation parameters to decide when an MCParticle is considered reconstructable
+     *  @param  selectedMCParticlesToHitsMap the output mapping from selected mcparticles to their hits
+     */
+    static void SelectParticlesByHitCount(const pandora::MCParticleVector &candidateTargets, const MCContributionMap &mcToTrueHitListMap,
+        const MCRelationMap &mcToTargetMCMap, const PrimaryParameters &parameters, MCContributionMap &selectedMCParticlesToHitsMap);    
+
 private:
     /**
      *  @brief  For a given Pfo, collect the hits which are reconstructable (=good hits belonging to a selected reconstructable MCParticle)
@@ -450,19 +453,7 @@ private:
      */
     static void SelectParticlesMatchingCriteria(const pandora::MCParticleVector &inputMCParticles, std::function<bool(const pandora::MCParticle *const)> fCriteria,
         pandora::MCParticleVector &selectedParticles, const PrimaryParameters &parameters, const bool isTestBeam);
-
-    /**
-     *  @brief  Filter an input vector of MCParticles to ensure they have sufficient good hits to be reconstructable
-     *
-     *  @param  candidateTargets candidate reconstructable MCParticles
-     *  @param  mcToTrueHitListMap mapping from candidates reconstructable MCParticles to their true hits
-     *  @param  mcToTargetMCMap the mc particle to target (primary or self) mc particle map
-     *  @param  parameters validation parameters to decide when an MCParticle is considered reconstructable
-     *  @param  selectedMCParticlesToHitsMap the output mapping from selected mcparticles to their hits
-     */
-    static void SelectParticlesByHitCount(const pandora::MCParticleVector &candidateTargets, const MCContributionMap &mcToTrueHitListMap,
-        const MCRelationMap &mcToTargetMCMap, const PrimaryParameters &parameters, MCContributionMap &selectedMCParticlesToHitsMap);
-
+    
     /**
      *  @brief  Whether it is possible to navigate from a primary mc particle to a downstream mc particle without "passing through" a neutron
      *

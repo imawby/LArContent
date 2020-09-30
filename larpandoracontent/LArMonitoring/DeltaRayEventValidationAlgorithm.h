@@ -11,6 +11,7 @@
 #include "Pandora/Algorithm.h"
 
 #include "larpandoracontent/LArHelpers/LArMCParticleHelper.h"
+#include "larpandoracontent/LArHelpers/LArDeltaRayHelper.h"
 
 #include "larpandoracontent/LArMonitoring/EventValidationBaseAlgorithm.h"
 
@@ -63,9 +64,14 @@ private:
      */
     void ProcessOutput(const ValidationInfo &validationInfo, const bool useInterpretedMatching, const bool printToScreen, const bool fillTree) const;
 
+    void GetUnfoldedInterpretedMatching(const pandora::MCParticleList *pMCParticleList, const pandora::CaloHitList *pCaloHitList, const pandora::PfoList *pPfoList,
+        LArMCParticleHelper::MCParticleToPfoHitSharingMap &unfoldedInterepretedMatchingMap) const;
+
     pandora::StatusCode ReadSettings(const pandora::TiXmlHandle xmlHandle);
 
     typedef std::vector<pandora::HitType> HitTypeVector;
+    
+    LArDeltaRayHelper::DeltaRayParameters  m_deltaRayParameters;
 
 
 };

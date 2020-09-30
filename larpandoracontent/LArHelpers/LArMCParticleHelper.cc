@@ -109,38 +109,6 @@ bool LArMCParticleHelper::IsCosmicRay(const MCParticle *const pMCParticle)
     return (LArMCParticleHelper::IsPrimary(pMCParticle) && ((nuance == 3000) || ((nuance == 0) && !LArMCParticleHelper::IsBeamNeutrinoFinalState(pMCParticle))));
 }
 
-//------------------------------------------------------------------------------------------------------------------------------------------
-
-bool LArMCParticleHelper::IsDeltaRay(const MCParticle *const pMCParticle)
-{
-    const LArMCParticle *const pLArMCParticle(dynamic_cast<const LArMCParticle*>(pMCParticle));
-
-    // If not ionisation from muon
-    if (!pLArMCParticle->GetIsDR())
-        return false;
-    /*
-    const MCParticle *const pParentMuon(LArMCParticleHelper::GetPrimaryMCParticle(pMCParticle));
-
-    // Sanity check
-    if (std::fabs(pParentMuon->GetParticleId()) != 13)
-        return false;
-
-    const CartesianVector &muonEndpoint(pParentMuon->GetEndpoint());
-    const CartesianVector &muonVertex(pParentMuon->GetVertex());
-    const CartesianVector &mcParticleVertex(pMCParticle->GetVertex());
-
-    // If parent muon is short
-    if ((muonEndpoint - muonVertex).GetMagnitude() < 10.f)
-        return false;
-
-    // Reject michel electrons
-    if (((muonEndpoint - mcParticleVertex).GetMagnitude() < 2.f) || ((muonVertex - mcParticleVertex).GetMagnitude() < 2.f))
-        return false;
-    */
-    
-    return true;
-}
-
 //------------------------------------------------------------------------------------------------------------------------------------------    
 
 unsigned int LArMCParticleHelper::GetNuanceCode(const MCParticle *const pMCParticle)
@@ -368,37 +336,6 @@ const MCParticle *LArMCParticleHelper::GetPrimaryMCParticle(const MCParticle *co
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-const MCParticle *LArMCParticleHelper::GetLeadingDeltaRay(const MCParticle *const pMCParticle)
-{
-    // Navigate upward through MC daughter/parent links - collect this particle and all its parents
-    MCParticleVector mcParticleVector;
-
-    const MCParticle *pParentMCParticle = pMCParticle;
-    mcParticleVector.push_back(pParentMCParticle);
-
-    while (!pParentMCParticle->GetParentList().empty())
-    {
-        if (1 != pParentMCParticle->GetParentList().size())
-            throw StatusCodeException(STATUS_CODE_INVALID_PARAMETER);
-
-        pParentMCParticle = *(pParentMCParticle->GetParentList().begin());
-        mcParticleVector.push_back(pParentMCParticle);
-    }
-
-    // Navigate downward through MC parent/daughter links - return the first long-lived charged particle
-    for (MCParticleVector::const_reverse_iterator iter = mcParticleVector.rbegin(), iterEnd = mcParticleVector.rend(); iter != iterEnd; ++iter)
-    {
-        const MCParticle *const pNextParticle = *iter;
-
-        if (LArMCParticleHelper::IsDeltaRay(pNextParticle))
-            return pNextParticle;
-    }
-
-    throw StatusCodeException(STATUS_CODE_NOT_FOUND);
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-
 const MCParticle *LArMCParticleHelper::GetLeadingMCParticle(const MCParticle *const pMCParticle, const int hierarchyTierLimit)
 {
     // ATTN: If not beam particle return primary particle
@@ -488,19 +425,6 @@ void LArMCParticleHelper::GetMCToSelfMap(const MCParticleList *const pMCParticle
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void LArMCParticleHelper::GetMCToLeadingDeltaRayMap(const MCParticleList *const pMCParticleList, const unsigned int maximumContributingTier, MCRelationMap &mcToLeadingDeltaRayMap)
-{
-    for (const MCParticle *const pMCParticle : *pMCParticleList)
-    {
-        if (LArMCParticleHelper::GetHierarchyTier(pMCParticle) > maximumContributingTier)
-            continue;
-        
-        mcToLeadingDeltaRayMap[pMCParticle] = LArMCParticleHelper::GetLeadingDeltaRay(pMCParticle);
-    }
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-
 const MCParticle *LArMCParticleHelper::GetMainMCParticle(const ParticleFlowObject *const pPfo)
 {
     ClusterList clusterList;
@@ -566,8 +490,6 @@ void LArMCParticleHelper::GetMCParticleToCaloHitMatches(const CaloHitList *const
                 throw statusCodeException;
         }
     }
-
-    //std::cout << "size of mc to hit map: " << mcToTrueHitListMap.size() << std::endl;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
