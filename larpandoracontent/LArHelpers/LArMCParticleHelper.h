@@ -190,6 +190,8 @@ public:
      */
     static const pandora::MCParticle *GetPrimaryMCParticle(const pandora::MCParticle *const pMCParticle);
 
+    static const pandora::MCParticle *GetLeadingDeltaRay(const pandora::MCParticle *const pMCParticle);
+
     /**
      *  @brief  Get the leading particle in the hierarchy, for use at ProtoDUNE
      *
@@ -266,6 +268,8 @@ public:
      */
     static void GetMCToSelfMap(const pandora::MCParticleList *const pMCParticleList, MCRelationMap &mcToSelfMap);
 
+    static void GetMCToLeadingDeltaRayMap(const pandora::MCParticleList *const pMCParticleList, const unsigned int maximumContributingTier, MCRelationMap &mcToLeadingDeltaRayMap);
+    
     /**
      *  @brief  Find the mc particle making the largest contribution to 2D clusters in a specified pfo
      *

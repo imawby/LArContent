@@ -368,6 +368,37 @@ const MCParticle *LArMCParticleHelper::GetPrimaryMCParticle(const MCParticle *co
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
+const MCParticle *LArMCParticleHelper::GetLeadingDeltaRay(const MCParticle *const pMCParticle)
+{
+    // Navigate upward through MC daughter/parent links - collect this particle and all its parents
+    MCParticleVector mcParticleVector;
+
+    const MCParticle *pParentMCParticle = pMCParticle;
+    mcParticleVector.push_back(pParentMCParticle);
+
+    while (!pParentMCParticle->GetParentList().empty())
+    {
+        if (1 != pParentMCParticle->GetParentList().size())
+            throw StatusCodeException(STATUS_CODE_INVALID_PARAMETER);
+
+        pParentMCParticle = *(pParentMCParticle->GetParentList().begin());
+        mcParticleVector.push_back(pParentMCParticle);
+    }
+
+    // Navigate downward through MC parent/daughter links - return the first long-lived charged particle
+    for (MCParticleVector::const_reverse_iterator iter = mcParticleVector.rbegin(), iterEnd = mcParticleVector.rend(); iter != iterEnd; ++iter)
+    {
+        const MCParticle *const pNextParticle = *iter;
+
+        if (LArMCParticleHelper::IsDeltaRay(pNextParticle))
+            return pNextParticle;
+    }
+
+    throw StatusCodeException(STATUS_CODE_NOT_FOUND);
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
 const MCParticle *LArMCParticleHelper::GetLeadingMCParticle(const MCParticle *const pMCParticle, const int hierarchyTierLimit)
 {
     // ATTN: If not beam particle return primary particle
@@ -452,6 +483,19 @@ void LArMCParticleHelper::GetMCToSelfMap(const MCParticleList *const pMCParticle
     for (const MCParticle *const pMCParticle : *pMCParticleList)
     {
         mcToSelfMap[pMCParticle] = pMCParticle;
+    }
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void LArMCParticleHelper::GetMCToLeadingDeltaRayMap(const MCParticleList *const pMCParticleList, const unsigned int maximumContributingTier, MCRelationMap &mcToLeadingDeltaRayMap)
+{
+    for (const MCParticle *const pMCParticle : *pMCParticleList)
+    {
+        if (LArMCParticleHelper::GetHierarchyTier(pMCParticle) > maximumContributingTier)
+            continue;
+        
+        mcToLeadingDeltaRayMap[pMCParticle] = LArMCParticleHelper::GetLeadingDeltaRay(pMCParticle);
     }
 }
 

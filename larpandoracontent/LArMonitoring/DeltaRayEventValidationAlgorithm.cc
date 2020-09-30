@@ -79,17 +79,288 @@ void DeltaRayEventValidationAlgorithm::FillValidationInfo(const MCParticleList *
     std::cout << "Matching Map size: " << mcToPfoHitSharingMap.size() << std::endl;
     std::cout << "Interpretted Matching Map size: " << interpretedMCToPfoHitSharingMap.size() << std::endl;
 
-    /*
-    for (auto &entry : validationInfo.GetTargetMCParticleToHitsMap())
-    {
-        if (mcToPfoHitSharingMap.find(entry.first) == mcToPfoHitSharingMap.end())
-            continue;
-
-        std::cout << "HITS: " << entry.second.size() << std::endl;
-        
-    }
-    */
+    std::cout << "U VIEW: " << std::endl;
     
+    unsigned int count(0);
+    for (auto &entry : validationInfo.GetAllMCParticleToHitsMap())
+    {
+        if (LArMCParticleHelper::IsCosmicRay(entry.first))
+        {
+            ++count;
+
+            if (count == 1)
+                std::cout << "Cosmic Ray Hierarchy Tier: " << LArMCParticleHelper::GetHierarchyTier(entry.first) << std::endl;
+            
+            for (const CaloHit *const pCaloHit : entry.second)
+            {            
+                if (pCaloHit->GetHitType() != TPC_VIEW_U)
+                    continue;
+
+                const CartesianVector &point(pCaloHit->GetPositionVector());
+                PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "CR", BLUE, 2);
+            }
+        }
+    }
+    
+    PandoraMonitoringApi::ViewEvent(this->GetPandora());
+    
+    for (auto &entry : validationInfo.GetAllMCParticleToHitsMap())
+    {
+        if (LArMCParticleHelper::IsDeltaRay(entry.first))
+        {
+            const unsigned int tier(LArMCParticleHelper::GetHierarchyTier(entry.first));
+
+            const MCParticleList &daughterMCParticleList = entry.first->GetDaughterList();
+            std::cout << "Number of child particles: " << daughterMCParticleList.size() << std::endl;
+
+            bool hasHits(false);
+            for (const CaloHit *const pCaloHit : entry.second)
+            {
+                if (pCaloHit->GetHitType() != TPC_VIEW_U)
+                    continue;
+
+                hasHits = true;
+
+                const CartesianVector &point(pCaloHit->GetPositionVector());
+
+                if (tier == 0)
+                {
+                    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "DR", BLUE, 2);
+                }
+                else if (tier == 1)
+                {
+                    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "DR", GREEN, 2);
+                }
+                else if (tier == 2)
+                {
+                    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "DR", RED, 2);
+                }
+                else if (tier == 3)
+                {
+                    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "DR", VIOLET, 2);
+                }
+                else if (tier == 4)
+                {
+                    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "DR", BLACK, 2);
+                }
+                else
+                {
+                    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "DR", PINK, 2);
+                }
+            }
+            
+            if(hasHits)
+            {
+                for (const MCParticle *const pMCParticle : daughterMCParticleList)
+                {
+                    auto jam(validationInfo.GetAllMCParticleToHitsMap().find(pMCParticle));
+
+                    if (jam != validationInfo.GetAllMCParticleToHitsMap().end())
+                    {
+                        for (const CaloHit *const pCaloHit : jam->second)
+                        {
+                            if (pCaloHit->GetHitType() != TPC_VIEW_U)
+                                continue;
+
+                            const CartesianVector &point(pCaloHit->GetPositionVector());
+                            PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "CHILD", BLUE, 2);
+                        }
+                    }
+                }
+
+                PandoraMonitoringApi::ViewEvent(this->GetPandora());
+            }
+        }
+    }
+
+    std::cout << "V VIEW: " << std::endl;
+
+    unsigned int countV(0);
+    for (auto &entry : validationInfo.GetAllMCParticleToHitsMap())
+    {
+        if (LArMCParticleHelper::IsCosmicRay(entry.first))
+        {
+            ++countV;
+
+            if (countV == 1)
+                std::cout << "Cosmic Ray Hierarchy Tier: " << LArMCParticleHelper::GetHierarchyTier(entry.first) << std::endl;
+            
+            for (const CaloHit *const pCaloHit : entry.second)
+            {            
+                if (pCaloHit->GetHitType() != TPC_VIEW_V)
+                    continue;
+
+                const CartesianVector &point(pCaloHit->GetPositionVector());
+                PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "CR", BLUE, 2);
+            }
+        }
+    }
+    
+    for (auto &entry : validationInfo.GetAllMCParticleToHitsMap())
+    {
+        if (LArMCParticleHelper::IsDeltaRay(entry.first))
+        {
+            const unsigned int tier(LArMCParticleHelper::GetHierarchyTier(entry.first));
+
+            const MCParticleList &daughterMCParticleList = entry.first->GetDaughterList();
+            std::cout << "Number of child particles: " << daughterMCParticleList.size() << std::endl;
+
+            bool hasHits(false);
+            for (const CaloHit *const pCaloHit : entry.second)
+            {
+                if (pCaloHit->GetHitType() != TPC_VIEW_V)
+                    continue;
+
+                hasHits = true;
+
+                const CartesianVector &point(pCaloHit->GetPositionVector());
+
+                if (tier == 0)
+                {
+                    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "DR", BLUE, 2);
+                }
+                else if (tier == 1)
+                {
+                    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "DR", GREEN, 2);
+                }
+                else if (tier == 2)
+                {
+                    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "DR", RED, 2);
+                }
+                else if (tier == 3)
+                {
+                    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "DR", VIOLET, 2);
+                }
+                else if (tier == 4)
+                {
+                    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "DR", BLACK, 2);
+                }
+                else
+                {
+                    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "DR", PINK, 2);
+                }
+            }
+            
+            if(hasHits)
+            {
+                for (const MCParticle *const pMCParticle : daughterMCParticleList)
+                {
+                    auto jam(validationInfo.GetAllMCParticleToHitsMap().find(pMCParticle));
+
+                    if (jam != validationInfo.GetAllMCParticleToHitsMap().end())
+                    {
+                        for (const CaloHit *const pCaloHit : jam->second)
+                        {
+                            if (pCaloHit->GetHitType() != TPC_VIEW_V)
+                                continue;
+
+                            const CartesianVector &point(pCaloHit->GetPositionVector());
+                            PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "CHILD", BLUE, 2);
+                        }
+                    }
+                }
+
+                PandoraMonitoringApi::ViewEvent(this->GetPandora());
+            }
+        }
+    }
+
+    std::cout << "W VIEW: " << std::endl;
+
+    unsigned int countW(0);
+    for (auto &entry : validationInfo.GetAllMCParticleToHitsMap())
+    {
+        if (LArMCParticleHelper::IsCosmicRay(entry.first))
+        {
+            ++countW;
+
+            if (countW == 1)
+                std::cout << "Cosmic Ray Hierarchy Tier: " << LArMCParticleHelper::GetHierarchyTier(entry.first) << std::endl;
+            
+            for (const CaloHit *const pCaloHit : entry.second)
+            {            
+                if (pCaloHit->GetHitType() != TPC_VIEW_W)
+                    continue;
+
+                const CartesianVector &point(pCaloHit->GetPositionVector());
+                PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "CR", BLUE, 2);
+            }
+        }
+    }
+        
+    
+    for (auto &entry : validationInfo.GetAllMCParticleToHitsMap())
+    {
+        if (LArMCParticleHelper::IsDeltaRay(entry.first))
+        {
+            const unsigned int tier(LArMCParticleHelper::GetHierarchyTier(entry.first));
+
+            const MCParticleList &daughterMCParticleList = entry.first->GetDaughterList();
+            std::cout << "Number of child particles: " << daughterMCParticleList.size() << std::endl;
+
+            bool hasHits(false);
+            for (const CaloHit *const pCaloHit : entry.second)
+            {
+                if (pCaloHit->GetHitType() != TPC_VIEW_W)
+                    continue;
+
+                hasHits = true;
+
+                const CartesianVector &point(pCaloHit->GetPositionVector());
+
+                if (tier == 0)
+                {
+                    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "DR", BLUE, 2);
+                }
+                else if (tier == 1)
+                {
+                    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "DR", GREEN, 2);
+                }
+                else if (tier == 2)
+                {
+                    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "DR", RED, 2);
+                }
+                else if (tier == 3)
+                {
+                    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "DR", VIOLET, 2);
+                }
+                else if (tier == 4)
+                {
+                    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "DR", BLACK, 2);
+                }
+                else
+                {
+                    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "DR", PINK, 2);
+                }
+            }
+            
+            if(hasHits)
+            {
+                for (const MCParticle *const pMCParticle : daughterMCParticleList)
+                {
+                    auto jam(validationInfo.GetAllMCParticleToHitsMap().find(pMCParticle));
+
+                    if (jam != validationInfo.GetAllMCParticleToHitsMap().end())
+                    {
+                        for (const CaloHit *const pCaloHit : jam->second)
+                        {
+                            if (pCaloHit->GetHitType() != TPC_VIEW_W)
+                                continue;
+
+                            const CartesianVector &point(pCaloHit->GetPositionVector());
+                            PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "CHILD", BLUE, 2);
+                        }
+                    }
+                }
+
+                PandoraMonitoringApi::ViewEvent(this->GetPandora());
+            }
+        }
+    }
+
+    
+    
+    /*
     PfoList cosmicRays, deltaRays;
     for (const auto &entry : interpretedMCToPfoHitSharingMap)
     {
@@ -127,8 +398,7 @@ void DeltaRayEventValidationAlgorithm::FillValidationInfo(const MCParticleList *
         for (const CartesianVector &point : position)
             PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "DR", RED, 2);
     }    
-    
-    PandoraMonitoringApi::ViewEvent(this->GetPandora());
+    */
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
