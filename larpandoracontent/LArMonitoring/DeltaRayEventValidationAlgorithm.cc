@@ -143,20 +143,28 @@ void DeltaRayEventValidationAlgorithm::FillValidationInfo(const MCParticleList *
         PfoList nonMuonPfoList;
         LArDeltaRayHelper::RemoveMuonPfosFromList(pPfoList, unfoldedInterepretedMatchingMap, nonMuonPfoList);
 
-        //std::cout << "nonMuonPfoListSize: " << 
+        std::cout << "FROG" << std::endl;
 
         PfoList nonMuonLeadingPfoList;
         LArDeltaRayHelper::SelectNonMuonLeadingPfos(nonMuonPfoList, nonMuonLeadingPfoList);
+
+        std::cout << "DOG" << std::endl;        
         
         LArMCParticleHelper::PfoContributionMap pfoToHitsMap;
         LArMCParticleHelper::GetPfoToReconstructable2DHitsMap(nonMuonLeadingPfoList, validationInfo.GetAllMCParticleToHitsMap(), pfoToHitsMap, true);
 
+        std::cout << "JAM" << std::endl;
+
         validationInfo.SetPfoToHitsMap(pfoToHitsMap);
     }
 
+    std::cout << "JUICE" << std::endl;
+    
     LArMCParticleHelper::PfoToMCParticleHitSharingMap pfoToMCHitSharingMap;
     LArMCParticleHelper::MCParticleToPfoHitSharingMap mcToPfoHitSharingMap;
     LArMCParticleHelper::GetPfoMCParticleHitSharingMaps(validationInfo.GetPfoToHitsMap(), {validationInfo.GetAllMCParticleToHitsMap()}, pfoToMCHitSharingMap, mcToPfoHitSharingMap);
+
+    std::cout << "WINE" << std::endl;    
     
     validationInfo.SetMCToPfoHitSharingMap(mcToPfoHitSharingMap);
 
