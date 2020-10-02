@@ -139,7 +139,10 @@ void LArDeltaRayHelper::GetMCToLeadingDeltaRayMap(const MCParticleList *const pM
 
 void LArDeltaRayHelper::RemoveMuonPfosFromList(const PfoList *const pPfoList, const LArMCParticleHelper::MCParticleToPfoHitSharingMap &unfoldedInterepretedMatchingMap,
     PfoList &outputList)
-{    
+{
+
+    std::cout << "JANET" << std::endl;
+    
     MCParticleVector reconstructableMCParticles;
     for (auto &entry : unfoldedInterepretedMatchingMap)
         reconstructableMCParticles.push_back(entry.first);
@@ -157,7 +160,10 @@ void LArDeltaRayHelper::RemoveMuonPfosFromList(const PfoList *const pPfoList, co
         if (iter == unfoldedInterepretedMatchingMap.end())
             continue;
 
-        muonPfos.push_back(iter->second.front().first);
+        std::cout << "BLAH" << std::endl;
+        if (!iter->second.empty())
+            muonPfos.push_back(iter->second.front().first);
+        std::cout << "BLAH 2" << std::endl;
     }
 
     for (const ParticleFlowObject *const pPfo : *pPfoList)
