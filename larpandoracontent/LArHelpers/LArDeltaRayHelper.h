@@ -53,6 +53,12 @@ public:
 
     static void SelectReconstructableDeltaRays(const pandora::MCParticleList *pMCParticleList, const pandora::CaloHitList *pCaloHitList, const DeltaRayParameters &parameters,
         LArMCParticleHelper::MCContributionMap &selectedMCParticlesToHitsMap);
+
+    static void GetDeltaRayPfoMatchContamination(const pandora::MCParticle *const pLeadingDeltaRay, const pandora::CaloHitList &matchedPfoHitList,
+        pandora::CaloHitList &parentTrackHits, pandora::CaloHitList &otherTrackHits, pandora::CaloHitList &otherShowerHits, pandora::CaloHitList &nonCRHits);
+
+    static void GetMuonDeltaRayContaminationContribution(const pandora::CaloHitList &cosmicRayPfoHitList, const pandora::CaloHitList &deltaRayMCHitList,
+        pandora::CaloHitList &deltaRayHitsInParentCosmicRay);
     
  private:
     static void SelectTargetMCParticles(const pandora::MCParticleList *pMCParticleList, pandora::MCParticleVector &selectedParticles, const DeltaRayParameters &parameters);

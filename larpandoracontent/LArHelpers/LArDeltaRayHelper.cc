@@ -6,6 +6,8 @@
  *  $Log: $
  */
 
+#include "Helpers/MCParticleHelper.h"
+
 #include "larpandoracontent/LArHelpers/LArMCParticleHelper.h"
 #include "larpandoracontent/LArHelpers/LArDeltaRayHelper.h"
 
@@ -18,7 +20,7 @@ using namespace pandora;
 
 LArDeltaRayHelper::DeltaRayParameters::DeltaRayParameters() :
     LArMCParticleHelper::PrimaryParameters(),
-    m_maximumContributingTier(0)
+    m_maximumContributingTier(std::numeric_limits<unsigned int>::max())
 {
 }
 
@@ -140,9 +142,6 @@ void LArDeltaRayHelper::GetMCToLeadingDeltaRayMap(const MCParticleList *const pM
 void LArDeltaRayHelper::RemoveMuonPfosFromList(const PfoList *const pPfoList, const LArMCParticleHelper::MCParticleToPfoHitSharingMap &unfoldedInterepretedMatchingMap,
     PfoList &outputList)
 {
-
-    std::cout << "JANET" << std::endl;
-    
     MCParticleVector reconstructableMCParticles;
     for (auto &entry : unfoldedInterepretedMatchingMap)
         reconstructableMCParticles.push_back(entry.first);
@@ -157,13 +156,8 @@ void LArDeltaRayHelper::RemoveMuonPfosFromList(const PfoList *const pPfoList, co
 
         const auto iter(unfoldedInterepretedMatchingMap.find(pMCParticle));
 
-        if (iter == unfoldedInterepretedMatchingMap.end())
-            continue;
-
-        std::cout << "BLAH" << std::endl;
-        if (!iter->second.empty())
-            muonPfos.push_back(iter->second.front().first);
-        std::cout << "BLAH 2" << std::endl;
+        for (auto &matchedPfoHitsPair : iter->second)
+            muonPfos.push_back(matchedPfoHitsPair.first);
     }
 
     for (const ParticleFlowObject *const pPfo : *pPfoList)
@@ -228,6 +222,57 @@ void LArDeltaRayHelper::SelectReconstructableDeltaRays(const MCParticleList *pMC
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
+void LArDeltaRayHelper::GetDeltaRayPfoMatchContamination(const MCParticle *const pLeadingDeltaRay, const CaloHitList &matchedPfoHitList,
+    CaloHitList &parentTrackHits, CaloHitList &otherTrackHits, CaloHitList &otherShowerHits, CaloHitList &nonCRHits)
+{
+    const MCParticle *const pParentCosmicRay(LArMCParticleHelper::GetParentMCParticle(pLeadingDeltaRay));
+    
+    for (const CaloHit *const pCaloHit : matchedPfoHitList)
+    {
+        const MCParticle *const pHitParticle(MCParticleHelper::GetMainMCParticle(pCaloHit));
+        const MCParticle *const pHitParticleParent(LArMCParticleHelper::GetParentMCParticle(pHitParticle));
+
+        if (!LArMCParticleHelper::IsCosmicRay(pHitParticleParent))
+        {
+            nonCRHits.push_back(pCaloHit);
+            continue;
+        }
+        
+        if (LArMCParticleHelper::IsCosmicRay(pHitParticle))
+        {
+            if (pHitParticle == pParentCosmicRay)
+            {
+                parentTrackHits.push_back(pCaloHit);
+            }
+            else
+            {
+                otherTrackHits.push_back(pCaloHit);
+            }
+        }
+        else
+        {
+            const MCParticle *const pHitParticleLeadingIonisation(LArDeltaRayHelper::GetLeadingDeltaRay(pHitParticle));
+
+            if (pHitParticleLeadingIonisation != pLeadingDeltaRay)
+                otherShowerHits.push_back(pCaloHit);
+        }
+    }
+} 
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void LArDeltaRayHelper::GetMuonDeltaRayContaminationContribution(const CaloHitList &cosmicRayPfoHitList, const CaloHitList &deltaRayMCHitList,
+    CaloHitList &deltaRayHitsInParentCosmicRay)
+{
+    for (const CaloHit *const pCaloHit : cosmicRayPfoHitList)
+    {
+        if (std::find(deltaRayMCHitList.begin(), deltaRayMCHitList.end(), pCaloHit) != deltaRayMCHitList.end())
+            deltaRayHitsInParentCosmicRay.push_back(pCaloHit);
+    }
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
 void LArDeltaRayHelper::SelectTargetMCParticles(const MCParticleList *pMCParticleList, MCParticleVector &selectedParticles, const DeltaRayParameters &parameters)
 {
     if (parameters.m_foldBackHierarchy)
@@ -254,5 +299,5 @@ void LArDeltaRayHelper::SelectTargetMCParticles(const MCParticleList *pMCParticl
 
     std::sort(selectedParticles.begin(), selectedParticles.end(), LArMCParticleHelper::SortByMomentum);
 }
-
+    
 } // namespace lar_content

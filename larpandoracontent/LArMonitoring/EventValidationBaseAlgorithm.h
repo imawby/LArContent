@@ -52,6 +52,13 @@ protected:
         const LArMCParticleHelper::MCContributionMap &GetAllMCParticleToHitsMap() const;
 
         /**
+         *  @brief  Get the unfolded all mc particle to hits map
+         *
+         *  @return the unfolded all mc particle to hits map
+         */
+        const LArMCParticleHelper::MCContributionMap &GetUnfoldedAllMCParticleToHitsMap() const;           
+
+        /**
          *  @brief  Get the target mc particle to hits map
          *
          *  @return the target mc particle to hits map
@@ -59,11 +66,25 @@ protected:
         const LArMCParticleHelper::MCContributionMap &GetTargetMCParticleToHitsMap() const;
 
         /**
+         *  @brief  Get the unfolded target mc particle to hits map
+         *
+         *  @return the unfolded target mc particle to hits map
+         */
+        const LArMCParticleHelper::MCContributionMap &GetUnfoldedTargetMCParticleToHitsMap() const;        
+
+        /**
          *  @brief  Get the pfo to hits map
          *
          *  @return the pfo to hits map
          */
         const LArMCParticleHelper::PfoContributionMap &GetPfoToHitsMap() const;
+
+        /**
+         *  @brief  Get the unfolded pfo to hits map
+         *
+         *  @return the unfolded pfo to hits map
+         */
+        const LArMCParticleHelper::PfoContributionMap &GetUnfoldedPfoToHitsMap() const;        
 
         /**
          *  @brief  Get the mc to pfo hit sharing map
@@ -80,11 +101,25 @@ protected:
         const LArMCParticleHelper::MCParticleToPfoHitSharingMap &GetInterpretedMCToPfoHitSharingMap() const;
 
         /**
+         *  @brief  Get the unfolded interpreted mc to pfo hit sharing map
+         *
+         *  @return the unfolded interpreted mc to pfo hit sharing map
+         */
+        const LArMCParticleHelper::MCParticleToPfoHitSharingMap &GetUnfoldedInterpretedMCToPfoHitSharingMap() const;        
+
+        /**
          *  @brief  Set the all mc particle to hits map
          *
          *  @param  allMCParticleToHitsMap the all mc particle to hits map
          */
         void SetAllMCParticleToHitsMap(const LArMCParticleHelper::MCContributionMap &allMCParticleToHitsMap);
+
+        /**
+         *  @brief  Set the unfolded all mc particle to hits map
+         *
+         *  @param  unfoldedAllMCParticleToHitsMap the unfolded all mc particle to hits map
+         */
+        void SetUnfoldedAllMCParticleToHitsMap(const LArMCParticleHelper::MCContributionMap &unfoldedAllMCParticleToHitsMap);        
 
         /**
          *  @brief  Set the target mc particle to hits map
@@ -94,11 +129,25 @@ protected:
         void SetTargetMCParticleToHitsMap(const LArMCParticleHelper::MCContributionMap &targetMCParticleToHitsMap);
 
         /**
+         *  @brief  Set the unfolded target mc particle to hits map
+         *
+         *  @param  unfoldedTargetMCParticleToHitsMap the unfolded target mc particle to hits map
+         */
+        void SetUnfoldedTargetMCParticleToHitsMap(const LArMCParticleHelper::MCContributionMap &unfoldedTargetMCParticleToHitsMap);        
+
+        /**
          *  @brief  Set the pfo to hits map
          *
          *  @param  pfoToHitsMap the pfo to hits map
          */
         void SetPfoToHitsMap(const LArMCParticleHelper::PfoContributionMap &pfoToHitsMap);
+
+        /**
+         *  @brief  Set the unfolded pfo to hits map
+         *
+         *  @param  unfoldedPfoToHitsMap the unfolded pfo to hits map
+         */
+        void SetUnfoldedPfoToHitsMap(const LArMCParticleHelper::PfoContributionMap &unfoldedPfoToHitsMap);        
 
         /**
          *  @brief  Set the mc to pfo hit sharing map
@@ -114,12 +163,23 @@ protected:
          */
         void SetInterpretedMCToPfoHitSharingMap(const LArMCParticleHelper::MCParticleToPfoHitSharingMap &interpretedMCToPfoHitSharingMap);
 
+        /**
+         *  @brief  Set the unfolded interpreted mc to pfo hit sharing map
+         *
+         *  @param  unfoldedInterpretedMCToPfoHitSharingMap the unfolded interpreted mc to pfo hit sharing map
+         */
+        void SetUnfoldedInterpretedMCToPfoHitSharingMap(const LArMCParticleHelper::MCParticleToPfoHitSharingMap &unfoldedInterpretedMCToPfoHitSharingMap);        
+
     private:
-        LArMCParticleHelper::MCContributionMap              m_allMCParticleToHitsMap;               ///< The all mc particle to hits map
-        LArMCParticleHelper::MCContributionMap              m_targetMCParticleToHitsMap;            ///< The target mc particle to hits map
-        LArMCParticleHelper::PfoContributionMap             m_pfoToHitsMap;                         ///< The pfo to hits map
-        LArMCParticleHelper::MCParticleToPfoHitSharingMap   m_mcToPfoHitSharingMap;                 ///< The mc to pfo hit sharing map
-        LArMCParticleHelper::MCParticleToPfoHitSharingMap   m_interpretedMCToPfoHitSharingMap;      ///< The interpreted mc to pfo hit sharing map
+        LArMCParticleHelper::MCContributionMap              m_allMCParticleToHitsMap;                       ///< The all mc particle to hits map
+        LArMCParticleHelper::MCContributionMap              m_unfoldedAllMCParticleToHitsMap;               ///< The all mc particle to hits map
+        LArMCParticleHelper::MCContributionMap              m_targetMCParticleToHitsMap;                    ///< The target mc particle to hits map
+        LArMCParticleHelper::MCContributionMap              m_unfoldedTargetMCParticleToHitsMap;            ///< The target mc particle to hits map        
+        LArMCParticleHelper::PfoContributionMap             m_pfoToHitsMap;                                 ///< The pfo to hits map
+        LArMCParticleHelper::PfoContributionMap             m_unfoldedPfoToHitsMap;                         ///< The pfo to hits map
+        LArMCParticleHelper::MCParticleToPfoHitSharingMap   m_mcToPfoHitSharingMap;                         ///< The mc to pfo hit sharing map
+        LArMCParticleHelper::MCParticleToPfoHitSharingMap   m_interpretedMCToPfoHitSharingMap;              ///< The interpreted mc to pfo hit sharing map
+        LArMCParticleHelper::MCParticleToPfoHitSharingMap   m_unfoldedInterpretedMCToPfoHitSharingMap;      ///< The interpreted mc to pfo hit sharing map
     };
 
     /**
@@ -245,6 +305,13 @@ inline const LArMCParticleHelper::MCContributionMap &EventValidationBaseAlgorith
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
+inline const LArMCParticleHelper::MCContributionMap &EventValidationBaseAlgorithm::ValidationInfo::GetUnfoldedAllMCParticleToHitsMap() const
+{
+    return m_unfoldedAllMCParticleToHitsMap;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
 inline const LArMCParticleHelper::MCContributionMap &EventValidationBaseAlgorithm::ValidationInfo::GetTargetMCParticleToHitsMap() const
 {
     return m_targetMCParticleToHitsMap;
@@ -252,9 +319,23 @@ inline const LArMCParticleHelper::MCContributionMap &EventValidationBaseAlgorith
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
+inline const LArMCParticleHelper::MCContributionMap &EventValidationBaseAlgorithm::ValidationInfo::GetUnfoldedTargetMCParticleToHitsMap() const
+{
+    return m_unfoldedTargetMCParticleToHitsMap;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
 inline const LArMCParticleHelper::PfoContributionMap &EventValidationBaseAlgorithm::ValidationInfo::GetPfoToHitsMap() const
 {
     return m_pfoToHitsMap;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+inline const LArMCParticleHelper::PfoContributionMap &EventValidationBaseAlgorithm::ValidationInfo::GetUnfoldedPfoToHitsMap() const
+{
+    return m_unfoldedPfoToHitsMap;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -273,9 +354,23 @@ inline const LArMCParticleHelper::MCParticleToPfoHitSharingMap &EventValidationB
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
+inline const LArMCParticleHelper::MCParticleToPfoHitSharingMap &EventValidationBaseAlgorithm::ValidationInfo::GetUnfoldedInterpretedMCToPfoHitSharingMap() const
+{
+    return m_unfoldedInterpretedMCToPfoHitSharingMap;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
 inline void EventValidationBaseAlgorithm::ValidationInfo::SetAllMCParticleToHitsMap(const LArMCParticleHelper::MCContributionMap &allMCParticleToHitsMap)
 {
     m_allMCParticleToHitsMap = allMCParticleToHitsMap;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+inline void EventValidationBaseAlgorithm::ValidationInfo::SetUnfoldedAllMCParticleToHitsMap(const LArMCParticleHelper::MCContributionMap &unfoldedAllMCParticleToHitsMap)
+{
+    m_unfoldedAllMCParticleToHitsMap = unfoldedAllMCParticleToHitsMap;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -287,9 +382,23 @@ inline void EventValidationBaseAlgorithm::ValidationInfo::SetTargetMCParticleToH
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
+inline void EventValidationBaseAlgorithm::ValidationInfo::SetUnfoldedTargetMCParticleToHitsMap(const LArMCParticleHelper::MCContributionMap &unfoldedTargetMCParticleToHitsMap)
+{
+    m_unfoldedTargetMCParticleToHitsMap = unfoldedTargetMCParticleToHitsMap;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
 inline void EventValidationBaseAlgorithm::ValidationInfo::SetPfoToHitsMap(const LArMCParticleHelper::PfoContributionMap &pfoToHitsMap)
 {
     m_pfoToHitsMap = pfoToHitsMap;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+inline void EventValidationBaseAlgorithm::ValidationInfo::SetUnfoldedPfoToHitsMap(const LArMCParticleHelper::PfoContributionMap &unfoldedPfoToHitsMap)
+{
+    m_unfoldedPfoToHitsMap = unfoldedPfoToHitsMap;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -304,6 +413,13 @@ inline void EventValidationBaseAlgorithm::ValidationInfo::SetMCToPfoHitSharingMa
 inline void EventValidationBaseAlgorithm::ValidationInfo::SetInterpretedMCToPfoHitSharingMap(const LArMCParticleHelper::MCParticleToPfoHitSharingMap &interpretedMCToPfoHitSharingMap)
 {
     m_interpretedMCToPfoHitSharingMap = interpretedMCToPfoHitSharingMap;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+inline void EventValidationBaseAlgorithm::ValidationInfo::SetUnfoldedInterpretedMCToPfoHitSharingMap(const LArMCParticleHelper::MCParticleToPfoHitSharingMap &unfoldedInterpretedMCToPfoHitSharingMap)
+{
+    m_unfoldedInterpretedMCToPfoHitSharingMap = unfoldedInterpretedMCToPfoHitSharingMap;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------

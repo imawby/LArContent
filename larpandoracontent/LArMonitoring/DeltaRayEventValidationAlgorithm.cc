@@ -40,131 +40,45 @@ void DeltaRayEventValidationAlgorithm::FillValidationInfo(const MCParticleList *
 {
     PandoraMonitoringApi::SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_DEFAULT, -1.f, 1.f, 1.f);
 
+    std::cout << "MCParticle list size: " << pMCParticleList->size() << std::endl;
+
+    // First get unfolded matching
+    this->SetUnfoldedMatching(pMCParticleList, pCaloHitList, pPfoList, validationInfo);
+    
     if (pMCParticleList && pCaloHitList)
     {
         LArMCParticleHelper::MCContributionMap targetMCParticleToHitsMap;
         LArDeltaRayHelper::SelectReconstructableDeltaRays(pMCParticleList, pCaloHitList, m_deltaRayParameters, targetMCParticleToHitsMap);
-        /*
+
         LArDeltaRayHelper::DeltaRayParameters deltaRayParameters(m_deltaRayParameters);
         deltaRayParameters.m_minPrimaryGoodHits = 0;
         deltaRayParameters.m_minHitsForGoodView = 0;
         deltaRayParameters.m_minHitSharingFraction = 0.f;
+        deltaRayParameters.m_maximumContributingTier = std::numeric_limits<unsigned int>::max();
         LArMCParticleHelper::MCContributionMap allMCParticleToHitsMap;
         LArDeltaRayHelper::SelectReconstructableDeltaRays(pMCParticleList, pCaloHitList, deltaRayParameters, allMCParticleToHitsMap);
-        */
-
-        LArMCParticleHelper::PrimaryParameters parameters(m_primaryParameters);
-        parameters.m_minPrimaryGoodHits = 0;
-        parameters.m_minHitsForGoodView = 0;
-        parameters.m_minHitSharingFraction = 0.f;
-        parameters.m_foldBackHierarchy = false;
-        LArMCParticleHelper::MCContributionMap allMCParticleToHitsMap;
-        LArMCParticleHelper::SelectReconstructableMCParticles(pMCParticleList, pCaloHitList, parameters, LArMCParticleHelper::IsCosmicRay, allMCParticleToHitsMap);
-
         
         validationInfo.SetTargetMCParticleToHitsMap(targetMCParticleToHitsMap);
         validationInfo.SetAllMCParticleToHitsMap(allMCParticleToHitsMap);
     }
-
-    for (auto &entry : validationInfo.GetTargetMCParticleToHitsMap())
-    {
-        std::cout << "isDeltaRay: " << LArDeltaRayHelper::IsDeltaRay(entry.first) << std::endl;
-        const unsigned int tier(LArMCParticleHelper::GetHierarchyTier(entry.first));
-
-        const MCParticleList &daughterMCParticleList = entry.first->GetDaughterList();
-        std::cout << "Number of child particles: " << daughterMCParticleList.size() << std::endl;
-
-        bool hasHits(false);
-        for (const CaloHit *const pCaloHit : entry.second)
-        {
-            if (pCaloHit->GetHitType() != TPC_VIEW_U)
-                continue;
-
-            hasHits = true;
-
-            const CartesianVector &point(pCaloHit->GetPositionVector());
-
-            if (tier == 0)
-            {
-                PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "DR", BLUE, 2);
-            }
-            else if (tier == 1)
-            {
-                PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "DR", GREEN, 2);
-            }
-            else if (tier == 2)
-            {
-                PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "DR", RED, 2);
-            }
-            else if (tier == 3)
-            {
-                PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "DR", VIOLET, 2);
-            }
-            else if (tier == 4)
-            {
-                PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "DR", BLACK, 2);
-            }
-            else
-            {
-                PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "DR", PINK, 2);
-            }
-        }
-            
-        if(hasHits)
-        {
-            for (const MCParticle *const pMCParticle : daughterMCParticleList)
-            {
-                auto jam(validationInfo.GetAllMCParticleToHitsMap().find(pMCParticle));
-
-                if (jam != validationInfo.GetAllMCParticleToHitsMap().end())
-                {
-                    for (const CaloHit *const pCaloHit : jam->second)
-                     {
-                         if (pCaloHit->GetHitType() != TPC_VIEW_U)
-                             continue;
-
-                         const CartesianVector &point(pCaloHit->GetPositionVector());
-                         PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &point, "CHILD", BLUE, 2);
-                     }
-                }
-            }
-
-            PandoraMonitoringApi::ViewEvent(this->GetPandora());
-        }
-    }
-    
     
     if (pPfoList)
-    {
-        // First get unfolded matching
-        LArMCParticleHelper::MCParticleToPfoHitSharingMap unfoldedInterepretedMatchingMap;
-        this->GetUnfoldedInterpretedMatching(pMCParticleList, pCaloHitList, pPfoList, unfoldedInterepretedMatchingMap);
-
+    {        
         PfoList nonMuonPfoList;
-        LArDeltaRayHelper::RemoveMuonPfosFromList(pPfoList, unfoldedInterepretedMatchingMap, nonMuonPfoList);
-
-        std::cout << "FROG" << std::endl;
-
+        LArDeltaRayHelper::RemoveMuonPfosFromList(pPfoList, validationInfo.GetUnfoldedInterpretedMCToPfoHitSharingMap(), nonMuonPfoList);
+        
         PfoList nonMuonLeadingPfoList;
         LArDeltaRayHelper::SelectNonMuonLeadingPfos(nonMuonPfoList, nonMuonLeadingPfoList);
-
-        std::cout << "DOG" << std::endl;        
-        
+           
         LArMCParticleHelper::PfoContributionMap pfoToHitsMap;
         LArMCParticleHelper::GetPfoToReconstructable2DHitsMap(nonMuonLeadingPfoList, validationInfo.GetAllMCParticleToHitsMap(), pfoToHitsMap, true);
 
-        std::cout << "JAM" << std::endl;
-
         validationInfo.SetPfoToHitsMap(pfoToHitsMap);
     }
-
-    std::cout << "JUICE" << std::endl;
     
     LArMCParticleHelper::PfoToMCParticleHitSharingMap pfoToMCHitSharingMap;
     LArMCParticleHelper::MCParticleToPfoHitSharingMap mcToPfoHitSharingMap;
     LArMCParticleHelper::GetPfoMCParticleHitSharingMaps(validationInfo.GetPfoToHitsMap(), {validationInfo.GetAllMCParticleToHitsMap()}, pfoToMCHitSharingMap, mcToPfoHitSharingMap);
-
-    std::cout << "WINE" << std::endl;    
     
     validationInfo.SetMCToPfoHitSharingMap(mcToPfoHitSharingMap);
 
@@ -181,14 +95,439 @@ void DeltaRayEventValidationAlgorithm::FillValidationInfo(const MCParticleList *
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
+void DeltaRayEventValidationAlgorithm::ProcessOutput(const ValidationInfo &validationInfo, const bool /*useInterpretedMatching*/, const bool /*printToScreen*/, const bool /*fillTree*/) const
+{
+    // Unfolded hit ownership/sharing maps for cosmic ray muons and their descendents
+    const LArMCParticleHelper::MCContributionMap &unfoldedTargetMCToHitsMap(validationInfo.GetUnfoldedTargetMCParticleToHitsMap());
+    const LArMCParticleHelper::PfoContributionMap &unfoldedPfoToHitsMap(validationInfo.GetUnfoldedPfoToHitsMap());
+    const LArMCParticleHelper::MCParticleToPfoHitSharingMap &unfoldedMCToPfoHitSharingMap(validationInfo.GetUnfoldedInterpretedMCToPfoHitSharingMap());
+
+    // Folded hit ownership/sharing maps for leading muon ionisation particles
+    const LArMCParticleHelper::MCContributionMap &foldedAllMCToHitsMap(validationInfo.GetAllMCParticleToHitsMap());
+    const LArMCParticleHelper::MCContributionMap &foldedTargetMCToHitsMap(validationInfo.GetTargetMCParticleToHitsMap());
+    const LArMCParticleHelper::PfoContributionMap &foldedPfoToHitsMap(validationInfo.GetPfoToHitsMap());
+    const LArMCParticleHelper::MCParticleToPfoHitSharingMap &foldedMCToPfoHitSharingMap(validationInfo.GetInterpretedMCToPfoHitSharingMap());
+
+    // Consider only delta rays from reconstructable CR muons
+    MCParticleVector mcCRVector;
+    for (auto &entry : unfoldedTargetMCToHitsMap)
+    {
+        if (LArMCParticleHelper::IsCosmicRay(entry.first))
+            mcCRVector.push_back(entry.first);
+    }
+    std::sort(mcCRVector.begin(), mcCRVector.end(), LArMCParticleHelper::SortByMomentum);
+
+    // Process matches
+    std::stringstream stringStream;
+    for (const MCParticle *const pCosmicRay : mcCRVector)
+    {
+        // Cosmic ray parameters
+        int nReconstructableChildDRs(0);
+        float mcE_CR, mcPX_CR, mcPY_CR, mcPZ_CR;
+        int nMCHitsTotal_CR, nMCHitsU_CR, nMCHitsV_CR, nMCHitsW_CR;
+        float mcVertexX_CR, mcVertexY_CR, mcVertexZ_CR, mcEndX_CR, mcEndY_CR, mcEndZ_CR;
+        int nCorrectChildDRs(0);
+    
+        // Leading delta ray parameters
+        FloatVector mcE_DR, mcPX_DR, mcPY_DR, mcPZ_DR; 
+        IntVector nMCHitsTotal_DR, nMCHitsU_DR, nMCHitsV_DR, nMCHitsW_DR;
+        FloatVector mcVertexX_DR, mcVertexY_DR, mcVertexZ_DR, mcEndX_DR, mcEndY_DR, mcEndZ_DR;
+        IntVector nAboveThresholdMatches_DR, isCorrect_DR, isCorrectParentLink_DR;
+        FloatVector bestMatchNHitsTotal_DR, bestMatchNHitsU_DR, bestMatchNHitsV_DR, bestMatchNHitsW_DR;
+        FloatVector bestMatchNSharedHitsTotal_DR, bestMatchNSharedHitsU_DR, bestMatchNSharedHitsV_DR, bestMatchNSharedHitsW_DR;
+        FloatVector bestMatchNParentTrackHitsTotal_DR, bestMatchNParentTrackHitsU_DR, bestMatchNParentTrackHitsV_DR, bestMatchNParentTrackHitsW_DR;
+        FloatVector bestMatchNOtherTrackHitsTotal_DR, bestMatchNOtherTrackHitsU_DR, bestMatchNOtherTrackHitsV_DR, bestMatchNOtherTrackHitsW_DR;
+        FloatVector bestMatchNOtherShowerHitsTotal_DR, bestMatchNOtherShowerHitsU_DR, bestMatchNOtherShowerHitsV_DR, bestMatchNOtherShowerHitsW_DR;
+        FloatVector bestMatchNNonCRHitsTotal_DR, bestMatchNNonCRHitsU_DR, bestMatchNNonCRHitsV_DR, bestMatchNNonCRHitsW_DR;
+        FloatVector totalDRHitsInBestMatchParentCR_DR, uDRHitsInBestMatchParentCR_DR, vDRHitsInBestMatchParentCR_DR, wDRHitsInBestMatchParentCR_DR;
+
+        // Move on if cosmic ray has not been reconstructed
+        if (unfoldedMCToPfoHitSharingMap.at(pCosmicRay).empty())
+            continue;
+
+        // Obtain reconstructable leading delta ray child particles (ISOBEL - CHECK THEIR HIERARCHY)
+        MCParticleVector childLeadingDeltaRays;
+        for (const MCParticle *const pMuonChild : pCosmicRay->GetDaughterList())
+        {
+            if (!LArDeltaRayHelper::IsDeltaRay(pMuonChild))
+                continue;
+
+            LArMCParticleHelper::MCContributionMap::const_iterator iter(foldedTargetMCToHitsMap.find(pMuonChild));
+            if (iter == foldedTargetMCToHitsMap.end())
+                continue;
+
+            childLeadingDeltaRays.push_back(pMuonChild);
+        }
+
+        // Move on if cosmic ray has no leading delta ray child particles
+        if (childLeadingDeltaRays.empty())
+            continue;
+        
+        std::sort(childLeadingDeltaRays.begin(), childLeadingDeltaRays.end(), LArMCParticleHelper::SortByMomentum);
+
+        // Pull cosmic ray data
+        const CaloHitList &cosmicRayHitList(validationInfo.GetUnfoldedAllMCParticleToHitsMap().at(pCosmicRay));
+        
+        mcE_CR = pCosmicRay->GetEnergy();
+        mcPX_CR = pCosmicRay->GetMomentum().GetX();
+        mcPY_CR = pCosmicRay->GetMomentum().GetY();
+        mcPZ_CR = pCosmicRay->GetMomentum().GetZ();        
+        mcVertexX_CR = pCosmicRay->GetVertex().GetX();
+        mcVertexY_CR = pCosmicRay->GetVertex().GetY();
+        mcVertexZ_CR = pCosmicRay->GetVertex().GetZ();                
+        mcEndX_CR = pCosmicRay->GetEndpoint().GetX();
+        mcEndY_CR = pCosmicRay->GetEndpoint().GetY();
+        mcEndZ_CR = pCosmicRay->GetEndpoint().GetZ();
+        nMCHitsTotal_CR = cosmicRayHitList.size();
+        nMCHitsU_CR = LArMonitoringHelper::CountHitsByType(TPC_VIEW_U, cosmicRayHitList);
+        nMCHitsV_CR = LArMonitoringHelper::CountHitsByType(TPC_VIEW_V, cosmicRayHitList);        
+        nMCHitsW_CR = LArMonitoringHelper::CountHitsByType(TPC_VIEW_W, cosmicRayHitList);
+        nReconstructableChildDRs = childLeadingDeltaRays.size();
+        
+        stringStream << "\033[34m" << "(Parent CR) " << "\033[0m" 
+            << "Energy " << pCosmicRay->GetEnergy()
+            << ", Dist. " << (pCosmicRay->GetEndpoint() - pCosmicRay->GetVertex()).GetMagnitude()
+            << ", nMCHits " << cosmicRayHitList.size()
+            << " (" << LArMonitoringHelper::CountHitsByType(TPC_VIEW_U, cosmicRayHitList)
+            << ", " << LArMonitoringHelper::CountHitsByType(TPC_VIEW_V, cosmicRayHitList)
+            << ", " << LArMonitoringHelper::CountHitsByType(TPC_VIEW_W, cosmicRayHitList) << ")"
+            << ", nReconstructableDRs " << nReconstructableChildDRs << std::endl;
+
+        ////////////////////////////////////////
+        
+        std::cout << "All MC Cosmic Ray Hits" << std::endl;
+        for (const CaloHit *const pCaloHit : cosmicRayHitList)
+        {
+            const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
+            if (pCaloHit->GetHitType() == TPC_VIEW_U)
+                PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, "MC_CR_U", BLUE, 2);
+        }
+        PandoraMonitoringApi::ViewEvent(this->GetPandora());
+
+        for (const CaloHit *const pCaloHit : cosmicRayHitList)
+        {
+            const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
+            if (pCaloHit->GetHitType() == TPC_VIEW_V)
+                PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, "MC_CR_V", BLUE, 2);
+        }
+        PandoraMonitoringApi::ViewEvent(this->GetPandora());
+
+        for (const CaloHit *const pCaloHit : cosmicRayHitList)
+        {
+            const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
+            if (pCaloHit->GetHitType() == TPC_VIEW_W)
+                PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, "MC_CR_W", BLUE, 2);
+        }
+        PandoraMonitoringApi::ViewEvent(this->GetPandora());
+
+
+        CartesianVector endpoint1(pCosmicRay->GetVertex()), endpoint2(pCosmicRay->GetEndpoint());
+        PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &endpoint1, "muon endpoint ", RED, 2);
+        PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &endpoint2, "muon endpoint 2", RED, 2);
+        PandoraMonitoringApi::ViewEvent(this->GetPandora());
+        ////////////////////////////////////////        
+        
+         // Pull delta ray data 
+        for (const MCParticle *const pLeadingDeltaRay : childLeadingDeltaRays)
+        {
+            // Write in MC info for the delta ray
+            const CaloHitList &deltaRayHitList(foldedAllMCToHitsMap.at(pLeadingDeltaRay));
+            
+            mcE_DR.push_back(pCosmicRay->GetEnergy());
+            mcPX_DR.push_back(pCosmicRay->GetMomentum().GetX());
+            mcPY_DR.push_back(pCosmicRay->GetMomentum().GetY());
+            mcPZ_DR.push_back(pCosmicRay->GetMomentum().GetZ());
+            mcVertexX_DR.push_back(pCosmicRay->GetVertex().GetX());
+            mcVertexY_DR.push_back(pCosmicRay->GetVertex().GetY());
+            mcVertexZ_DR.push_back(pCosmicRay->GetVertex().GetZ());        
+            mcEndX_DR.push_back(pCosmicRay->GetEndpoint().GetX());
+            mcEndY_DR.push_back(pCosmicRay->GetEndpoint().GetY());
+            mcEndZ_DR.push_back(pCosmicRay->GetEndpoint().GetZ());   
+            nMCHitsTotal_DR.push_back(cosmicRayHitList.size());
+            nMCHitsU_DR.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_U, cosmicRayHitList));
+            nMCHitsV_DR.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_V, cosmicRayHitList));   
+            nMCHitsW_DR.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_W, cosmicRayHitList));
+
+            stringStream << "\033[33m"  << "(Child DR)  " << "\033[0m"
+                << "Energy " << pLeadingDeltaRay->GetEnergy()
+                << ", Dist. " << (pLeadingDeltaRay->GetEndpoint() - pLeadingDeltaRay->GetVertex()).GetMagnitude()
+                << ", nMCHits " << deltaRayHitList.size()
+                << " (" << LArMonitoringHelper::CountHitsByType(TPC_VIEW_U, deltaRayHitList)
+                << ", " << LArMonitoringHelper::CountHitsByType(TPC_VIEW_V, deltaRayHitList)
+                 << ", " << LArMonitoringHelper::CountHitsByType(TPC_VIEW_W, deltaRayHitList) << ")" << std::endl;
+
+            ////////////////////////////////////////
+            /*
+            std::cout << "All MC Delta Ray Hits" << std::endl;
+            for (const CaloHit *const pCaloHit : deltaRayHitList)
+            {
+                const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
+                if (pCaloHit->GetHitType() == TPC_VIEW_U)
+                    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, "MC_DR_U", RED, 2);
+            }
+            PandoraMonitoringApi::ViewEvent(this->GetPandora());
+
+            for (const CaloHit *const pCaloHit : deltaRayHitList)
+            {
+                const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
+                if (pCaloHit->GetHitType() == TPC_VIEW_V)
+                    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, "MC_DR_V", RED, 2);
+            }
+            PandoraMonitoringApi::ViewEvent(this->GetPandora());
+
+            for (const CaloHit *const pCaloHit : deltaRayHitList)
+            {
+                const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
+                if (pCaloHit->GetHitType() == TPC_VIEW_W)
+                    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, "MC_DR_W", RED, 2);
+            }
+            PandoraMonitoringApi::ViewEvent(this->GetPandora());
+            */
+            ////////////////////////////////////////             
+
+            // Look at matches
+            int nMatches(0);
+            int nAboveThresholdMatches(0);
+            bool isBestMatchMatchedToCorrectCosmicRay(false);
+            for (const LArMCParticleHelper::PfoCaloHitListPair &pfoToSharedHits : foldedMCToPfoHitSharingMap.at(pLeadingDeltaRay))
+            {
+                const ParticleFlowObject *const pMatchedPfo(pfoToSharedHits.first);
+                const CaloHitList &pfoHitList(foldedPfoToHitsMap.at(pMatchedPfo));
+                const CaloHitList &sharedHitList(pfoToSharedHits.second);
+
+                ////////////////////////////////////////
+                /*
+                std::cout << "Pfo Delta Ray Hits" << std::endl;
+                for (const CaloHit *const pCaloHit : pfoHitList)
+                {
+                    const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
+                    if (pCaloHit->GetHitType() == TPC_VIEW_U)
+                        PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, "PFO_DR_U", VIOLET, 2);
+                }
+                PandoraMonitoringApi::ViewEvent(this->GetPandora());
+
+                for (const CaloHit *const pCaloHit : pfoHitList)
+                {
+                    const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
+                    if (pCaloHit->GetHitType() == TPC_VIEW_V)
+                        PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, "PFO_DR_V", VIOLET, 2);
+                }
+                PandoraMonitoringApi::ViewEvent(this->GetPandora());
+
+                for (const CaloHit *const pCaloHit : pfoHitList)
+                {
+                    const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
+                    if (pCaloHit->GetHitType() == TPC_VIEW_W)
+                        PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, "PFO_DR_W", VIOLET, 2);
+                }
+                PandoraMonitoringApi::ViewEvent(this->GetPandora());
+                */
+                ////////////////////////////////////////   
+
+                const bool isGoodMatch(this->IsGoodMatch(deltaRayHitList, pfoHitList, sharedHitList));
+
+                CaloHitList parentTrackHits, otherTrackHits, otherShowerHits, nonCRHits;
+                LArDeltaRayHelper::GetDeltaRayPfoMatchContamination(pLeadingDeltaRay, pfoHitList, parentTrackHits, otherTrackHits, otherShowerHits, nonCRHits);
+
+                // Check whether the reconstructed pfo has the correct parent-child link
+                bool isMatchedToCorrectCosmicRay(false);
+                const ParticleFlowObject *const pParentPfo(LArPfoHelper::GetParentPfo(pMatchedPfo));
+
+                for (LArMCParticleHelper::PfoToSharedHitsVector::const_iterator cosmicRayMatchedPfoPair = unfoldedMCToPfoHitSharingMap.at(pCosmicRay).begin();
+                    cosmicRayMatchedPfoPair != unfoldedMCToPfoHitSharingMap.at(pCosmicRay).end(); ++cosmicRayMatchedPfoPair)
+                {
+                    if (cosmicRayMatchedPfoPair->first == pParentPfo)
+                    {
+                        isMatchedToCorrectCosmicRay = true;
+                        break;
+                    }
+                }
+
+                ////////////////////////////////////////
+                /*
+                if (pParentPfo != pMatchedPfo)
+                {
+                    std::cout << "Pfo Parent Cosmic Ray Hits" << std::endl;
+                    const CaloHitList &parentCRHits(unfoldedPfoToHitsMap.at(pParentPfo));
+                    
+                    for (const CaloHit *const pCaloHit : parentCRHits)
+                    {   
+                        const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
+                        if (pCaloHit->GetHitType() == TPC_VIEW_U)
+                            PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, "PFO_CR_U", DARKGREEN, 2);
+                    }
+                    PandoraMonitoringApi::ViewEvent(this->GetPandora());
+
+                    for (const CaloHit *const pCaloHit : parentCRHits)
+                    {
+                        const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
+                        if (pCaloHit->GetHitType() == TPC_VIEW_V)
+                            PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, "PFO_CR_V", DARKGREEN, 2);
+                    }
+                    PandoraMonitoringApi::ViewEvent(this->GetPandora());
+
+                    for (const CaloHit *const pCaloHit : parentCRHits)
+                    {
+                        const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
+                        if (pCaloHit->GetHitType() == TPC_VIEW_W)
+                            PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, "PFO_CR_W", DARKGREEN, 2);
+                    }
+                    PandoraMonitoringApi::ViewEvent(this->GetPandora());
+                }
+                else
+                {
+                    std::cout << "Pfo does not have a parent pfo" << std::endl;
+                }
+                */
+                ////////////////////////////////////////                       
+
+                CaloHitList deltaRayHitsInParentCosmicRay;
+                if (pParentPfo != pMatchedPfo)
+                    LArDeltaRayHelper::GetMuonDeltaRayContaminationContribution(unfoldedPfoToHitsMap.at(pParentPfo), foldedAllMCToHitsMap.at(pLeadingDeltaRay), deltaRayHitsInParentCosmicRay);
+                
+                if (0 == nMatches++)
+                {
+                    isBestMatchMatchedToCorrectCosmicRay = isMatchedToCorrectCosmicRay;
+
+                    if (isMatchedToCorrectCosmicRay)
+                    {
+                        isCorrectParentLink_DR.push_back(1);
+                    }
+                    else
+                    {
+                        isCorrectParentLink_DR.push_back(0);
+                    }                    
+                    
+                    bestMatchNHitsTotal_DR.push_back(pfoHitList.size());
+                    bestMatchNHitsU_DR.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_U, pfoHitList));
+                    bestMatchNHitsV_DR.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_V, pfoHitList));
+                    bestMatchNHitsW_DR.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_W, pfoHitList));
+                    bestMatchNSharedHitsTotal_DR.push_back(sharedHitList.size());
+                    bestMatchNSharedHitsU_DR.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_U, sharedHitList));
+                    bestMatchNSharedHitsV_DR.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_V, sharedHitList));
+                    bestMatchNSharedHitsW_DR.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_W, sharedHitList));
+
+                    bestMatchNParentTrackHitsTotal_DR.push_back(parentTrackHits.size());
+                    bestMatchNParentTrackHitsU_DR.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_U, parentTrackHits));
+                    bestMatchNParentTrackHitsV_DR.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_V, parentTrackHits));
+                    bestMatchNParentTrackHitsW_DR.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_W, parentTrackHits));
+
+                    bestMatchNOtherTrackHitsTotal_DR.push_back(otherTrackHits.size());
+                    bestMatchNOtherTrackHitsU_DR.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_U, otherTrackHits));
+                    bestMatchNOtherTrackHitsV_DR.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_V, otherTrackHits));
+                    bestMatchNOtherTrackHitsW_DR.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_W, otherTrackHits));
+
+                    bestMatchNOtherShowerHitsTotal_DR.push_back(otherShowerHits.size());
+                    bestMatchNOtherShowerHitsU_DR.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_U, otherShowerHits));
+                    bestMatchNOtherShowerHitsV_DR.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_V, otherShowerHits));
+                    bestMatchNOtherShowerHitsW_DR.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_W, otherShowerHits));
+
+                    bestMatchNNonCRHitsTotal_DR.push_back(nonCRHits.size());
+                    bestMatchNNonCRHitsU_DR.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_U, nonCRHits));
+                    bestMatchNNonCRHitsV_DR.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_V, nonCRHits));
+                    bestMatchNNonCRHitsW_DR.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_W, nonCRHits));
+                    
+                    totalDRHitsInBestMatchParentCR_DR.push_back(deltaRayHitsInParentCosmicRay.size());
+                    uDRHitsInBestMatchParentCR_DR.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_U, deltaRayHitsInParentCosmicRay));
+                    vDRHitsInBestMatchParentCR_DR.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_V, deltaRayHitsInParentCosmicRay));
+                    wDRHitsInBestMatchParentCR_DR.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_W, deltaRayHitsInParentCosmicRay));
+                }
+
+                if (isGoodMatch)
+                    ++nAboveThresholdMatches;
+                                      
+                stringStream << "-" << (!isGoodMatch ? "(Below threshold) " : "")
+                    << "nPfoHits " << pfoHitList.size()
+                    << " (" << LArMonitoringHelper::CountHitsByType(TPC_VIEW_U, pfoHitList)
+                    << ", " << LArMonitoringHelper::CountHitsByType(TPC_VIEW_V, pfoHitList)
+                    << ", " << LArMonitoringHelper::CountHitsByType(TPC_VIEW_W, pfoHitList) << ")"
+                    << ", nMatchedHits " << sharedHitList.size()
+                    << " (" << LArMonitoringHelper::CountHitsByType(TPC_VIEW_U, sharedHitList)
+                    << ", " << LArMonitoringHelper::CountHitsByType(TPC_VIEW_V, sharedHitList)
+                    << ", " << LArMonitoringHelper::CountHitsByType(TPC_VIEW_W, sharedHitList) << ")"
+                    << ",  nDRHitsInParentCR " << deltaRayHitsInParentCosmicRay.size()
+                    << " (" << LArMonitoringHelper::CountHitsByType(TPC_VIEW_U, deltaRayHitsInParentCosmicRay)
+                    << ", " << LArMonitoringHelper::CountHitsByType(TPC_VIEW_V, deltaRayHitsInParentCosmicRay)
+                    << ", " << LArMonitoringHelper::CountHitsByType(TPC_VIEW_W, deltaRayHitsInParentCosmicRay) << ")" << std::endl                 
+                    <<  (!isGoodMatch ? "                   " : " ")
+                    << "nParentTrackHits " << parentTrackHits.size()
+                    << " (" << LArMonitoringHelper::CountHitsByType(TPC_VIEW_U, parentTrackHits)
+                    << ", " << LArMonitoringHelper::CountHitsByType(TPC_VIEW_V, parentTrackHits)
+                    << ", " << LArMonitoringHelper::CountHitsByType(TPC_VIEW_W, parentTrackHits) << ")"
+                    << ", nOtherTrackHits " << otherTrackHits.size()
+                    << " (" << LArMonitoringHelper::CountHitsByType(TPC_VIEW_U, otherTrackHits)
+                    << ", " << LArMonitoringHelper::CountHitsByType(TPC_VIEW_V, otherTrackHits)
+                    << ", " << LArMonitoringHelper::CountHitsByType(TPC_VIEW_W, otherTrackHits) << ")"
+                    << ", nOtherShowerHits " << otherShowerHits.size()
+                    << " (" << LArMonitoringHelper::CountHitsByType(TPC_VIEW_U, otherShowerHits)
+                    << ", " << LArMonitoringHelper::CountHitsByType(TPC_VIEW_V, otherShowerHits)
+                    << ", " << LArMonitoringHelper::CountHitsByType(TPC_VIEW_W, otherShowerHits) << ")"                    
+                    << ",  nNonCRHits " << nonCRHits.size()
+                    << " (" << LArMonitoringHelper::CountHitsByType(TPC_VIEW_U, nonCRHits)
+                    << ", " << LArMonitoringHelper::CountHitsByType(TPC_VIEW_V, nonCRHits)
+                    << ", " << LArMonitoringHelper::CountHitsByType(TPC_VIEW_W, nonCRHits) << ")"  << std::endl
+                    <<  (!isGoodMatch ? "                   " : " ")                    
+                    << (isMatchedToCorrectCosmicRay ? "Correct" :  "Incorrect") << "\033[0m" << " parent link" << std::endl;
+
+                //std::cout << stringStream.str() << std::endl;
+               
+            }
+
+            nAboveThresholdMatches_DR.push_back(nAboveThresholdMatches);
+
+            if ((nAboveThresholdMatches == 1) && isBestMatchMatchedToCorrectCosmicRay)
+            {
+                ++nCorrectChildDRs;
+                isCorrect_DR.push_back(1);
+            }
+            else
+            {
+                isCorrect_DR.push_back(0);
+            }
+
+            if (foldedMCToPfoHitSharingMap.at(pLeadingDeltaRay).empty())
+            {
+                stringStream << "-" << "No matched pfo" << std::endl;
+                std::cout << stringStream.str() << std::endl;
+                
+                isCorrectParentLink_DR.push_back(0);
+                bestMatchNHitsTotal_DR.push_back(0); bestMatchNHitsU_DR.push_back(0); bestMatchNHitsV_DR.push_back(0); bestMatchNHitsW_DR.push_back(0);
+                bestMatchNSharedHitsTotal_DR.push_back(0); bestMatchNSharedHitsU_DR.push_back(0); bestMatchNSharedHitsV_DR.push_back(0); bestMatchNSharedHitsW_DR.push_back(0);
+                bestMatchNParentTrackHitsTotal_DR.push_back(0); bestMatchNParentTrackHitsU_DR.push_back(0); bestMatchNParentTrackHitsV_DR.push_back(0); bestMatchNParentTrackHitsW_DR.push_back(0);
+                bestMatchNOtherTrackHitsTotal_DR.push_back(0); bestMatchNOtherTrackHitsU_DR.push_back(0), bestMatchNOtherTrackHitsV_DR.push_back(0); bestMatchNOtherTrackHitsW_DR.push_back(0);
+                bestMatchNOtherShowerHitsTotal_DR.push_back(0); bestMatchNOtherShowerHitsU_DR.push_back(0); bestMatchNOtherShowerHitsV_DR.push_back(0), bestMatchNOtherShowerHitsW_DR.push_back(0);
+                bestMatchNNonCRHitsTotal_DR.push_back(0); bestMatchNNonCRHitsU_DR.push_back(0); bestMatchNNonCRHitsV_DR.push_back(0), bestMatchNNonCRHitsW_DR.push_back(0);
+                totalDRHitsInBestMatchParentCR_DR.push_back(0); uDRHitsInBestMatchParentCR_DR.push_back(0); vDRHitsInBestMatchParentCR_DR.push_back(0); wDRHitsInBestMatchParentCR_DR.push_back(0);
+            }
+
+            bool isCorrect((nAboveThresholdMatches == 1) && isBestMatchMatchedToCorrectCosmicRay);
+            stringStream << nAboveThresholdMatches << " above threshold matches" << std::endl
+                         << "Reconstruction is "
+                         << (isCorrect ?  "\033[32m" : "\033[31m")
+                         << (isCorrect ?  "CORRECT" : "INCORRECT") << "\033[0m" << std::endl;
+        }
+
+        stringStream << "------------------------------------------------------------------------------------------------" << std::endl;        
+
+        stringStream << nCorrectChildDRs << " / " << nReconstructableChildDRs << " DRs correctly reconstructed" << std::endl;
+        stringStream << "------------------------------------------------------------------------------------------------" << std::endl;
+        stringStream << "------------------------------------------------------------------------------------------------" << std::endl;
+    }
+
+    std::cout << stringStream.str() << std::endl;
+
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------    
+
+/*
 void DeltaRayEventValidationAlgorithm::ProcessOutput(const ValidationInfo &validationInfo, const bool useInterpretedMatching, const bool printToScreen, const bool fillTree) const
 {
-    if (printToScreen && useInterpretedMatching) std::cout << "---INTERPRETED-MATCHING-OUTPUT------------------------------------------------------------------" << std::endl;
-    else if (printToScreen) std::cout << "---RAW-MATCHING-OUTPUT--------------------------------------------------------------------------" << std::endl;
+    if (printToScreen) std::cout << "---INTERPRETED-MATCHING-OUTPUT------------------------------------------------------------------" << std::endl;
 
-    
-    const LArMCParticleHelper::MCParticleToPfoHitSharingMap &mcToPfoHitSharingMap(useInterpretedMatching ?
-        validationInfo.GetInterpretedMCToPfoHitSharingMap() : validationInfo.GetMCToPfoHitSharingMap());
+    const LArMCParticleHelper::MCParticleToPfoHitSharingMap &mcToPfoHitSharingMap(validationInfo.GetInterpretedMCToPfoHitSharingMap());
+
+
     
     LArMCParticleHelper::CRToChildDRMap crToChildDRMap;
     const LArMCParticleHelper::MCContributionMap &targetMCParticleToHitsMap(validationInfo.GetTargetMCParticleToHitsMap());
@@ -477,14 +816,12 @@ void DeltaRayEventValidationAlgorithm::ProcessOutput(const ValidationInfo &valid
     }
 
 }
-
+*/
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void DeltaRayEventValidationAlgorithm::GetUnfoldedInterpretedMatching(const MCParticleList *pMCParticleList, const CaloHitList *pCaloHitList, const PfoList *pPfoList,
-    LArMCParticleHelper::MCParticleToPfoHitSharingMap &unfoldedInterepretedMatchingMap) const
+void DeltaRayEventValidationAlgorithm::SetUnfoldedMatching(const MCParticleList *pMCParticleList, const CaloHitList *pCaloHitList, const PfoList *pPfoList,
+    ValidationInfo &validationInfo) const
 {
-    std::cout << "AAAAA" << std::endl;
-    
     ValidationInfo unfoldedValidationInfo;
     if (pMCParticleList && pCaloHitList)
     {
@@ -502,22 +839,23 @@ void DeltaRayEventValidationAlgorithm::GetUnfoldedInterpretedMatching(const MCPa
         
         LArMCParticleHelper::MCContributionMap allMCParticleToHitsMap;
         LArMCParticleHelper::SelectReconstructableMCParticles(pMCParticleList, pCaloHitList, parameters, LArMCParticleHelper::IsCosmicRay, allMCParticleToHitsMap);
-
+        
+        validationInfo.SetUnfoldedTargetMCParticleToHitsMap(targetMCParticleToHitsMap);
+        validationInfo.SetUnfoldedAllMCParticleToHitsMap(allMCParticleToHitsMap);
+         
         unfoldedValidationInfo.SetTargetMCParticleToHitsMap(targetMCParticleToHitsMap);
         unfoldedValidationInfo.SetAllMCParticleToHitsMap(allMCParticleToHitsMap);
     }
-
-    std::cout << "BBBBBBBBBBBBBBBBBBBBBB" << std::endl;    
 
     if (pPfoList)
     {
         LArMCParticleHelper::PfoContributionMap pfoToHitsMap;
         LArMCParticleHelper::GetPfoToReconstructable2DHitsMap(*pPfoList, unfoldedValidationInfo.GetAllMCParticleToHitsMap(), pfoToHitsMap, false);
 
+        validationInfo.SetUnfoldedPfoToHitsMap(pfoToHitsMap);
+        
         unfoldedValidationInfo.SetPfoToHitsMap(pfoToHitsMap);
     }
-
-        std::cout << "CCCCCCCCCCCCCCCCC" << std::endl;    
 
     LArMCParticleHelper::PfoToMCParticleHitSharingMap pfoToMCHitSharingMap;
     LArMCParticleHelper::MCParticleToPfoHitSharingMap mcToPfoHitSharingMap;
@@ -525,17 +863,13 @@ void DeltaRayEventValidationAlgorithm::GetUnfoldedInterpretedMatching(const MCPa
 
     unfoldedValidationInfo.SetMCToPfoHitSharingMap(mcToPfoHitSharingMap);
 
-        std::cout << "DDDDDDDDDDDDDDD" << std::endl;    
-
     LArMCParticleHelper::MCParticleToPfoHitSharingMap interpretedMCToPfoHitSharingMap;
     this->InterpretMatching(unfoldedValidationInfo, interpretedMCToPfoHitSharingMap);
 
-        std::cout << "EEEEEEEEEEEEEEEEEE" << std::endl;    
-
-    unfoldedInterepretedMatchingMap = interpretedMCToPfoHitSharingMap;
+    validationInfo.SetUnfoldedInterpretedMCToPfoHitSharingMap(interpretedMCToPfoHitSharingMap);
 }
 
-//------------------------------------------------------------------------------------------------------------------------------------------    
+//------------------------------------------------------------------------------------------------------------------------------------------
 
 StatusCode DeltaRayEventValidationAlgorithm::ReadSettings(const TiXmlHandle xmlHandle)
 {
@@ -568,3 +902,30 @@ StatusCode DeltaRayEventValidationAlgorithm::ReadSettings(const TiXmlHandle xmlH
 }
 
 } // namespace lar_content    
+
+
+
+
+/*  
+    LArMCParticleHelper::CRToChildDRMap crToChildDRMap;
+    const LArMCParticleHelper::MCContributionMap &targetMCParticleToHitsMap(validationInfo.GetTargetMCParticleToHitsMap());
+    for (const LArMCParticleHelper::MCParticleCaloHitListPair &entry : targetMCParticleToHitsMap)
+    {
+        if (!LArDeltaRayHelper::IsDeltaRay(entry.first))
+            continue;
+
+        const MCParticle *const pParentMuon(LArMCParticleHelper::GetPrimaryMCParticle(entry.first));
+
+        if (targetMCParticleToHitsMap.find(pParentMuon) == targetMCParticleToHitsMap.end())
+            continue;
+
+        crToChildDRMap[pParentMuon].push_back(entry.first);
+    }
+    
+    // sort by the highest number of hits CR first 
+    MCParticleVector mcCRVector;
+    for (auto &entry : crToChildDRMap)
+        mcCRVector.push_back(entry.first);
+    
+    LArMonitoringHelper::GetOrderedMCParticleVector(targetMCParticleToHitsMap, mcCRVector);
+*/

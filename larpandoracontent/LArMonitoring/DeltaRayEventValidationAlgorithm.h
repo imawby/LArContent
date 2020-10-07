@@ -64,8 +64,8 @@ private:
      */
     void ProcessOutput(const ValidationInfo &validationInfo, const bool useInterpretedMatching, const bool printToScreen, const bool fillTree) const;
 
-    void GetUnfoldedInterpretedMatching(const pandora::MCParticleList *pMCParticleList, const pandora::CaloHitList *pCaloHitList, const pandora::PfoList *pPfoList,
-        LArMCParticleHelper::MCParticleToPfoHitSharingMap &unfoldedInterepretedMatchingMap) const;
+    void SetUnfoldedMatching(const pandora::MCParticleList *pMCParticleList, const pandora::CaloHitList *pCaloHitList, const pandora::PfoList *pPfoList,
+        ValidationInfo &validationInfo) const;
 
     pandora::StatusCode ReadSettings(const pandora::TiXmlHandle xmlHandle);
 
@@ -73,7 +73,7 @@ private:
     
     LArDeltaRayHelper::DeltaRayParameters  m_deltaRayParameters;
 
-
+    
 };
 
 } // namespace lar_content
