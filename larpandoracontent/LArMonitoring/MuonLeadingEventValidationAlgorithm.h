@@ -1,17 +1,17 @@
 /**
- *  @file   larpandoracontent/LArMonitoring/DeltaRayEventValidationAlgorithm.h
+ *  @file   larpandoracontent/LArMonitoring/MuonLeadingEventValidationAlgorithm.h
  *
  *  @brief  Header file for the delta ray event validation algorithm.
  *
  *  $Log: $
  */
-#ifndef LAR_DELTA_RAY_EVENT_VALIDATION_ALGORITHM_H
-#define LAR_DELTA_RAY_EVENT_VALIDATION_ALGORITHM_H 1
+#ifndef LAR_MUON_LEADING_EVENT_VALIDATION_ALGORITHM_H
+#define LAR_MUON_LEADING_EVENT_VALIDATION_ALGORITHM_H 1
 
 #include "Pandora/Algorithm.h"
 
 #include "larpandoracontent/LArHelpers/LArMCParticleHelper.h"
-#include "larpandoracontent/LArHelpers/LArDeltaRayHelper.h"
+#include "larpandoracontent/LArHelpers/LArMuonLeadingHelper.h"
 
 #include "larpandoracontent/LArMonitoring/EventValidationBaseAlgorithm.h"
 
@@ -25,20 +25,20 @@ namespace lar_content
 {
 
 /**
- *  @brief  DeltaRayEventValidationAlgorithm class
+ *  @brief  MuonLeadingEventValidationAlgorithm class
  */
-class DeltaRayEventValidationAlgorithm: public EventValidationBaseAlgorithm
+class MuonLeadingEventValidationAlgorithm: public EventValidationBaseAlgorithm
 {
 public:
     /**
      *  @brief  Default constructor
      */
-    DeltaRayEventValidationAlgorithm();
+    MuonLeadingEventValidationAlgorithm();
 
     /**
      *  @brief  Destructor
      */
-    ~DeltaRayEventValidationAlgorithm();
+    ~MuonLeadingEventValidationAlgorithm();
 
 private:
     /**
@@ -67,15 +67,18 @@ private:
     void SetUnfoldedMatching(const pandora::MCParticleList *pMCParticleList, const pandora::CaloHitList *pCaloHitList, const pandora::PfoList *pPfoList,
         ValidationInfo &validationInfo) const;
 
+    void PrintHits(const pandora::CaloHitList caloHitList, const std::string &stringTag, const Color &colour) const;
+
     pandora::StatusCode ReadSettings(const pandora::TiXmlHandle xmlHandle);
 
     typedef std::vector<pandora::HitType> HitTypeVector;
     
-    LArDeltaRayHelper::DeltaRayParameters  m_deltaRayParameters;
+    LArMuonLeadingHelper::ValidationParameters  m_validationParameters;
 
-    
+    bool m_deltaRayMode;
+    bool m_michelMode;
 };
 
 } // namespace lar_content
 
-#endif // LAR_DELTA_RAY_EVENT_VALIDATION_ALGORITHM_H
+#endif // LAR_MUON_LEADING_EVENT_VALIDATION_ALGORITHM_H

@@ -13,7 +13,7 @@
 #include "larpandoracontent/LArHelpers/LArMonitoringHelper.h"
 #include "larpandoracontent/LArHelpers/LArPfoHelper.h"
 #include "larpandoracontent/LArHelpers/LArMCParticleHelper.h"
-#include "larpandoracontent/LArHelpers/LArDeltaRayHelper.h"
+#include "larpandoracontent/LArHelpers/LArMuonLeadingHelper.h"
 
 #include "larpandoracontent/LArMonitoring/MCDeltaRayAlgorithm.h"
 
@@ -62,7 +62,7 @@ StatusCode MCDeltaRayAlgorithm::Run()
     {
         const MCParticle *const pMCParticle(entry.first);
         
-        if (!LArDeltaRayHelper::IsDeltaRay(pMCParticle))
+        if (!LArMuonLeadingHelper::IsDeltaRay(pMCParticle))
             continue;
         
         const MCParticle *const pParentMuon(LArMCParticleHelper::GetPrimaryMCParticle(pMCParticle));

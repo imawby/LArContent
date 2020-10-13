@@ -71,13 +71,12 @@ StatusCode EventValidationBaseAlgorithm::Run()
 
     if (m_printAllToScreen)
         this->PrintAllMatches(validationInfo);
-    /*
+    
     if (m_printMatchingToScreen)
         this->PrintInterpretedMatches(validationInfo);
 
     if (m_writeToTree)
         this->WriteInterpretedMatches(validationInfo);
- */
 
     return STATUS_CODE_SUCCESS;
 }

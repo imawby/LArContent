@@ -712,8 +712,8 @@ StatusCode MasterAlgorithm::Copy(const Pandora *const pPandora, const MCParticle
     }
 
     parameters.m_nuanceCode = pLArMCParticle->GetNuanceCode();
-    parameters.m_t0 = pLArMCParticle->GetT0();
     parameters.m_isDR = pLArMCParticle->GetIsDR();
+    parameters.m_isDecay = pLArMCParticle->GetIsDecay();    
     parameters.m_energy = pMCParticle->GetEnergy();
     parameters.m_momentum = pMCParticle->GetMomentum();
     parameters.m_vertex = pMCParticle->GetVertex();

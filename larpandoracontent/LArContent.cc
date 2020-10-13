@@ -47,10 +47,10 @@
 #include "larpandoracontent/LArHelpers/LArGeometryHelper.h"
 
 #include "larpandoracontent/LArMonitoring/CosmicRayTaggingMonitoringTool.h"
-#include "larpandoracontent/LArMonitoring/DeltaRayEventValidationAlgorithm.h"
 #include "larpandoracontent/LArMonitoring/NeutrinoEventValidationAlgorithm.h"
 #include "larpandoracontent/LArMonitoring/MCParticleMonitoringAlgorithm.h"
 #include "larpandoracontent/LArMonitoring/MCDeltaRayAlgorithm.h"
+#include "larpandoracontent/LArMonitoring/MuonLeadingEventValidationAlgorithm.h"
 #include "larpandoracontent/LArMonitoring/VisualMonitoringAlgorithm.h"
 #include "larpandoracontent/LArMonitoring/PfoValidationAlgorithm.h"
 #include "larpandoracontent/LArMonitoring/ShowerTensorVisualizationTool.h"
@@ -194,7 +194,7 @@
 #define LAR_ALGORITHM_LIST(d)                                                                                                   \
     d("LArNeutrinoEventValidation",             NeutrinoEventValidationAlgorithm)                                               \
     d("LArTestBeamEventValidation",             TestBeamEventValidationAlgorithm)                                               \
-    d("LArDeltaRayEventValidation",             DeltaRayEventValidationAlgorithm)                                               \
+    d("LArMuonLeadingEventValidation",          MuonLeadingEventValidationAlgorithm)                                            \
     d("LArMCDeltaRay",                          MCDeltaRayAlgorithm)                                                            \
     d("LArTestBeamHierarchyEventValidation",    TestBeamHierarchyEventValidationAlgorithm)                                      \
     d("LArPfoValidation",                       PfoValidationAlgorithm)                                                         \
