@@ -77,6 +77,7 @@ private:
 
     bool m_deltaRayMode;
     bool m_michelMode;
+    int m_muonsToSkip;
 };
 
 } // namespace lar_content

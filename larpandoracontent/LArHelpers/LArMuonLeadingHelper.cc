@@ -193,7 +193,7 @@ void LArMuonLeadingHelper::SelectReconstructableLeadingParticles(const MCParticl
     // Select reconstructable hits, e.g. remove those downstream of a neutron
     // Unless selectInputHits == false
     CaloHitList selectedCaloHitList;
-    LArMCParticleHelper::SelectCaloHits(pCaloHitList, mcToLeadingMCMap, selectedCaloHitList, parameters.m_selectInputHits, std::numeric_limits<float>::max());
+    LArMCParticleHelper::SelectCaloHits(pCaloHitList, mcToLeadingMCMap, selectedCaloHitList, parameters.m_selectInputHits, 2.5);//std::numeric_limits<float>::max());
 
     // Obtain maps: [hit -> leading muon child mc], [leading muon child mc -> list of hits]
     LArMCParticleHelper::CaloHitToMCMap trueHitToLeadingMCMap;

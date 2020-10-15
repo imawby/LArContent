@@ -25,7 +25,8 @@ namespace lar_content
 
 MuonLeadingEventValidationAlgorithm::MuonLeadingEventValidationAlgorithm() :
     m_deltaRayMode(false),
-    m_michelMode(false)
+    m_michelMode(false),
+    m_muonsToSkip(0)
 {
 }
 
@@ -94,7 +95,7 @@ void MuonLeadingEventValidationAlgorithm::FillValidationInfo(const MCParticleLis
 
 //------------------------------------------------------------------------------------------------------------------------------------------
     
-    void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &validationInfo, const bool /*useInterpretedMatching*/, const bool printToScreen, const bool fillTree) const
+void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &validationInfo, const bool /*useInterpretedMatching*/, const bool /*printToScreen*/, const bool fillTree) const
 {
     // Unfolded hit ownership/sharing maps for cosmic ray muons and their descendents
     const LArMCParticleHelper::MCContributionMap &unfoldedTargetMCToHitsMap(validationInfo.GetUnfoldedTargetMCParticleToHitsMap());
@@ -122,14 +123,15 @@ void MuonLeadingEventValidationAlgorithm::FillValidationInfo(const MCParticleLis
     for (const MCParticle *const pCosmicRay : mcCRVector)
     {
         // Cosmic ray parameters
-        int muonId, nReconstructableChildCRLs(0);
+        int ID_CR, nReconstructableChildCRLs(0);
         float mcE_CR, mcPX_CR, mcPY_CR, mcPZ_CR;
         int nMCHitsTotal_CR, nMCHitsU_CR, nMCHitsV_CR, nMCHitsW_CR;
         float mcVertexX_CR, mcVertexY_CR, mcVertexZ_CR, mcEndX_CR, mcEndY_CR, mcEndZ_CR;
         int nCorrectChildCRLs(0);
     
         // Leading particle parameters
-        FloatVector mcE_CRL, mcPX_CRL, mcPY_CRL, mcPZ_CRL; 
+        FloatVector mcE_CRL, mcPX_CRL, mcPY_CRL, mcPZ_CRL;
+        IntVector ID_CRL;        
         IntVector nMCHitsTotal_CRL, nMCHitsU_CRL, nMCHitsV_CRL, nMCHitsW_CRL;
         FloatVector mcVertexX_CRL, mcVertexY_CRL, mcVertexZ_CRL, mcEndX_CRL, mcEndY_CRL, mcEndZ_CRL;
         IntVector nAboveThresholdMatches_CRL, isCorrect_CRL, isCorrectParentLink_CRL;
@@ -177,7 +179,10 @@ void MuonLeadingEventValidationAlgorithm::FillValidationInfo(const MCParticleLis
         
         std::sort(childLeadingParticles.begin(), childLeadingParticles.end(), LArMCParticleHelper::SortByMomentum);
 
-        ++mounCount;
+        ++muonCount;
+
+        if (muonCount < (m_muonsToSkip + 1))
+            continue;
 
         // Pull cosmic ray info
         const CaloHitList &cosmicRayHitList(validationInfo.GetUnfoldedAllMCParticleToHitsMap().at(pCosmicRay));
@@ -185,7 +190,7 @@ void MuonLeadingEventValidationAlgorithm::FillValidationInfo(const MCParticleLis
         std::cout << "MC COSMIC RAY HITS" << std::endl;
         this->PrintHits(cosmicRayHitList, "MC CR", BLUE);
 
-        muonId = muonCount;
+        ID_CR = muonCount;
         mcE_CR = pCosmicRay->GetEnergy();
         mcPX_CR = pCosmicRay->GetMomentum().GetX();
         mcPY_CR = pCosmicRay->GetMomentum().GetY();
@@ -211,16 +216,19 @@ void MuonLeadingEventValidationAlgorithm::FillValidationInfo(const MCParticleLis
             << ", " << LArMonitoringHelper::CountHitsByType(TPC_VIEW_W, cosmicRayHitList) << ")"
             << ", nReconstructableCRLs " << nReconstructableChildCRLs << std::endl;   
         
-        // Pull delta ray data 
+        // Pull delta ray data
+        int leadingCount(0);
         for (const MCParticle *const pLeadingParticle : childLeadingParticles)
         {
             // Pull delta ray MC info
             const CaloHitList &leadingParticleHitList(foldedAllMCToHitsMap.at(pLeadingParticle));
+            ++leadingCount;
 
             std::cout << "MC DELTA RAY HITS" << std::endl;
             this->PrintHits(leadingParticleHitList, "MC DR", RED);           
             
             mcE_CRL.push_back(pLeadingParticle->GetEnergy());
+            ID_CRL.push_back(leadingCount);
             mcPX_CRL.push_back(pLeadingParticle->GetMomentum().GetX());
             mcPY_CRL.push_back(pLeadingParticle->GetMomentum().GetY());
             mcPZ_CRL.push_back(pLeadingParticle->GetMomentum().GetZ());
@@ -235,7 +243,7 @@ void MuonLeadingEventValidationAlgorithm::FillValidationInfo(const MCParticleLis
             nMCHitsV_CRL.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_V, leadingParticleHitList));   
             nMCHitsW_CRL.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_W, leadingParticleHitList));
 
-            stringStream << "\033[33m"  << "(Child "<< (m_deltaRayMode ? "DR)  " : "Michel)  ") << "\033[0m"
+            stringStream << "\033[33m"  << "(Child "<< (m_deltaRayMode ? "DR: " : "Michel: ") << leadingCount << ")  " << "\033[0m"
                 << "Energy " << pLeadingParticle->GetEnergy()
                 << ", Dist. " << (pLeadingParticle->GetEndpoint() - pLeadingParticle->GetVertex()).GetMagnitude()
                 << ", nMCHits " << leadingParticleHitList.size()
@@ -356,7 +364,7 @@ void MuonLeadingEventValidationAlgorithm::FillValidationInfo(const MCParticleLis
                 std::cout << stringStream.str() << std::endl;
                 std::cout << "DELTA RAY pfo HITS" << std::endl;
                 this->PrintHits(pfoHitList, "DR PFO", VIOLET);
-
+                
                 if (pParentPfo != pMatchedPfo)
                 {
                     std::cout << "PARENT PFO" << std::endl;
@@ -405,6 +413,7 @@ void MuonLeadingEventValidationAlgorithm::FillValidationInfo(const MCParticleLis
         if (fillTree)
         {
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "eventNumber", m_eventNumber - 1));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ID_CR", ID_CR));
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "mcE_CR", mcE_CR));
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "mcPX_CR", mcPX_CR));
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "mcPY_CR", mcPY_CR));
@@ -422,6 +431,7 @@ void MuonLeadingEventValidationAlgorithm::FillValidationInfo(const MCParticleLis
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "nReconstructableChildCRLs", nReconstructableChildCRLs));
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "nCorrectChildCRLs", nCorrectChildCRLs));
 
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ID_CRL", &ID_CRL));
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "mcE_CRL", &mcE_CRL));
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "mcPX_CRL", &mcPX_CRL));
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "mcPY_CRL", &mcPY_CRL));
@@ -472,13 +482,13 @@ void MuonLeadingEventValidationAlgorithm::FillValidationInfo(const MCParticleLis
         stringStream << "------------------------------------------------------------------------------------------------" << std::endl;
         stringStream << "------------------------------------------------------------------------------------------------" << std::endl;
     }
-    
+    /*
     if (printToScreen)
     {
         std::cout << "jam" << std::endl;
         std::cout << stringStream.str() << std::endl;
     }
-    
+    */
 
 }
 
@@ -561,6 +571,9 @@ StatusCode MuonLeadingEventValidationAlgorithm::ReadSettings(const TiXmlHandle x
 
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
         "MichelMode", m_michelMode));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
+        "MuonsToSkip", m_muonsToSkip));    
     
     return EventValidationBaseAlgorithm::ReadSettings(xmlHandle);
 }
