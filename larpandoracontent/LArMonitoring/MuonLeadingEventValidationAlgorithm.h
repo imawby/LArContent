@@ -69,6 +69,11 @@ private:
 
     void PrintHits(const pandora::CaloHitList caloHitList, const std::string &stringTag, const Color &colour) const;
 
+    void FillContaminationHitsDistance(const pandora::CaloHitList &contaminationHits, const pandora::CaloHitList &leadingMCHits,
+        pandora::IntVector &bestMatchContaminationHitsDistance) const;
+
+    void GetHitsOfType(const pandora::CaloHitList &inputList, const pandora::HitType &hitType, pandora::CaloHitList &outputList) const;
+
     pandora::StatusCode ReadSettings(const pandora::TiXmlHandle xmlHandle);
 
     typedef std::vector<pandora::HitType> HitTypeVector;

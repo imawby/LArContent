@@ -8,6 +8,7 @@
 
 #include "Pandora/AlgorithmHeaders.h"
 
+#include "larpandoracontent/LArHelpers/LArClusterHelper.h"
 #include "larpandoracontent/LArHelpers/LArInteractionTypeHelper.h"
 #include "larpandoracontent/LArHelpers/LArMonitoringHelper.h"
 #include "larpandoracontent/LArHelpers/LArPfoHelper.h"
@@ -41,7 +42,7 @@ MuonLeadingEventValidationAlgorithm::~MuonLeadingEventValidationAlgorithm()
 void MuonLeadingEventValidationAlgorithm::FillValidationInfo(const MCParticleList *const pMCParticleList, const CaloHitList *const pCaloHitList,
     const PfoList *const pPfoList, ValidationInfo &validationInfo) const
 {
-    PandoraMonitoringApi::SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_DEFAULT, -1.f, 1.f, 1.f);
+    //PandoraMonitoringApi::SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_DEFAULT, -1.f, 1.f, 1.f);
 
     // First get unfolded matching (includes all particles within a CR hierarchy including the primary CR)
     this->SetUnfoldedMatching(pMCParticleList, pCaloHitList, pPfoList, validationInfo);
@@ -86,16 +87,16 @@ void MuonLeadingEventValidationAlgorithm::FillValidationInfo(const MCParticleLis
     this->InterpretMatching(validationInfo, interpretedMCToPfoHitSharingMap);
     validationInfo.SetInterpretedMCToPfoHitSharingMap(interpretedMCToPfoHitSharingMap);
 
-    std::cout << "MC Hit Map size: " << validationInfo.GetTargetMCParticleToHitsMap().size() << std::endl;
-    std::cout << "Pfo Hit Map size: " << validationInfo.GetPfoToHitsMap().size() << std::endl;
-    std::cout << "Matching Map size: " << mcToPfoHitSharingMap.size() << std::endl;
-    std::cout << "Interpretted Matching Map size: " << interpretedMCToPfoHitSharingMap.size() << std::endl;
+    //std::cout << "MC Hit Map size: " << validationInfo.GetTargetMCParticleToHitsMap().size() << std::endl;
+    //std::cout << "Pfo Hit Map size: " << validationInfo.GetPfoToHitsMap().size() << std::endl;
+    //std::cout << "Matching Map size: " << mcToPfoHitSharingMap.size() << std::endl;
+    //std::cout << "Interpretted Matching Map size: " << interpretedMCToPfoHitSharingMap.size() << std::endl;
 
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
     
-void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &validationInfo, const bool /*useInterpretedMatching*/, const bool /*printToScreen*/, const bool fillTree) const
+void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &validationInfo, const bool /*useInterpretedMatching*/, const bool printToScreen, const bool fillTree) const
 {
     // Unfolded hit ownership/sharing maps for cosmic ray muons and their descendents
     const LArMCParticleHelper::MCContributionMap &unfoldedTargetMCToHitsMap(validationInfo.GetUnfoldedTargetMCParticleToHitsMap());
@@ -142,6 +143,10 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
         IntVector bestMatchNOtherShowerHitsTotal_CRL, bestMatchNOtherShowerHitsU_CRL, bestMatchNOtherShowerHitsV_CRL, bestMatchNOtherShowerHitsW_CRL;
         IntVector totalCRLHitsInBestMatchParentCR_CRL, uCRLHitsInBestMatchParentCR_CRL, vCRLHitsInBestMatchParentCR_CRL, wCRLHitsInBestMatchParentCR_CRL;
 
+        IntVector bestMatchOtherShowerHitsID_CRL, bestMatchOtherShowerHitsDistance_CRL;
+        IntVector bestMatchOtherTrackHitsID_CRL, bestMatchOtherTrackHitsDistance_CRL;
+        IntVector bestMatchParentTrackHitsID_CRL, bestMatchParentTrackHitsDistance_CRL;        
+
         // Move on if cosmic ray has not been reconstructed
         if (unfoldedMCToPfoHitSharingMap.at(pCosmicRay).empty())
             continue;
@@ -186,10 +191,17 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
 
         // Pull cosmic ray info
         const CaloHitList &cosmicRayHitList(validationInfo.GetUnfoldedAllMCParticleToHitsMap().at(pCosmicRay));
-        
+
+        ///////////////////////////////
         std::cout << "MC COSMIC RAY HITS" << std::endl;
         this->PrintHits(cosmicRayHitList, "MC CR", BLUE);
 
+        CartesianVector endpoint1(pCosmicRay->GetVertex()), endpoint2(pCosmicRay->GetEndpoint());
+        PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &endpoint1, "muon endpoint ", RED, 2);
+        PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &endpoint2, "muon endpoint 2", RED, 2);
+        PandoraMonitoringApi::ViewEvent(this->GetPandora());
+        ///////////////////////////////
+        
         ID_CR = muonCount;
         mcE_CR = pCosmicRay->GetEnergy();
         mcPX_CR = pCosmicRay->GetMomentum().GetX();
@@ -224,8 +236,8 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
             const CaloHitList &leadingParticleHitList(foldedAllMCToHitsMap.at(pLeadingParticle));
             ++leadingCount;
 
-            std::cout << "MC DELTA RAY HITS" << std::endl;
-            this->PrintHits(leadingParticleHitList, "MC DR", RED);           
+            //std::cout << "MC DELTA RAY HITS" << std::endl;
+            //this->PrintHits(leadingParticleHitList, "MC DR", RED);           
             
             mcE_CRL.push_back(pLeadingParticle->GetEnergy());
             ID_CRL.push_back(leadingCount);
@@ -327,6 +339,15 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
                     uCRLHitsInBestMatchParentCR_CRL.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_U, leadingParticleHitsInParentCosmicRay));
                     vCRLHitsInBestMatchParentCR_CRL.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_V, leadingParticleHitsInParentCosmicRay));
                     wCRLHitsInBestMatchParentCR_CRL.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_W, leadingParticleHitsInParentCosmicRay));
+
+                    bestMatchOtherShowerHitsID_CRL.insert(bestMatchOtherShowerHitsDistance_CRL.end(), otherShowerHits.size(), leadingCount);
+                    this->FillContaminationHitsDistance(otherShowerHits, leadingParticleHitList, bestMatchOtherShowerHitsDistance_CRL);
+
+                    bestMatchOtherTrackHitsID_CRL.insert(bestMatchOtherTrackHitsDistance_CRL.end(), otherTrackHits.size(), leadingCount);
+                    this->FillContaminationHitsDistance(otherTrackHits, leadingParticleHitList, bestMatchOtherTrackHitsDistance_CRL);
+
+                    bestMatchParentTrackHitsID_CRL.insert(bestMatchParentTrackHitsDistance_CRL.end(), parentTrackHits.size(), leadingCount);
+                    this->FillContaminationHitsDistance(parentTrackHits, leadingParticleHitList, bestMatchParentTrackHitsDistance_CRL);                    
                 }
 
                 if (isGoodMatch)
@@ -361,22 +382,23 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
                     <<  (!isGoodMatch ? "                   " : " ")                    
                     << (isMatchedToCorrectCosmicRay ? "Correct" :  "Incorrect") << "\033[0m" << " parent link" << std::endl;
 
-                std::cout << stringStream.str() << std::endl;
-                std::cout << "DELTA RAY pfo HITS" << std::endl;
-                this->PrintHits(pfoHitList, "DR PFO", VIOLET);
-                
+                //std::cout << stringStream.str() << std::endl;
+                //std::cout << "DELTA RAY pfo HITS" << std::endl;
+                //this->PrintHits(pfoHitList, "DR PFO", VIOLET);
+                /*
                 if (pParentPfo != pMatchedPfo)
                 {
                     std::cout << "PARENT PFO" << std::endl;
                     const CaloHitList &parentCRHits(unfoldedPfoToHitsMap.at(pParentPfo));
                     this->PrintHits(parentCRHits, "DR PARENT PFO", DARKGREEN);
                 }
-                
+                */
              }
                 
             nAboveThresholdMatches_CRL.push_back(nAboveThresholdMatches);
 
-            bool isCorrect((nAboveThresholdMatches == 1) && isBestMatchMatchedToCorrectCosmicRay);
+            const bool isCorrect((nAboveThresholdMatches == 1) && isBestMatchMatchedToCorrectCosmicRay);
+            
             if (isCorrect)
             {
                 ++nCorrectChildCRLs;
@@ -390,7 +412,7 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
             if (foldedMCToPfoHitSharingMap.at(pLeadingParticle).empty())
             {
                 stringStream << "-" << "No matched pfo" << std::endl;
-                std::cout << stringStream.str() << std::endl;
+                //std::cout << stringStream.str() << std::endl;
                 
                 isCorrectParentLink_CRL.push_back(0);
                 bestMatchNHitsTotal_CRL.push_back(0); bestMatchNHitsU_CRL.push_back(0); bestMatchNHitsV_CRL.push_back(0); bestMatchNHitsW_CRL.push_back(0);
@@ -407,7 +429,7 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
                          << (isCorrect ?  "\033[32m" : "\033[31m")
                          << (isCorrect ?  "CORRECT" : "INCORRECT") << "\033[0m" << std::endl;
 
-            std::cout << stringStream.str() << std::endl;
+            //std::cout << stringStream.str() << std::endl;
         }
 
         if (fillTree)
@@ -473,6 +495,13 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "uCRLHitsInBestMatchParentCR_CRL", &uCRLHitsInBestMatchParentCR_CRL));
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "vCRLHitsInBestMatchParentCR_CRL", &vCRLHitsInBestMatchParentCR_CRL));
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "wCRLHitsInBestMatchParentCR_CRL", &wCRLHitsInBestMatchParentCR_CRL));
+            
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "bestMatchOtherShowerHitsID_CRL", &bestMatchOtherShowerHitsID_CRL));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "bestMatchOtherShowerHitsDistance_CRL", &bestMatchOtherShowerHitsDistance_CRL));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "bestMatchOtherTrackHitsID_CRL", &bestMatchOtherTrackHitsID_CRL));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "bestMatchOtherTrackHitsDistance_CRL", &bestMatchOtherTrackHitsDistance_CRL));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "bestMatchParentTrackHitsID_CRL", &bestMatchParentTrackHitsID_CRL));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "bestMatchParentTrackHitsDistance_CRL", &bestMatchParentTrackHitsDistance_CRL));            
 
             PANDORA_MONITORING_API(FillTree(this->GetPandora(), m_treeName.c_str()));
         }
@@ -482,14 +511,11 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
         stringStream << "------------------------------------------------------------------------------------------------" << std::endl;
         stringStream << "------------------------------------------------------------------------------------------------" << std::endl;
     }
-    /*
+    
     if (printToScreen)
     {
-        std::cout << "jam" << std::endl;
         std::cout << stringStream.str() << std::endl;
     }
-    */
-
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------    
@@ -605,13 +631,42 @@ void MuonLeadingEventValidationAlgorithm::PrintHits(const CaloHitList caloHitLis
             PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, stringTag, colour, 2);
     }
     PandoraMonitoringApi::ViewEvent(this->GetPandora());
+}
 
-        /*
-        CartesianVector endpoint1(pCosmicRay->GetVertex()), endpoint2(pCosmicRay->GetEndpoint());
-        PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &endpoint1, "muon endpoint ", RED, 2);
-        PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &endpoint2, "muon endpoint 2", RED, 2);
-        PandoraMonitoringApi::ViewEvent(this->GetPandora());
-        */
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void MuonLeadingEventValidationAlgorithm::FillContaminationHitsDistance(const CaloHitList &contaminationHits, const CaloHitList &leadingMCHits,
+    IntVector &bestMatchContaminationHitsDistance) const
+{
+    CaloHitList leadingU, leadingV, leadingW;
+    this->GetHitsOfType(leadingMCHits, TPC_VIEW_U, leadingU);
+    this->GetHitsOfType(leadingMCHits, TPC_VIEW_V, leadingV);
+    this->GetHitsOfType(leadingMCHits, TPC_VIEW_W, leadingW);    
+    
+    for (const CaloHit *const pContaminationHit : contaminationHits)
+    {
+        const CartesianVector &hitPosition(pContaminationHit->GetPositionVector());
+        
+        if (pContaminationHit->GetHitType() == TPC_VIEW_U)
+            bestMatchContaminationHitsDistance.push_back(LArClusterHelper::GetClosestDistance(hitPosition, leadingU));
+
+        if (pContaminationHit->GetHitType() == TPC_VIEW_V)
+            bestMatchContaminationHitsDistance.push_back(LArClusterHelper::GetClosestDistance(hitPosition, leadingV));
+            
+        if (pContaminationHit->GetHitType() == TPC_VIEW_W)
+            bestMatchContaminationHitsDistance.push_back(LArClusterHelper::GetClosestDistance(hitPosition, leadingW));
+    }
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void MuonLeadingEventValidationAlgorithm::GetHitsOfType(const CaloHitList &inputList, const HitType &hitType, CaloHitList &outputList) const
+{
+    for (const CaloHit *const pCaloHit : inputList)
+    {
+        if (pCaloHit->GetHitType() == hitType)
+            outputList.push_back(pCaloHit);
+    }   
 }
 
 } // namespace lar_content    
