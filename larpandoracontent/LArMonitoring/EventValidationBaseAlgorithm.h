@@ -255,7 +255,7 @@ protected:
 
     std::string                             m_treeName;                 ///< Name of output tree
 
-private:
+protected:
     pandora::StatusCode Run();
 
     /**

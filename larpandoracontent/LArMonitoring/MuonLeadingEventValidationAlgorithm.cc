@@ -27,7 +27,8 @@ namespace lar_content
 MuonLeadingEventValidationAlgorithm::MuonLeadingEventValidationAlgorithm() :
     m_deltaRayMode(false),
     m_michelMode(false),
-    m_muonsToSkip(0)
+    m_muonsToSkip(0),
+    m_visualize(false)
 {
 }
 
@@ -35,6 +36,50 @@ MuonLeadingEventValidationAlgorithm::MuonLeadingEventValidationAlgorithm() :
 
 MuonLeadingEventValidationAlgorithm::~MuonLeadingEventValidationAlgorithm()
 {
+    if (m_writeToTree)
+    {
+        try
+        {
+            PANDORA_MONITORING_API(SaveTree(this->GetPandora(), "OtherShowerContamination", m_fileName.c_str(), "UPDATE"));
+        }
+        catch (const StatusCodeException &)
+        {
+            std::cout << "EventValidationBaseAlgorithm: Unable to write tree " << "OtherShowerContamination" << " to file " << m_fileName << std::endl;
+        }
+    }
+    if (m_writeToTree)
+    {
+        try
+        {
+            PANDORA_MONITORING_API(SaveTree(this->GetPandora(), "OtherTrackContamination", m_fileName.c_str(), "UPDATE"));
+        }
+        catch (const StatusCodeException &)
+        {
+            std::cout << "EventValidationBaseAlgorithm: Unable to write tree " << "OtherTrackContamination" << " to file " << m_fileName << std::endl;
+        }
+    }
+    if (m_writeToTree)
+    {
+        try
+        {
+            PANDORA_MONITORING_API(SaveTree(this->GetPandora(), "ParentTrackContamination", m_fileName.c_str(), "UPDATE"));
+        }
+        catch (const StatusCodeException &)
+        {
+            std::cout << "EventValidationBaseAlgorithm: Unable to write tree " << "ParentTrackContamination" << " to file " << m_fileName << std::endl;
+        }
+    }
+    if (m_writeToTree)
+    {
+        try
+        {
+            PANDORA_MONITORING_API(SaveTree(this->GetPandora(), "CRLHitsInCR", m_fileName.c_str(), "UPDATE"));
+        }
+        catch (const StatusCodeException &)
+        {
+            std::cout << "EventValidationBaseAlgorithm: Unable to write tree " << "CRLHitsInCR" << " to file " << m_fileName << std::endl;
+        }
+    }
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -143,9 +188,9 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
         IntVector bestMatchNOtherShowerHitsTotal_CRL, bestMatchNOtherShowerHitsU_CRL, bestMatchNOtherShowerHitsV_CRL, bestMatchNOtherShowerHitsW_CRL;
         IntVector totalCRLHitsInBestMatchParentCR_CRL, uCRLHitsInBestMatchParentCR_CRL, vCRLHitsInBestMatchParentCR_CRL, wCRLHitsInBestMatchParentCR_CRL;
 
-        IntVector bestMatchOtherShowerHitsID_CRL, bestMatchOtherShowerHitsDistance_CRL;
-        IntVector bestMatchOtherTrackHitsID_CRL, bestMatchOtherTrackHitsDistance_CRL;
-        IntVector bestMatchParentTrackHitsID_CRL, bestMatchParentTrackHitsDistance_CRL;        
+        // Contamination parameters
+        IntVector  bestMatchOtherShowerHitsID_CRL, bestMatchOtherTrackHitsID_CRL, bestMatchParentTrackHitsID_CRL, bestMatchCRLHitsInCRID_CRL;
+        FloatVector bestMatchOtherShowerHitsDistance_CRL, bestMatchOtherTrackHitsDistance_CRL, bestMatchParentTrackHitsDistance_CRL, bestMatchCRLHitsInCRDistance_CRL;
 
         // Move on if cosmic ray has not been reconstructed
         if (unfoldedMCToPfoHitSharingMap.at(pCosmicRay).empty())
@@ -186,20 +231,22 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
 
         ++muonCount;
 
-        if (muonCount < (m_muonsToSkip + 1))
+        if (muonCount < (m_muonsToSkip))
             continue;
 
         // Pull cosmic ray info
         const CaloHitList &cosmicRayHitList(validationInfo.GetUnfoldedAllMCParticleToHitsMap().at(pCosmicRay));
 
         ///////////////////////////////
-        std::cout << "MC COSMIC RAY HITS" << std::endl;
-        this->PrintHits(cosmicRayHitList, "MC CR", BLUE);
-
-        CartesianVector endpoint1(pCosmicRay->GetVertex()), endpoint2(pCosmicRay->GetEndpoint());
-        PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &endpoint1, "muon endpoint ", RED, 2);
-        PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &endpoint2, "muon endpoint 2", RED, 2);
-        PandoraMonitoringApi::ViewEvent(this->GetPandora());
+        if(m_visualize)
+        {
+            std::cout << "MC COSMIC RAY HITS" << std::endl;
+            this->PrintHits(cosmicRayHitList, "MC_CR", BLUE);
+            CartesianVector endpoint1(pCosmicRay->GetVertex()), endpoint2(pCosmicRay->GetEndpoint());
+            PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &endpoint1, "muon endpoint ", BLACK, 2);
+            PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &endpoint2, "muon endpoint 2", BLACK, 2);
+            PandoraMonitoringApi::ViewEvent(this->GetPandora());
+        }
         ///////////////////////////////
         
         ID_CR = muonCount;
@@ -236,8 +283,17 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
             const CaloHitList &leadingParticleHitList(foldedAllMCToHitsMap.at(pLeadingParticle));
             ++leadingCount;
 
-            //std::cout << "MC DELTA RAY HITS" << std::endl;
-            //this->PrintHits(leadingParticleHitList, "MC DR", RED);           
+            ///////////////////////////////
+            if (m_visualize)
+            {
+                std::cout << "MC DELTA RAY HITS" << std::endl;
+                this->PrintHits(leadingParticleHitList, "MC_DR", RED);
+                CartesianVector endpoint1(pLeadingParticle->GetVertex()), endpoint2(pLeadingParticle->GetEndpoint());
+                PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &endpoint1, "leading endpoint ", BLACK, 2);
+                PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &endpoint2, "leading endpoint 2", BLACK, 2);
+                PandoraMonitoringApi::ViewEvent(this->GetPandora());
+            }
+            ///////////////////////////////
             
             mcE_CRL.push_back(pLeadingParticle->GetEnergy());
             ID_CRL.push_back(leadingCount);
@@ -294,8 +350,8 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
                 }                    
 
                 CaloHitList leadingParticleHitsInParentCosmicRay;
-                if (pParentPfo != pMatchedPfo)
-                    LArMuonLeadingHelper::GetMuonPfoContaminationContribution(unfoldedPfoToHitsMap.at(pParentPfo), foldedAllMCToHitsMap.at(pLeadingParticle), leadingParticleHitsInParentCosmicRay);
+                if (isMatchedToCorrectCosmicRay)
+                    LArMuonLeadingHelper::GetMuonPfoContaminationContribution(unfoldedPfoToHitsMap.at(pParentPfo), leadingParticleHitList, leadingParticleHitsInParentCosmicRay);
                 
                 if (0 == nMatches++)
                 {
@@ -340,14 +396,27 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
                     vCRLHitsInBestMatchParentCR_CRL.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_V, leadingParticleHitsInParentCosmicRay));
                     wCRLHitsInBestMatchParentCR_CRL.push_back(LArMonitoringHelper::CountHitsByType(TPC_VIEW_W, leadingParticleHitsInParentCosmicRay));
 
-                    bestMatchOtherShowerHitsID_CRL.insert(bestMatchOtherShowerHitsDistance_CRL.end(), otherShowerHits.size(), leadingCount);
-                    this->FillContaminationHitsDistance(otherShowerHits, leadingParticleHitList, bestMatchOtherShowerHitsDistance_CRL);
+                    if (!otherShowerHits.empty())
+                    {
+                        bestMatchOtherShowerHitsID_CRL.insert(bestMatchOtherShowerHitsID_CRL.end(), otherShowerHits.size(), leadingCount);
+                        this->FillContaminationHitsDistance(otherShowerHits, leadingParticleHitList, bestMatchOtherShowerHitsDistance_CRL);
+                    }
+                    if (!otherTrackHits.empty())
+                    {
+                        bestMatchOtherTrackHitsID_CRL.insert(bestMatchOtherTrackHitsID_CRL.end(), otherTrackHits.size(), leadingCount);
+                        this->FillContaminationHitsDistance(otherTrackHits, leadingParticleHitList, bestMatchOtherTrackHitsDistance_CRL);
+                    }
+                    if (!parentTrackHits.empty())
+                    {
+                        bestMatchParentTrackHitsID_CRL.insert(bestMatchParentTrackHitsID_CRL.end(), parentTrackHits.size(), leadingCount);
+                        this->FillContaminationHitsDistance(parentTrackHits, leadingParticleHitList, bestMatchParentTrackHitsDistance_CRL);
+                    }
 
-                    bestMatchOtherTrackHitsID_CRL.insert(bestMatchOtherTrackHitsDistance_CRL.end(), otherTrackHits.size(), leadingCount);
-                    this->FillContaminationHitsDistance(otherTrackHits, leadingParticleHitList, bestMatchOtherTrackHitsDistance_CRL);
-
-                    bestMatchParentTrackHitsID_CRL.insert(bestMatchParentTrackHitsDistance_CRL.end(), parentTrackHits.size(), leadingCount);
-                    this->FillContaminationHitsDistance(parentTrackHits, leadingParticleHitList, bestMatchParentTrackHitsDistance_CRL);                    
+                    if (!leadingParticleHitsInParentCosmicRay.empty())
+                    {
+                        bestMatchCRLHitsInCRID_CRL.insert(bestMatchCRLHitsInCRID_CRL.end(), leadingParticleHitsInParentCosmicRay.size(), leadingCount);
+                        this->FillContaminationHitsDistance(leadingParticleHitsInParentCosmicRay, cosmicRayHitList, bestMatchCRLHitsInCRDistance_CRL);
+                    }
                 }
 
                 if (isGoodMatch)
@@ -382,17 +451,21 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
                     <<  (!isGoodMatch ? "                   " : " ")                    
                     << (isMatchedToCorrectCosmicRay ? "Correct" :  "Incorrect") << "\033[0m" << " parent link" << std::endl;
 
-                //std::cout << stringStream.str() << std::endl;
-                //std::cout << "DELTA RAY pfo HITS" << std::endl;
-                //this->PrintHits(pfoHitList, "DR PFO", VIOLET);
-                /*
-                if (pParentPfo != pMatchedPfo)
+                ///////////////////////////////
+                if (m_visualize)
                 {
-                    std::cout << "PARENT PFO" << std::endl;
-                    const CaloHitList &parentCRHits(unfoldedPfoToHitsMap.at(pParentPfo));
-                    this->PrintHits(parentCRHits, "DR PARENT PFO", DARKGREEN);
+                    std::cout << stringStream.str() << std::endl;
+                    std::cout << "DELTA RAY PFO HITS" << std::endl;
+                    this->PrintHits(pfoHitList, otherShowerHits, otherTrackHits, parentTrackHits, "DR_PFO");
+
+                    if (pParentPfo != pMatchedPfo)
+                    {
+                        std::cout << "PARENT PFO" << std::endl;
+                        const CaloHitList &parentCRHits(unfoldedPfoToHitsMap.at(pParentPfo));
+                        this->PrintHits(parentCRHits, leadingParticleHitList, "DR_PARENT_PFO");
+                    }
                 }
-                */
+                ///////////////////////////////
              }
                 
             nAboveThresholdMatches_CRL.push_back(nAboveThresholdMatches);
@@ -412,7 +485,11 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
             if (foldedMCToPfoHitSharingMap.at(pLeadingParticle).empty())
             {
                 stringStream << "-" << "No matched pfo" << std::endl;
-                //std::cout << stringStream.str() << std::endl;
+
+                if (m_visualize)
+                {
+                    std::cout << stringStream.str() << std::endl;
+                }
                 
                 isCorrectParentLink_CRL.push_back(0);
                 bestMatchNHitsTotal_CRL.push_back(0); bestMatchNHitsU_CRL.push_back(0); bestMatchNHitsV_CRL.push_back(0); bestMatchNHitsW_CRL.push_back(0);
@@ -429,7 +506,8 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
                          << (isCorrect ?  "\033[32m" : "\033[31m")
                          << (isCorrect ?  "CORRECT" : "INCORRECT") << "\033[0m" << std::endl;
 
-            //std::cout << stringStream.str() << std::endl;
+            if (m_visualize)
+                std::cout << stringStream.str() << std::endl;
         }
 
         if (fillTree)
@@ -495,15 +573,40 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "uCRLHitsInBestMatchParentCR_CRL", &uCRLHitsInBestMatchParentCR_CRL));
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "vCRLHitsInBestMatchParentCR_CRL", &vCRLHitsInBestMatchParentCR_CRL));
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "wCRLHitsInBestMatchParentCR_CRL", &wCRLHitsInBestMatchParentCR_CRL));
-            
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "bestMatchOtherShowerHitsID_CRL", &bestMatchOtherShowerHitsID_CRL));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "bestMatchOtherShowerHitsDistance_CRL", &bestMatchOtherShowerHitsDistance_CRL));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "bestMatchOtherTrackHitsID_CRL", &bestMatchOtherTrackHitsID_CRL));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "bestMatchOtherTrackHitsDistance_CRL", &bestMatchOtherTrackHitsDistance_CRL));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "bestMatchParentTrackHitsID_CRL", &bestMatchParentTrackHitsID_CRL));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "bestMatchParentTrackHitsDistance_CRL", &bestMatchParentTrackHitsDistance_CRL));            
 
             PANDORA_MONITORING_API(FillTree(this->GetPandora(), m_treeName.c_str()));
+            
+            if (!bestMatchOtherShowerHitsID_CRL.empty())
+            {
+                PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "OtherShowerContamination", "bestMatchOtherShowerHitsID_CR", ID_CR));
+                PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "OtherShowerContamination", "bestMatchOtherShowerHitsID_CRL", &bestMatchOtherShowerHitsID_CRL));
+                PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "OtherShowerContamination", "bestMatchOtherShowerHitsDistance_CRL", &bestMatchOtherShowerHitsDistance_CRL));
+                PANDORA_MONITORING_API(FillTree(this->GetPandora(), "OtherShowerContamination"));
+            }
+
+            if (!bestMatchOtherTrackHitsID_CRL.empty())
+            {
+                PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "OtherTrackContamination", "bestMatchOtherTrackHitsID_CR", ID_CR));
+                PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "OtherTrackContamination", "bestMatchOtherTrackHitsID_CRL", &bestMatchOtherTrackHitsID_CRL));
+                PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "OtherTrackContamination", "bestMatchOtherTrackHitsDistance_CRL", &bestMatchOtherTrackHitsDistance_CRL));
+                PANDORA_MONITORING_API(FillTree(this->GetPandora(), "OtherTrackContamination"));
+            }
+
+            if (!bestMatchParentTrackHitsID_CRL.empty())
+            {
+                PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "ParentTrackContamination", "bestMatchParentTrackHitsID_CR", ID_CR));
+                PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "ParentTrackContamination", "bestMatchParentTrackHitsID_CRL", &bestMatchParentTrackHitsID_CRL));
+                PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "ParentTrackContamination", "bestMatchParentTrackHitsDistance_CRL", &bestMatchParentTrackHitsDistance_CRL));
+                PANDORA_MONITORING_API(FillTree(this->GetPandora(), "ParentTrackContamination"));
+            }
+
+            if (!bestMatchCRLHitsInCRID_CRL.empty())
+            {
+                PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "CRLHitsInCR", "bestMatchCRLHitsInCRID_CR", ID_CR));
+                PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "CRLHitsInCR", "bestMatchCRLHitsInCRID_CRL", &bestMatchCRLHitsInCRID_CRL));
+                PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "CRLHitsInCR", "bestMatchCRLHitsInCRDistance_CRL", &bestMatchCRLHitsInCRDistance_CRL));
+                PANDORA_MONITORING_API(FillTree(this->GetPandora(), "CRLHitsInCR"));
+            }
         }
 
         stringStream << "------------------------------------------------------------------------------------------------" << std::endl;      
@@ -512,7 +615,7 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
         stringStream << "------------------------------------------------------------------------------------------------" << std::endl;
     }
     
-    if (printToScreen)
+    if (printToScreen && !m_visualize)
     {
         std::cout << stringStream.str() << std::endl;
     }
@@ -599,7 +702,10 @@ StatusCode MuonLeadingEventValidationAlgorithm::ReadSettings(const TiXmlHandle x
         "MichelMode", m_michelMode));
 
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
-        "MuonsToSkip", m_muonsToSkip));    
+        "MuonsToSkip", m_muonsToSkip));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
+        "Visualize", m_visualize));        
     
     return EventValidationBaseAlgorithm::ReadSettings(xmlHandle);
 }
@@ -635,8 +741,146 @@ void MuonLeadingEventValidationAlgorithm::PrintHits(const CaloHitList caloHitLis
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
+void MuonLeadingEventValidationAlgorithm::PrintHits(const CaloHitList totalCaloHitList, const CaloHitList otherShowerCaloHitList,
+    const CaloHitList otherTrackCaloHitList, const CaloHitList parentTrackCaloHitList, const std::string &stringTag) const
+{
+    for (const CaloHit *const pCaloHit : totalCaloHitList)
+    {
+        if (pCaloHit->GetHitType() != TPC_VIEW_U)
+            continue;
+
+        Color color(BLACK);
+        std::string newStringTag(stringTag);
+        const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
+        
+        if (std::find(otherShowerCaloHitList.begin(), otherShowerCaloHitList.end(), pCaloHit) != otherShowerCaloHitList.end())
+        {
+            newStringTag += "_OTHER_SHOWER"; color = VIOLET;
+        }
+        if (std::find(otherTrackCaloHitList.begin(), otherTrackCaloHitList.end(), pCaloHit) != otherTrackCaloHitList.end())
+        {
+            newStringTag += "_OTHER_TRACK"; color = RED;
+        }
+        if (std::find(parentTrackCaloHitList.begin(), parentTrackCaloHitList.end(), pCaloHit) != parentTrackCaloHitList.end())
+        {
+            newStringTag += "_PARENT_TRACK"; color = BLUE;
+        }
+        PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, newStringTag, color, 2);
+    }
+    PandoraMonitoringApi::ViewEvent(this->GetPandora());  
+
+    for (const CaloHit *const pCaloHit : totalCaloHitList)
+    {
+        if (pCaloHit->GetHitType() != TPC_VIEW_V)
+            continue;
+
+        Color color(BLACK);
+        std::string newStringTag(stringTag);        
+        const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
+            
+        if (std::find(otherShowerCaloHitList.begin(), otherShowerCaloHitList.end(), pCaloHit) != otherShowerCaloHitList.end())
+        {
+            newStringTag += "_OTHER_SHOWER"; color = VIOLET;
+        }
+        if (std::find(otherTrackCaloHitList.begin(), otherTrackCaloHitList.end(), pCaloHit) != otherTrackCaloHitList.end())
+        {
+            newStringTag += "_OTHER_TRACK"; color = RED;
+        }
+        if (std::find(parentTrackCaloHitList.begin(), parentTrackCaloHitList.end(), pCaloHit) != parentTrackCaloHitList.end())
+        {
+            newStringTag += "_PARENT_TRACK"; color = BLUE;
+        }
+        PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, newStringTag, color, 2);
+    }
+    PandoraMonitoringApi::ViewEvent(this->GetPandora());  
+
+    for (const CaloHit *const pCaloHit : totalCaloHitList)
+    {
+        if (pCaloHit->GetHitType() != TPC_VIEW_W)
+            continue;
+
+        Color color(BLACK);
+        std::string newStringTag(stringTag);        
+        const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
+            
+        if (std::find(otherShowerCaloHitList.begin(), otherShowerCaloHitList.end(), pCaloHit) != otherShowerCaloHitList.end())
+        {
+            newStringTag += "_OTHER_SHOWER"; color = VIOLET;
+        }
+        if (std::find(otherTrackCaloHitList.begin(), otherTrackCaloHitList.end(), pCaloHit) != otherTrackCaloHitList.end())
+        {
+            newStringTag += "_OTHER_TRACK"; color = RED;
+        }
+        if (std::find(parentTrackCaloHitList.begin(), parentTrackCaloHitList.end(), pCaloHit) != parentTrackCaloHitList.end())
+        {
+            newStringTag += "_PARENT_TRACK"; color = BLUE;
+        }
+        PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, newStringTag, color, 2);
+    }
+    PandoraMonitoringApi::ViewEvent(this->GetPandora());  
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void MuonLeadingEventValidationAlgorithm::PrintHits(const CaloHitList totalCaloHitList, const CaloHitList leadingCaloHitList,
+    const std::string &stringTag) const
+{
+    for (const CaloHit *const pCaloHit : totalCaloHitList)
+    {
+        if (pCaloHit->GetHitType() != TPC_VIEW_U)
+            continue;
+
+        Color color(DARKGREEN);
+        std::string newStringTag(stringTag);
+        const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
+        
+        if (std::find(leadingCaloHitList.begin(), leadingCaloHitList.end(), pCaloHit) != leadingCaloHitList.end())
+        {
+            newStringTag += "_LEADING"; color = RED;
+        }
+        PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, newStringTag, color, 2);
+    }
+    PandoraMonitoringApi::ViewEvent(this->GetPandora());  
+
+    for (const CaloHit *const pCaloHit : totalCaloHitList)
+    {
+        if (pCaloHit->GetHitType() != TPC_VIEW_V)
+            continue;
+
+        Color color(DARKGREEN);
+        std::string newStringTag(stringTag);        
+        const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
+            
+        if (std::find(leadingCaloHitList.begin(), leadingCaloHitList.end(), pCaloHit) != leadingCaloHitList.end())
+        {
+            newStringTag += "_LEADING"; color = RED;
+        }
+        PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, newStringTag, color, 2);
+    }
+    PandoraMonitoringApi::ViewEvent(this->GetPandora());  
+
+    for (const CaloHit *const pCaloHit : totalCaloHitList)
+    {
+        if (pCaloHit->GetHitType() != TPC_VIEW_W)
+            continue;
+
+        Color color(DARKGREEN);
+        std::string newStringTag(stringTag);        
+        const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
+            
+        if (std::find(leadingCaloHitList.begin(), leadingCaloHitList.end(), pCaloHit) != leadingCaloHitList.end())
+        {
+            newStringTag += "_LEADING"; color = RED;
+        }
+        PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, newStringTag, color, 2);
+    }
+    PandoraMonitoringApi::ViewEvent(this->GetPandora());  
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
 void MuonLeadingEventValidationAlgorithm::FillContaminationHitsDistance(const CaloHitList &contaminationHits, const CaloHitList &leadingMCHits,
-    IntVector &bestMatchContaminationHitsDistance) const
+    FloatVector &bestMatchContaminationHitsDistance) const
 {
     CaloHitList leadingU, leadingV, leadingW;
     this->GetHitsOfType(leadingMCHits, TPC_VIEW_U, leadingU);
@@ -670,144 +914,3 @@ void MuonLeadingEventValidationAlgorithm::GetHitsOfType(const CaloHitList &input
 }
 
 } // namespace lar_content    
-
-
-        ////////////////////////////////////////
-        /*
-        std::cout << "All MC Cosmic Ray Hits" << std::endl;
-        for (const CaloHit *const pCaloHit : cosmicRayHitList)
-        {
-            const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
-            if (pCaloHit->GetHitType() == TPC_VIEW_U)
-                PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, "MC_CR_U", BLUE, 2);
-        }
-        PandoraMonitoringApi::ViewEvent(this->GetPandora());
-
-        for (const CaloHit *const pCaloHit : cosmicRayHitList)
-        {
-            const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
-            if (pCaloHit->GetHitType() == TPC_VIEW_V)
-                PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, "MC_CR_V", BLUE, 2);
-        }
-        PandoraMonitoringApi::ViewEvent(this->GetPandora());
-
-        for (const CaloHit *const pCaloHit : cosmicRayHitList)
-        {
-            const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
-            if (pCaloHit->GetHitType() == TPC_VIEW_W)
-                PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, "MC_CR_W", BLUE, 2);
-        }
-        PandoraMonitoringApi::ViewEvent(this->GetPandora());
-
-        std::cout << "Particle Id: " << pCosmicRay->GetParticleId() << std::endl;
-
-        CartesianVector endpoint1(pCosmicRay->GetVertex()), endpoint2(pCosmicRay->GetEndpoint());
-        PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &endpoint1, "muon endpoint ", RED, 2);
-        PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &endpoint2, "muon endpoint 2", RED, 2);
-        PandoraMonitoringApi::ViewEvent(this->GetPandora());
-        */
-        ////////////////////////////////////////
-
-            ////////////////////////////////////////
-            /*
-            std::cout << "All MC Delta Ray Hits" << std::endl;
-            for (const CaloHit *const pCaloHit : leadingParticleHitList)
-            {
-                const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
-                if (pCaloHit->GetHitType() == TPC_VIEW_U)
-                    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, "MC_DR_U", RED, 2);
-            }
-            PandoraMonitoringApi::ViewEvent(this->GetPandora());
-
-            for (const CaloHit *const pCaloHit : leadingParticleHitList)
-            {
-                const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
-                if (pCaloHit->GetHitType() == TPC_VIEW_V)
-                    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, "MC_DR_V", RED, 2);
-            }
-            PandoraMonitoringApi::ViewEvent(this->GetPandora());
-
-            for (const CaloHit *const pCaloHit : leadingParticleHitList)
-            {
-                const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
-                if (pCaloHit->GetHitType() == TPC_VIEW_W)
-                    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, "MC_DR_W", RED, 2);
-            }
-            PandoraMonitoringApi::ViewEvent(this->GetPandora());
-
-            std::cout << "Particle Id: " << pCosmicRay->GetParticleId() << std::endl;
-
-            CartesianVector endpoint1D(pLeadingParticle->GetVertex()), endpoint2D(pLeadingParticle->GetEndpoint());
-            PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &endpoint1D, "delta endpoint ", VIOLET, 2);
-            PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &endpoint2D, "delta endpoint 2", VIOLET, 2);
-            PandoraMonitoringApi::ViewEvent(this->GetPandora());
-            */
-            ////////////////////////////////////////
-
-
-                ////////////////////////////////////////
-                /*
-                std::cout << "Pfo Delta Ray Hits" << std::endl;
-                for (const CaloHit *const pCaloHit : pfoHitList)
-                {
-                    const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
-                    if (pCaloHit->GetHitType() == TPC_VIEW_U)
-                        PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, "PFO_DR_U", VIOLET, 2);
-                }
-                PandoraMonitoringApi::ViewEvent(this->GetPandora());
-
-                for (const CaloHit *const pCaloHit : pfoHitList)
-                {
-                    const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
-                    if (pCaloHit->GetHitType() == TPC_VIEW_V)
-                        PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, "PFO_DR_V", VIOLET, 2);
-                }
-                PandoraMonitoringApi::ViewEvent(this->GetPandora());
-
-                for (const CaloHit *const pCaloHit : pfoHitList)
-                {
-                    const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
-                    if (pCaloHit->GetHitType() == TPC_VIEW_W)
-                        PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, "PFO_DR_W", VIOLET, 2);
-                }
-                PandoraMonitoringApi::ViewEvent(this->GetPandora());
-                */
-                ////////////////////////////////////////
-
-                ////////////////////////////////////////
-                /*
-                if (pParentPfo != pMatchedPfo)
-                {
-                    std::cout << "Pfo Parent Cosmic Ray Hits" << std::endl;
-                    const CaloHitList &parentCRHits(unfoldedPfoToHitsMap.at(pParentPfo));
-                    
-                    for (const CaloHit *const pCaloHit : parentCRHits)
-                    {   
-                        const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
-                        if (pCaloHit->GetHitType() == TPC_VIEW_U)
-                            PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, "PFO_CR_U", DARKGREEN, 2);
-                    }
-                    PandoraMonitoringApi::ViewEvent(this->GetPandora());
-
-                    for (const CaloHit *const pCaloHit : parentCRHits)
-                    {
-                        const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
-                        if (pCaloHit->GetHitType() == TPC_VIEW_V)
-                            PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, "PFO_CR_V", DARKGREEN, 2);
-                    }
-                    PandoraMonitoringApi::ViewEvent(this->GetPandora());
-
-                    for (const CaloHit *const pCaloHit : parentCRHits)
-                    {
-                        const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
-                        if (pCaloHit->GetHitType() == TPC_VIEW_W)
-                            PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, "PFO_CR_W", DARKGREEN, 2);
-                    }
-                    PandoraMonitoringApi::ViewEvent(this->GetPandora());
-                }
-                else
-                {
-                    std::cout << "Pfo does not have a parent pfo" << std::endl;
-                }
-                */
-                ////////////////////////////////////////   

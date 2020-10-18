@@ -69,8 +69,13 @@ private:
 
     void PrintHits(const pandora::CaloHitList caloHitList, const std::string &stringTag, const Color &colour) const;
 
+    void PrintHits(const pandora::CaloHitList totalCaloHitList, const pandora::CaloHitList otherShowerCaloHitList, const pandora::CaloHitList otherTrackCaloHitList,
+        const pandora::CaloHitList parentTrackCaloHitList, const std::string &stringTag) const;
+
+    void PrintHits(const pandora::CaloHitList totalCaloHitList, const pandora::CaloHitList leadingCaloHitList, const std::string &stringTag) const;
+
     void FillContaminationHitsDistance(const pandora::CaloHitList &contaminationHits, const pandora::CaloHitList &leadingMCHits,
-        pandora::IntVector &bestMatchContaminationHitsDistance) const;
+        pandora::FloatVector &bestMatchContaminationHitsDistance) const;
 
     void GetHitsOfType(const pandora::CaloHitList &inputList, const pandora::HitType &hitType, pandora::CaloHitList &outputList) const;
 
@@ -83,6 +88,7 @@ private:
     bool m_deltaRayMode;
     bool m_michelMode;
     int m_muonsToSkip;
+    bool m_visualize;
 };
 
 } // namespace lar_content
