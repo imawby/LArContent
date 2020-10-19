@@ -180,7 +180,7 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
         IntVector ID_CRL;        
         IntVector nMCHitsTotal_CRL, nMCHitsU_CRL, nMCHitsV_CRL, nMCHitsW_CRL;
         FloatVector mcVertexX_CRL, mcVertexY_CRL, mcVertexZ_CRL, mcEndX_CRL, mcEndY_CRL, mcEndZ_CRL;
-        IntVector nAboveThresholdMatches_CRL, isCorrect_CRL, isCorrectParentLink_CRL;
+        IntVector nAboveThresholdMatches_CRL, isCorrect_CRL, isCorrectParentLink_CRL, isBestMatchedCorrectParentLink_CRL;
         IntVector bestMatchNHitsTotal_CRL, bestMatchNHitsU_CRL, bestMatchNHitsV_CRL, bestMatchNHitsW_CRL;
         IntVector bestMatchNSharedHitsTotal_CRL, bestMatchNSharedHitsU_CRL, bestMatchNSharedHitsV_CRL, bestMatchNSharedHitsW_CRL;
         IntVector bestMatchNParentTrackHitsTotal_CRL, bestMatchNParentTrackHitsU_CRL, bestMatchNParentTrackHitsV_CRL, bestMatchNParentTrackHitsW_CRL;
@@ -320,17 +320,20 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
                  << ", " << LArMonitoringHelper::CountHitsByType(TPC_VIEW_W, leadingParticleHitList) << ")" << std::endl;        
 
             // Look at the pfo matches
-            int nMatches(0);
-            int nAboveThresholdMatches(0);
-            bool isBestMatchMatchedToCorrectCosmicRay(false);
-
+            int nMatches(0), nAboveThresholdMatches(0);
+            bool isCorrectParentLink(false);
             for (const LArMCParticleHelper::PfoCaloHitListPair &pfoToSharedHits : foldedMCToPfoHitSharingMap.at(pLeadingParticle))
             {
                 const ParticleFlowObject *const pMatchedPfo(pfoToSharedHits.first);
                 const CaloHitList &pfoHitList(foldedPfoToHitsMap.at(pMatchedPfo));
-                const CaloHitList &sharedHitList(pfoToSharedHits.second); 
+                const CaloHitList &sharedHitList(pfoToSharedHits.second);
 
                 const bool isGoodMatch(this->IsGoodMatch(leadingParticleHitList, pfoHitList, sharedHitList));
+
+                ++nMatches;
+
+                if (isGoodMatch)
+                    ++nAboveThresholdMatches;
 
                 CaloHitList parentTrackHits, otherTrackHits, otherShowerHits;
                 LArMuonLeadingHelper::GetPfoMatchContamination(pLeadingParticle, pfoHitList, parentTrackHits, otherTrackHits, otherShowerHits);
@@ -352,18 +355,30 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
                 CaloHitList leadingParticleHitsInParentCosmicRay;
                 if (isMatchedToCorrectCosmicRay)
                     LArMuonLeadingHelper::GetMuonPfoContaminationContribution(unfoldedPfoToHitsMap.at(pParentPfo), leadingParticleHitList, leadingParticleHitsInParentCosmicRay);
-                
-                if (0 == nMatches++)
-                {
-                    isBestMatchMatchedToCorrectCosmicRay = isMatchedToCorrectCosmicRay;
 
-                    if (isBestMatchMatchedToCorrectCosmicRay)
+                if (nAboveThresholdMatches == 1)
+                {
+                    isCorrectParentLink = isMatchedToCorrectCosmicRay;
+                        
+                    if (isMatchedToCorrectCosmicRay)
                     {
                         isCorrectParentLink_CRL.push_back(1);
                     }
                     else
                     {
                         isCorrectParentLink_CRL.push_back(0);
+                    }
+                }
+                
+                if (nMatches == 1)
+                {
+                    if (isMatchedToCorrectCosmicRay)
+                    {
+                        isBestMatchedCorrectParentLink_CRL.push_back(1);
+                    }
+                    else
+                    {
+                        isBestMatchedCorrectParentLink_CRL.push_back(0);
                     }                    
                     
                     bestMatchNHitsTotal_CRL.push_back(pfoHitList.size());
@@ -418,9 +433,6 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
                         this->FillContaminationHitsDistance(leadingParticleHitsInParentCosmicRay, cosmicRayHitList, bestMatchCRLHitsInCRDistance_CRL);
                     }
                 }
-
-                if (isGoodMatch)
-                    ++nAboveThresholdMatches;
                                       
                 stringStream << "-" << (!isGoodMatch ? "(Below threshold) " : "")
                     << "nPfoHits " << pfoHitList.size()
@@ -470,7 +482,7 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
                 
             nAboveThresholdMatches_CRL.push_back(nAboveThresholdMatches);
 
-            const bool isCorrect((nAboveThresholdMatches == 1) && isBestMatchMatchedToCorrectCosmicRay);
+            const bool isCorrect((nAboveThresholdMatches == 1) && isCorrectParentLink);
             
             if (isCorrect)
             {
@@ -491,7 +503,7 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
                     std::cout << stringStream.str() << std::endl;
                 }
                 
-                isCorrectParentLink_CRL.push_back(0);
+                isCorrectParentLink_CRL.push_back(0); isBestMatchedCorrectParentLink_CRL.push_back(0);
                 bestMatchNHitsTotal_CRL.push_back(0); bestMatchNHitsU_CRL.push_back(0); bestMatchNHitsV_CRL.push_back(0); bestMatchNHitsW_CRL.push_back(0);
                 bestMatchNSharedHitsTotal_CRL.push_back(0); bestMatchNSharedHitsU_CRL.push_back(0); bestMatchNSharedHitsV_CRL.push_back(0); bestMatchNSharedHitsW_CRL.push_back(0);
                 bestMatchNParentTrackHitsTotal_CRL.push_back(0); bestMatchNParentTrackHitsU_CRL.push_back(0); bestMatchNParentTrackHitsV_CRL.push_back(0); bestMatchNParentTrackHitsW_CRL.push_back(0);
@@ -549,6 +561,7 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "nAboveThresholdMatches_CRL", &nAboveThresholdMatches_CRL));
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "isCorrect_CRL", &isCorrect_CRL));
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "isCorrectParentLink_CRL", &isCorrectParentLink_CRL));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "isBestMatchedCorrectParentLink_CRL", &isBestMatchedCorrectParentLink_CRL));
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "bestMatchNHitsTotal_CRL", &bestMatchNHitsTotal_CRL));
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "bestMatchNHitsU_CRL", &bestMatchNHitsU_CRL));
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "bestMatchNHitsV_CRL", &bestMatchNHitsV_CRL));
