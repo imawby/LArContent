@@ -67,7 +67,7 @@ private:
     void SetUnfoldedMatching(const pandora::MCParticleList *pMCParticleList, const pandora::CaloHitList *pCaloHitList, const pandora::PfoList *pPfoList,
         ValidationInfo &validationInfo) const;
 
-    void PrintHits(const pandora::CaloHitList caloHitList, const std::string &stringTag, const Color &colour) const;
+    void PrintHits(const pandora::CaloHitList caloHitList, const std::string &stringTag, const Color &colour, bool print) const;
 
     void PrintHits(const pandora::CaloHitList totalCaloHitList, const pandora::CaloHitList otherShowerCaloHitList, const pandora::CaloHitList otherTrackCaloHitList,
         const pandora::CaloHitList parentTrackCaloHitList, const std::string &stringTag) const;

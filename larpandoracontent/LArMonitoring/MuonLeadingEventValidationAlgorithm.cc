@@ -241,7 +241,7 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
         if(m_visualize)
         {
             std::cout << "MC COSMIC RAY HITS" << std::endl;
-            this->PrintHits(cosmicRayHitList, "MC_CR", BLUE);
+            this->PrintHits(cosmicRayHitList, "MC_CR", BLUE, false);
             CartesianVector endpoint1(pCosmicRay->GetVertex()), endpoint2(pCosmicRay->GetEndpoint());
             PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &endpoint1, "muon endpoint ", BLACK, 2);
             PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &endpoint2, "muon endpoint 2", BLACK, 2);
@@ -284,15 +284,26 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
             ++leadingCount;
 
             ///////////////////////////////
+            
             if (m_visualize)
             {
                 std::cout << "MC DELTA RAY HITS" << std::endl;
-                this->PrintHits(leadingParticleHitList, "MC_DR", RED);
+
+                MCParticleList descendentMCParticleList;
+                LArMCParticleHelper::GetAllDescendentMCParticles(pLeadingParticle, descendentMCParticleList);
+                for (const MCParticle *const jam : descendentMCParticleList)
+                {
+                    if (validationInfo.GetUnfoldedAllMCParticleToHitsMap().find(jam) != validationInfo.GetUnfoldedAllMCParticleToHitsMap().end())
+                        std::cout << "MC Descendent: " << jam->GetParticleId() << ", Tier: " << LArMCParticleHelper::GetHierarchyTier(jam) << std::endl;
+                }
+            
+                this->PrintHits(leadingParticleHitList, "MC_DR", RED, true);
                 CartesianVector endpoint1(pLeadingParticle->GetVertex()), endpoint2(pLeadingParticle->GetEndpoint());
                 PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &endpoint1, "leading endpoint ", BLACK, 2);
                 PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &endpoint2, "leading endpoint 2", BLACK, 2);
                 PandoraMonitoringApi::ViewEvent(this->GetPandora());
             }
+            
             ///////////////////////////////
             
             mcE_CRL.push_back(pLeadingParticle->GetEnergy());
@@ -730,29 +741,78 @@ StatusCode MuonLeadingEventValidationAlgorithm::ReadSettings(const TiXmlHandle x
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void MuonLeadingEventValidationAlgorithm::PrintHits(const CaloHitList caloHitList, const std::string &stringTag, const Color &colour) const
+void MuonLeadingEventValidationAlgorithm::PrintHits(const CaloHitList caloHitList, const std::string &stringTag, const Color &colour, bool print) const
 {
     for (const CaloHit *const pCaloHit : caloHitList)
     {
         const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
+
         if (pCaloHit->GetHitType() == TPC_VIEW_U)
-            PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, stringTag, colour, 2);
+        {
+            Color printColour(colour);
+            if(print)
+            {
+                std::cout << "/////////////////////" << std::endl;                
+                const MCParticleWeightMap &weightMap(pCaloHit->GetMCParticleWeightMap());
+                for (auto &entry : weightMap)
+                {
+                    std::cout << "MCParticle: " << entry.first->GetParticleId() << ", Weight: " << entry.second << std::endl;
+                    if ((std::abs(entry.first->GetParticleId()) == 13) && (entry.second > 0.3))
+                        printColour = VIOLET;
+                        
+                }
+            }
+            PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, stringTag, printColour, 2);
+            //PandoraMonitoringApi::Pause(this->GetPandora());
+        }
     }
     PandoraMonitoringApi::ViewEvent(this->GetPandora());
 
     for (const CaloHit *const pCaloHit : caloHitList)
     {
         const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
+        
         if (pCaloHit->GetHitType() == TPC_VIEW_V)
-            PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, stringTag, colour, 2);
+        {
+            Color printColour(colour);
+            if(print)
+            {
+                std::cout << "/////////////////////" << std::endl;
+                const MCParticleWeightMap &weightMap(pCaloHit->GetMCParticleWeightMap());
+                for (auto &entry : weightMap)
+                {
+                    std::cout << "MCParticle: " << entry.first->GetParticleId() << ", Weight: " << entry.second << std::endl;
+                    if ((std::abs(entry.first->GetParticleId()) == 13) && (entry.second > 0.3))
+                        printColour = VIOLET;
+                }
+            }
+            PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, stringTag, printColour, 2);
+            //PandoraMonitoringApi::Pause(this->GetPandora());            
+        }
     }
     PandoraMonitoringApi::ViewEvent(this->GetPandora());
 
     for (const CaloHit *const pCaloHit : caloHitList)
     {
         const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
+
         if (pCaloHit->GetHitType() == TPC_VIEW_W)
-            PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, stringTag, colour, 2);
+        {
+            Color printColour(colour);            
+            if(print)
+            {
+                std::cout << "/////////////////////" << std::endl;                
+                const MCParticleWeightMap &weightMap(pCaloHit->GetMCParticleWeightMap());
+                for (auto &entry : weightMap)
+                {
+                    std::cout << "MCParticle: " << entry.first->GetParticleId() << ", Weight: " << entry.second << std::endl;
+                    if ((std::abs(entry.first->GetParticleId()) == 13) && (entry.second > 0.3))
+                        printColour = VIOLET;                    
+                }
+            }
+            PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &hitPosition, stringTag, printColour, 2);            
+            //PandoraMonitoringApi::Pause(this->GetPandora());
+        }
     }
     PandoraMonitoringApi::ViewEvent(this->GetPandora());
 }
