@@ -9,6 +9,7 @@
 #include "Pandora/AlgorithmHeaders.h"
 
 #include "larpandoracontent/LArHelpers/LArClusterHelper.h"
+#include "larpandoracontent/LArHelpers/LArGeometryHelper.h"
 #include "larpandoracontent/LArHelpers/LArInteractionTypeHelper.h"
 #include "larpandoracontent/LArHelpers/LArMonitoringHelper.h"
 #include "larpandoracontent/LArHelpers/LArPfoHelper.h"
@@ -88,36 +89,34 @@ void MuonLeadingEventValidationAlgorithm::FillValidationInfo(const MCParticleLis
     const PfoList *const pPfoList, ValidationInfo &validationInfo) const
 {
     //PandoraMonitoringApi::SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_DEFAULT, -1.f, 1.f, 1.f);
-
-    // First get unfolded matching (includes all particles within a CR hierarchy including the primary CR)
-    this->SetUnfoldedMatching(pMCParticleList, pCaloHitList, pPfoList, validationInfo);
+    //this->Investigate(pMCParticleList, pCaloHitList, *pPfoList);
 
     if (pMCParticleList && pCaloHitList)
     {
+        // Get reconstructable MCParticle hit ownership map (non-muon leading hierarchy is folded whilst muon is unfolded)
         LArMCParticleHelper::MCContributionMap targetMCParticleToHitsMap;
-        LArMuonLeadingHelper::SelectReconstructableLeadingParticles(pMCParticleList, pCaloHitList, m_validationParameters, targetMCParticleToHitsMap);
-
-        LArMuonLeadingHelper::ValidationParameters validationParameters(m_validationParameters);
-        validationParameters.m_minPrimaryGoodHits = 0;
-        validationParameters.m_minHitsForGoodView = 0;
-        validationParameters.m_minHitSharingFraction = 0.f;
+        LArMuonLeadingHelper::ValidationParameters recoValidationParams(m_validationParameters);
+        recoValidationParams.m_minHitSharingFraction = 0.7f;//0.90f;
+        recoValidationParams.m_maxBremsstrahlungSeparation = 5.f;
+        LArMuonLeadingHelper::SelectReconstructableLeadingParticles(pMCParticleList, pCaloHitList, recoValidationParams, targetMCParticleToHitsMap, this->GetPandora());    
+        validationInfo.SetTargetMCParticleToHitsMap(targetMCParticleToHitsMap);
+        
+        LArMuonLeadingHelper::ValidationParameters allValidationParams(m_validationParameters);
+        allValidationParams.m_minPrimaryGoodHits = 0;
+        allValidationParams.m_minHitsForGoodView = 0;
+        allValidationParams.m_minHitSharingFraction = 0.7f;//0.90f;
+        allValidationParams.m_maxBremsstrahlungSeparation = 5.f;
         LArMCParticleHelper::MCContributionMap allMCParticleToHitsMap;
-        LArMuonLeadingHelper::SelectReconstructableLeadingParticles(pMCParticleList, pCaloHitList, validationParameters, allMCParticleToHitsMap);
+        LArMuonLeadingHelper::SelectReconstructableLeadingParticles(pMCParticleList, pCaloHitList, allValidationParams, allMCParticleToHitsMap, this->GetPandora());
         
         validationInfo.SetTargetMCParticleToHitsMap(targetMCParticleToHitsMap);
         validationInfo.SetAllMCParticleToHitsMap(allMCParticleToHitsMap);
     }
-    
+
     if (pPfoList)
     {        
-        PfoList nonMuonPfoList;
-        LArMuonLeadingHelper::RemoveMuonPfosFromList(pPfoList, validationInfo.GetUnfoldedInterpretedMCToPfoHitSharingMap(), nonMuonPfoList);
-        
-        PfoList nonMuonLeadingPfoList;
-        LArMuonLeadingHelper::SelectNonMuonLeadingPfos(nonMuonPfoList, nonMuonLeadingPfoList);
-           
         LArMCParticleHelper::PfoContributionMap pfoToHitsMap;
-        LArMCParticleHelper::GetPfoToReconstructable2DHitsMap(nonMuonLeadingPfoList, validationInfo.GetUnfoldedAllMCParticleToHitsMap(), pfoToHitsMap, true);
+        LArMCParticleHelper::GetPfoToReconstructable2DHitsMap(*pPfoList, validationInfo.GetAllMCParticleToHitsMap(), pfoToHitsMap, false);
 
         validationInfo.SetPfoToHitsMap(pfoToHitsMap);
     }
@@ -136,7 +135,6 @@ void MuonLeadingEventValidationAlgorithm::FillValidationInfo(const MCParticleLis
     //std::cout << "Pfo Hit Map size: " << validationInfo.GetPfoToHitsMap().size() << std::endl;
     //std::cout << "Matching Map size: " << mcToPfoHitSharingMap.size() << std::endl;
     //std::cout << "Interpretted Matching Map size: " << interpretedMCToPfoHitSharingMap.size() << std::endl;
-
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -144,9 +142,9 @@ void MuonLeadingEventValidationAlgorithm::FillValidationInfo(const MCParticleLis
 void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &validationInfo, const bool /*useInterpretedMatching*/, const bool printToScreen, const bool fillTree) const
 {
     // Unfolded hit ownership/sharing maps for cosmic ray muons and their descendents
-    const LArMCParticleHelper::MCContributionMap &unfoldedTargetMCToHitsMap(validationInfo.GetUnfoldedTargetMCParticleToHitsMap());
-    const LArMCParticleHelper::PfoContributionMap &unfoldedPfoToHitsMap(validationInfo.GetUnfoldedPfoToHitsMap());
-    const LArMCParticleHelper::MCParticleToPfoHitSharingMap &unfoldedMCToPfoHitSharingMap(validationInfo.GetUnfoldedInterpretedMCToPfoHitSharingMap());
+    //const LArMCParticleHelper::MCContributionMap &unfoldedTargetMCToHitsMap(validationInfo.GetUnfoldedTargetMCParticleToHitsMap());
+    //const LArMCParticleHelper::PfoContributionMap &unfoldedPfoToHitsMap(validationInfo.GetUnfoldedPfoToHitsMap());
+    //const LArMCParticleHelper::MCParticleToPfoHitSharingMap &unfoldedMCToPfoHitSharingMap(validationInfo.GetUnfoldedInterpretedMCToPfoHitSharingMap());
 
     // Folded hit ownership/sharing maps for leading muon ionisation particles
     const LArMCParticleHelper::MCContributionMap &foldedAllMCToHitsMap(validationInfo.GetAllMCParticleToHitsMap());
@@ -156,7 +154,7 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
     
     // Consider only delta rays from reconstructable CR muons
     MCParticleVector mcCRVector;
-    for (auto &entry : unfoldedTargetMCToHitsMap)
+    for (auto &entry : foldedTargetMCToHitsMap)
     {
         if (LArMCParticleHelper::IsCosmicRay(entry.first))
             mcCRVector.push_back(entry.first);
@@ -193,13 +191,16 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
         FloatVector bestMatchOtherShowerHitsDistance_CRL, bestMatchOtherTrackHitsDistance_CRL, bestMatchParentTrackHitsDistance_CRL, bestMatchCRLHitsInCRDistance_CRL;
 
         // Move on if cosmic ray has not been reconstructed
-        if (unfoldedMCToPfoHitSharingMap.at(pCosmicRay).empty())
+        if (foldedMCToPfoHitSharingMap.at(pCosmicRay).empty())
             continue;
 
         // Obtain reconstructable leading particles
         MCParticleVector childLeadingParticles;
         for (const MCParticle *const pMuonChild : pCosmicRay->GetDaughterList())
         {
+            if (!(m_michelMode || m_deltaRayMode))
+                continue;
+                        
             if (m_deltaRayMode)
             {
                 if (!LArMuonLeadingHelper::IsDeltaRay(pMuonChild))
@@ -211,9 +212,6 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
                 if (!LArMuonLeadingHelper::IsMichel(pMuonChild))
                     continue;
             }
-
-            if (!(m_michelMode || m_deltaRayMode))
-                continue;
 
             // Move on if leading particle is not reconstructable
             LArMCParticleHelper::MCContributionMap::const_iterator iter(foldedTargetMCToHitsMap.find(pMuonChild));
@@ -235,7 +233,7 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
             continue;
 
         // Pull cosmic ray info
-        const CaloHitList &cosmicRayHitList(validationInfo.GetUnfoldedAllMCParticleToHitsMap().at(pCosmicRay));
+        const CaloHitList &cosmicRayHitList(foldedAllMCToHitsMap.at(pCosmicRay));
 
         ///////////////////////////////
         if(m_visualize)
@@ -284,18 +282,14 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
             ++leadingCount;
 
             ///////////////////////////////
-            
             if (m_visualize)
             {
                 std::cout << "MC DELTA RAY HITS" << std::endl;
 
                 MCParticleList descendentMCParticleList;
                 LArMCParticleHelper::GetAllDescendentMCParticles(pLeadingParticle, descendentMCParticleList);
-                for (const MCParticle *const jam : descendentMCParticleList)
-                {
-                    if (validationInfo.GetUnfoldedAllMCParticleToHitsMap().find(jam) != validationInfo.GetUnfoldedAllMCParticleToHitsMap().end())
-                        std::cout << "MC Descendent: " << jam->GetParticleId() << ", Tier: " << LArMCParticleHelper::GetHierarchyTier(jam) << std::endl;
-                }
+                for (const MCParticle *const pDescendent : descendentMCParticleList)
+                    std::cout << "MC Descendent: " << pDescendent->GetParticleId() << ", Tier: " << LArMCParticleHelper::GetHierarchyTier(pDescendent) << std::endl;
             
                 this->PrintHits(leadingParticleHitList, "MC_DR", RED, true);
                 CartesianVector endpoint1(pLeadingParticle->GetVertex()), endpoint2(pLeadingParticle->GetEndpoint());
@@ -303,7 +297,6 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
                 PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &endpoint2, "leading endpoint 2", BLACK, 2);
                 PandoraMonitoringApi::ViewEvent(this->GetPandora());
             }
-            
             ///////////////////////////////
             
             mcE_CRL.push_back(pLeadingParticle->GetEnergy());
@@ -353,8 +346,8 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
                 bool isMatchedToCorrectCosmicRay(false);
                 const ParticleFlowObject *const pParentPfo(LArPfoHelper::GetParentPfo(pMatchedPfo));
 
-                for (LArMCParticleHelper::PfoToSharedHitsVector::const_iterator cosmicRayMatchedPfoPair = unfoldedMCToPfoHitSharingMap.at(pCosmicRay).begin();
-                    cosmicRayMatchedPfoPair != unfoldedMCToPfoHitSharingMap.at(pCosmicRay).end(); ++cosmicRayMatchedPfoPair)
+                for (LArMCParticleHelper::PfoToSharedHitsVector::const_iterator cosmicRayMatchedPfoPair = foldedMCToPfoHitSharingMap.at(pCosmicRay).begin();
+                    cosmicRayMatchedPfoPair != foldedMCToPfoHitSharingMap.at(pCosmicRay).end(); ++cosmicRayMatchedPfoPair)
                 {
                     if (cosmicRayMatchedPfoPair->first == pParentPfo)
                     {
@@ -365,7 +358,7 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
 
                 CaloHitList leadingParticleHitsInParentCosmicRay;
                 if (isMatchedToCorrectCosmicRay)
-                    LArMuonLeadingHelper::GetMuonPfoContaminationContribution(unfoldedPfoToHitsMap.at(pParentPfo), leadingParticleHitList, leadingParticleHitsInParentCosmicRay);
+                    LArMuonLeadingHelper::GetMuonPfoContaminationContribution(foldedPfoToHitsMap.at(pParentPfo), leadingParticleHitList, leadingParticleHitsInParentCosmicRay);
                 
                 if ((nAboveThresholdMatches == 1) && isGoodMatch)
                 {
@@ -481,7 +474,7 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
                     if (pParentPfo != pMatchedPfo)
                     {
                         std::cout << "PARENT PFO" << std::endl;
-                        const CaloHitList &parentCRHits(unfoldedPfoToHitsMap.at(pParentPfo));
+                        const CaloHitList &parentCRHits(foldedPfoToHitsMap.at(pParentPfo));
                         this->PrintHits(parentCRHits, leadingParticleHitList, "DR_PARENT_PFO");
                     }
                 }
@@ -651,10 +644,11 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------    
-
+/*
 void MuonLeadingEventValidationAlgorithm::SetUnfoldedMatching(const MCParticleList *pMCParticleList, const CaloHitList *pCaloHitList, const PfoList *pPfoList,
     ValidationInfo &validationInfo) const
 {
+    
     ValidationInfo unfoldedValidationInfo;
     if (pMCParticleList && pCaloHitList)
     {
@@ -698,7 +692,7 @@ void MuonLeadingEventValidationAlgorithm::SetUnfoldedMatching(const MCParticleLi
 
     validationInfo.SetUnfoldedInterpretedMCToPfoHitSharingMap(interpretedMCToPfoHitSharingMap);
 }
-
+*/
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 StatusCode MuonLeadingEventValidationAlgorithm::ReadSettings(const TiXmlHandle xmlHandle)
@@ -990,5 +984,207 @@ void MuonLeadingEventValidationAlgorithm::GetHitsOfType(const CaloHitList &input
             outputList.push_back(pCaloHit);
     }   
 }
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void MuonLeadingEventValidationAlgorithm::Investigate(const MCParticleList *const pMCParticleList, const CaloHitList *const pCaloHitList, const PfoList &pfoList) const
+{
+    ////////////////////////////
+    ValidationInfo validationInfo;
+    
+    LArMCParticleHelper::MCContributionMap targetMCParticleToHitsMap;
+    LArMuonLeadingHelper::ValidationParameters jam(m_validationParameters);
+    jam.m_minHitSharingFraction = 0.90f;
+    jam.m_maxBremsstrahlungSeparation = 0.f;
+    LArMuonLeadingHelper::SelectReconstructableLeadingParticles(pMCParticleList, pCaloHitList, jam, targetMCParticleToHitsMap, this->GetPandora());        
+    validationInfo.SetTargetMCParticleToHitsMap(targetMCParticleToHitsMap);
+
+    LArMCParticleHelper::MCContributionMap allMCParticleToHitsMap;
+    LArMuonLeadingHelper::ValidationParameters jamAll(m_validationParameters);
+    jamAll.m_minPrimaryGoodHits = 0;
+    jamAll.m_minHitsForGoodView = 0;    
+    jamAll.m_minHitSharingFraction = 0.0f;
+    jamAll.m_maxBremsstrahlungSeparation = std::numeric_limits<float>::max();
+    LArMuonLeadingHelper::SelectReconstructableLeadingParticles(pMCParticleList, pCaloHitList, jamAll, allMCParticleToHitsMap, this->GetPandora());     
+    validationInfo.SetAllMCParticleToHitsMap(allMCParticleToHitsMap);
+
+    // To identify hits rejected because of their hit sharing fraction
+    LArMuonLeadingHelper::ValidationParameters noHitFractionParameters(m_validationParameters);
+    noHitFractionParameters.m_minPrimaryGoodHits = 0;
+    noHitFractionParameters.m_minHitsForGoodView = 0;
+    noHitFractionParameters.m_minHitSharingFraction = 0.f;
+    noHitFractionParameters.m_maxBremsstrahlungSeparation = 0.f;        
+    LArMCParticleHelper::MCContributionMap noHitFraction;
+    LArMuonLeadingHelper::SelectReconstructableLeadingParticles(pMCParticleList, pCaloHitList, noHitFractionParameters, noHitFraction, this->GetPandora());
+
+    // To identify hits rejected because of their bremsstrahlung propagation length
+    LArMuonLeadingHelper::ValidationParameters noPhotonPropagationCut(m_validationParameters);
+    noPhotonPropagationCut.m_minPrimaryGoodHits = 0;
+    noPhotonPropagationCut.m_minHitsForGoodView = 0;
+    noPhotonPropagationCut.m_minHitSharingFraction = 0.90f;
+    noPhotonPropagationCut.m_maxBremsstrahlungSeparation = std::numeric_limits<float>::max();
+    LArMCParticleHelper::MCContributionMap noPhotonPropagation;
+    LArMuonLeadingHelper::SelectReconstructableLeadingParticles(pMCParticleList, pCaloHitList, noPhotonPropagationCut, noPhotonPropagation, this->GetPandora());    
+
+    LArMCParticleHelper::PfoContributionMap pfoToHitsMap;
+    LArMCParticleHelper::MCContributionMapVector trueHitMaps = {noHitFraction, noPhotonPropagation}; //need to fill with hits would expect to get
+    LArMCParticleHelper::GetPfoToReconstructable2DHitsMap(pfoList, trueHitMaps, pfoToHitsMap, false);
+    validationInfo.SetPfoToHitsMap(pfoToHitsMap);
+
+    LArMCParticleHelper::PfoToMCParticleHitSharingMap pfoToMCHitSharingMap;
+    LArMCParticleHelper::MCParticleToPfoHitSharingMap mcToPfoHitSharingMap;
+    LArMCParticleHelper::GetPfoMCParticleHitSharingMaps(pfoToHitsMap, {targetMCParticleToHitsMap}, pfoToMCHitSharingMap, mcToPfoHitSharingMap);
+    validationInfo.SetMCToPfoHitSharingMap(mcToPfoHitSharingMap);
+
+    LArMCParticleHelper::MCParticleToPfoHitSharingMap interpretedMCToPfoHitSharingMap;
+    this->InterpretMatching(validationInfo, interpretedMCToPfoHitSharingMap);
+    validationInfo.SetInterpretedMCToPfoHitSharingMap(interpretedMCToPfoHitSharingMap);
+    ////////////////////////////    
+
+
+
+
+    //Print matches
+        for (auto &entry : targetMCParticleToHitsMap)
+        {
+            if (std::fabs(entry.first->GetParticleId()) == 13)
+            {
+                if (targetMCParticleToHitsMap.find(entry.first) != targetMCParticleToHitsMap.end())
+                {
+                    const MCParticleList &childParticles(entry.first->GetDaughterList());
+                    
+                    for (const MCParticle *const pChild : childParticles)
+                    {
+                        if (targetMCParticleToHitsMap.find(pChild) != targetMCParticleToHitsMap.end())
+                        {
+                            MCParticleList hierarchy;
+                            LArMCParticleHelper::GetAllDescendentMCParticles(pChild, hierarchy);
+
+                            for (const MCParticle *const pJam : hierarchy)
+                                std::cout << "MCParticle: " << pJam->GetParticleId() << ", Hierarchy: " << LArMCParticleHelper::GetHierarchyTier(pJam) << std::endl;
+
+                            CaloHitList reconstructableHits;
+                            for (const CaloHit *const pCaloHit : targetMCParticleToHitsMap.at(pChild))
+                                reconstructableHits.push_back(pCaloHit);
+
+                            CaloHitList sharingFractionRejectedHits;
+                            if (noHitFraction.find(pChild) != noHitFraction.end())
+                            {
+                                for (const CaloHit *const pCaloHit : noHitFraction.at(pChild))
+                                {
+                                    if (std::find(reconstructableHits.begin(), reconstructableHits.end(), pCaloHit) == reconstructableHits.end())
+                                        sharingFractionRejectedHits.push_back(pCaloHit);
+                                }
+                            }
+
+                            CaloHitList photonPropagationRejectedHits;
+                            if (noPhotonPropagation.find(pChild) != noPhotonPropagation.end())
+                            {
+                                for (const CaloHit *const pCaloHit : noPhotonPropagation.at(pChild))
+                                {
+                                    if (std::find(reconstructableHits.begin(), reconstructableHits.end(), pCaloHit) == reconstructableHits.end())
+                                        photonPropagationRejectedHits.push_back(pCaloHit);
+                                }
+                            }                            
+
+                            for (const CaloHit *const pCaloHit : reconstructableHits)
+                            {
+                                if (pCaloHit->GetHitType() != TPC_VIEW_U)
+                                    continue;
+                                
+                                const CartesianVector &position(pCaloHit->GetPositionVector());
+                                PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &position, "RECO", RED, 2);
+                            }
+
+                            for (const CaloHit *const pCaloHit : sharingFractionRejectedHits)
+                            {
+                                if (pCaloHit->GetHitType() != TPC_VIEW_U)
+                                    continue;
+
+                                std::cout << "/////////////////////" << std::endl;
+                                const MCParticleWeightMap &weightMap(pCaloHit->GetMCParticleWeightMap());
+                                for (auto &frog : weightMap)
+                                {
+                                    std::cout << "MCParticle: " << frog.first->GetParticleId() << ", Weight: " << frog.second << std::endl;
+                                }
+                                
+                                const CartesianVector &position(pCaloHit->GetPositionVector());
+                                PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &position, "SHARING FRACTION", VIOLET, 2);
+                            }
+
+                            for (const CaloHit *const pCaloHit : photonPropagationRejectedHits)
+                            {
+                                if (pCaloHit->GetHitType() != TPC_VIEW_U)
+                                    continue;
+                                
+                                const CartesianVector &position(pCaloHit->GetPositionVector());
+                                //const CartesianVector translatedPosition(position.GetX() - pCaloHit->GetX0(), position.GetY(), position.GetZ());
+
+                                std::cout << "Distance: " << LArClusterHelper::GetClosestDistanceWithShiftedHits(pCaloHit, targetMCParticleToHitsMap.at(pChild)) << std::endl;
+                                PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &position, "PHOTON LENGTH", BLUE, 2);
+                                //PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &translatedPosition, "PHOTON TRANSLATED", DARKBLUE, 2);                                
+                                //std::cout << "X0: " << pCaloHit->GetX0() << std::endl;
+                            }                                               
+
+                            PandoraMonitoringApi::ViewEvent(this->GetPandora());
+                        
+                            for (auto &pfoMatch : interpretedMCToPfoHitSharingMap.at(pChild))
+                            {
+                                for (const CaloHit *const pfoHit : pfoToHitsMap.at(pfoMatch.first))
+                                {
+                                    const CartesianVector &position(pfoHit->GetPositionVector());
+                                    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &position, "PFO", DARKGREEN, 2);
+                                }
+
+                                PandoraMonitoringApi::ViewEvent(this->GetPandora());
+                            }
+                        }                            
+                    }
+                }
+            }
+        }
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+bool MuonLeadingEventValidationAlgorithm::PrintPhoton(const MCParticle *const pOriginalPrimary, const MCParticle *const pThisMCParticle,
+    const MCParticle *const pHitMCParticle, const float maxPhotonPropagation, const HitType &hitType) const
+{
+    if (NEUTRON == std::abs(pThisMCParticle->GetParticleId()))
+        return false;
+
+    MCParticleList hierarchy;
+    LArMCParticleHelper::GetAllAncestorMCParticles(pHitMCParticle, hierarchy);
+
+    if ((PHOTON == pThisMCParticle->GetParticleId()) && (PHOTON != pOriginalPrimary->GetParticleId()) && (E_MINUS != std::abs(pOriginalPrimary->GetParticleId())))
+    {
+        const CartesianVector &vertex(pThisMCParticle->GetVertex()), &endpoint(pThisMCParticle->GetEndpoint());
+        const CartesianVector projectedVertex(LArGeometryHelper::ProjectPosition(this->GetPandora(), vertex, hitType));
+        const CartesianVector projectedEndpoint(LArGeometryHelper::ProjectPosition(this->GetPandora(), endpoint, hitType));
+
+        if ((projectedEndpoint - projectedVertex).GetMagnitude() > maxPhotonPropagation)
+        {
+            if (std::find(hierarchy.begin(), hierarchy.end(), pThisMCParticle) != hierarchy.end())
+            {
+                PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &projectedEndpoint, "end", BLACK, 2);
+                PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &projectedVertex, "start", BLACK, 2);
+                std::cout << "Photon Distance: " << (projectedEndpoint - projectedVertex).GetMagnitude() << std::endl;
+            }
+            return false;
+        }
+    }
+
+    if (pThisMCParticle == pHitMCParticle)
+        return true;
+
+    for (const MCParticle *const pDaughterMCParticle : pThisMCParticle->GetDaughterList())
+    {
+        if (PrintPhoton(pOriginalPrimary, pDaughterMCParticle, pHitMCParticle, maxPhotonPropagation, hitType))
+            return true;
+    }
+
+    return false;
+}
+
 
 } // namespace lar_content    

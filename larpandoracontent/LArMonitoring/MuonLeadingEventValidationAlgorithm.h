@@ -64,8 +64,8 @@ private:
      */
     void ProcessOutput(const ValidationInfo &validationInfo, const bool useInterpretedMatching, const bool printToScreen, const bool fillTree) const;
 
-    void SetUnfoldedMatching(const pandora::MCParticleList *pMCParticleList, const pandora::CaloHitList *pCaloHitList, const pandora::PfoList *pPfoList,
-        ValidationInfo &validationInfo) const;
+    //void SetUnfoldedMatching(const pandora::MCParticleList *pMCParticleList, const pandora::CaloHitList *pCaloHitList, const pandora::PfoList *pPfoList,
+    //ValidationInfo &validationInfo) const;
 
     void PrintHits(const pandora::CaloHitList caloHitList, const std::string &stringTag, const Color &colour, bool print) const;
 
@@ -80,6 +80,12 @@ private:
     void GetHitsOfType(const pandora::CaloHitList &inputList, const pandora::HitType &hitType, pandora::CaloHitList &outputList) const;
 
     pandora::StatusCode ReadSettings(const pandora::TiXmlHandle xmlHandle);
+
+
+    void Investigate(const pandora::MCParticleList *const pMCParticleList, const pandora::CaloHitList *const pCaloHitList, const pandora::PfoList &pfoList) const;
+
+    bool PrintPhoton(const pandora::MCParticle *const pOriginalPrimary, const pandora::MCParticle *const pThisMCParticle,
+                     const pandora::MCParticle *const pHitMCParticle, const float maxPhotonPropagation, const pandora::HitType &hitType) const;
 
     typedef std::vector<pandora::HitType> HitTypeVector;
     

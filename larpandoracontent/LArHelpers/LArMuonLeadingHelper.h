@@ -31,7 +31,11 @@ public:
          *  @brief  Constructor
          */
         ValidationParameters();
+
+        float m_maxBremsstrahlungSeparation;
     };
+
+    typedef std::map<const pandora::MCParticle*, std::map<const pandora::MCParticle*, pandora::CaloHitList>> LeadingMCParticleToPostPhotonHitLists;
     
     /**
      *  @brief  Return true if passed a DR tagged MCParticle 
@@ -52,13 +56,21 @@ public:
     static void SelectNonMuonLeadingPfos(const pandora::PfoList &inputPfoList, pandora::PfoList &outputList);
 
     static void SelectReconstructableLeadingParticles(const pandora::MCParticleList *pMCParticleList, const pandora::CaloHitList *pCaloHitList, const ValidationParameters &parameters,
-        LArMCParticleHelper::MCContributionMap &selectedMCParticlesToHitsMap);
+                                                      LArMCParticleHelper::MCContributionMap &selectedMCParticlesToHitsMap,  const pandora::Pandora &pandora);
+
+    static void SelectCaloHits(const pandora::CaloHitList *const pCaloHitList, const LArMCParticleHelper::MCRelationMap &mcToTargetMCMap,
+                               pandora::CaloHitList &selectedCaloHitList, const bool selectInputHits, const float minHitSharingFraction, LeadingMCParticleToPostPhotonHitLists &leadingMCParticleToPostPhotonHitLists); 
 
     static void GetPfoMatchContamination(const pandora::MCParticle *const pLeadingParticle, const pandora::CaloHitList &matchedPfoHitList,
         pandora::CaloHitList &parentTrackHits, pandora::CaloHitList &otherTrackHits, pandora::CaloHitList &otherShowerHits);
 
     static void GetMuonPfoContaminationContribution(const pandora::CaloHitList &cosmicRayPfoHitList, const pandora::CaloHitList &leadingMCHitList,
         pandora::CaloHitList &leadingHitsInParentCosmicRay);
+
+    static bool RejectBremsstrahlungHits(const pandora::CaloHit *const pCaloHit, LeadingMCParticleToPostPhotonHitLists &leadingMCParticleToPostPhotonHitLists);
+
+    static void AddInReconstructablePostPhotonHits(const LeadingMCParticleToPostPhotonHitLists &leadingMCParticleToPostPhotonHitLists, const float maxBremsstrahlungSeparation,
+                                                   LArMCParticleHelper::MCContributionMap &leadingMCToTrueHitListMap, const pandora::Pandora &pandora);    
     
  private:
     static void SelectLeadingMCParticles(const pandora::MCParticleList *pMCParticleList, pandora::MCParticleVector &selectedParticles);
