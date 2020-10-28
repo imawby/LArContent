@@ -311,10 +311,8 @@ bool LArMuonLeadingHelper::RejectBremsstrahlungHits(const CaloHit *const pCaloHi
     }
    
     if (leadingMCParticle && highestTierPhoton)
-        leadingMCParticleToPostPhotonHitLists[leadingMCParticle][highestTierPhoton].push_back(pCaloHit);
-
-    if (leadingMCParticle && highestTierPhoton)
     {
+        leadingMCParticleToPostPhotonHitLists[leadingMCParticle][pHitMCParticle].push_back(pCaloHit);        
         return true;
     }
     else
@@ -326,7 +324,7 @@ bool LArMuonLeadingHelper::RejectBremsstrahlungHits(const CaloHit *const pCaloHi
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 void LArMuonLeadingHelper::AddInReconstructablePostPhotonHits(const LeadingMCParticleToPostPhotonHitLists &leadingMCParticleToPostPhotonHitLists, const float maxBremsstrahlungSeparation,
-                                                              LArMCParticleHelper::MCContributionMap &leadingMCToTrueHitListMap, const Pandora &/*pandora*/)
+    LArMCParticleHelper::MCContributionMap &leadingMCToTrueHitListMap, const Pandora &pandora)
 {
     MCParticleVector leadingMCParticleVector;
     for (auto &entry : leadingMCParticleToPostPhotonHitLists)
@@ -354,26 +352,107 @@ void LArMuonLeadingHelper::AddInReconstructablePostPhotonHits(const LeadingMCPar
             continue;
         }
 
-        CaloHitList &leadingHitList(leadingMCToTrueHitListMap.at(pLeadingMCParticle));
-
-        MCParticleVector pMCPhotonVector;
-        for(auto &entry : leadingMCParticleToPostPhotonHitLists.at(pLeadingMCParticle))
-            pMCPhotonVector.push_back(entry.first);
-        std::sort(pMCPhotonVector.begin(), pMCPhotonVector.end(), LArMCParticleHelper::SortByMomentum);        
-
-        for (const MCParticle *const pMCPhoton : pMCPhotonVector)
+        /*
+        if (std::fabs(pLeadingMCParticle->GetEnergy() - 0.0296) < 0.01)
         {
-            const CaloHitList postPhotonHitList(leadingMCParticleToPostPhotonHitLists.at(pLeadingMCParticle).at(pMCPhoton));
-
-            if (LArClusterHelper::GetClosestDistanceWithShiftedHits(leadingHitList, postPhotonHitList) < maxBremsstrahlungSeparation)
-                leadingHitList.insert(leadingHitList.begin(), postPhotonHitList.begin(), postPhotonHitList.end());
+        CaloHitList &leadingHitList(leadingMCToTrueHitListMap.at(pLeadingMCParticle));
+        for(const CaloHit *const pCaloHit : leadingHitList)
+        {
+            const CartesianVector shiftedPosition(pCaloHit->GetPositionVector().GetX() - pCaloHit->GetX0(), pCaloHit->GetPositionVector().GetY(), pCaloHit->GetPositionVector().GetZ());
+            PandoraMonitoringApi::AddMarkerToVisualization(pandora, &shiftedPosition, "CRL", RED, 2);
         }
-    }
-
-    //PandoraMonitoringApi::ViewEvent(pandora);
+        }
+        */
+            
+        LArMuonLeadingHelper::AddHits(pLeadingMCParticle, leadingMCParticleToPostPhotonHitLists, maxBremsstrahlungSeparation, leadingMCToTrueHitListMap, TPC_VIEW_U, pandora);
+        LArMuonLeadingHelper::AddHits(pLeadingMCParticle, leadingMCParticleToPostPhotonHitLists, maxBremsstrahlungSeparation, leadingMCToTrueHitListMap, TPC_VIEW_V, pandora);
+        LArMuonLeadingHelper::AddHits(pLeadingMCParticle, leadingMCParticleToPostPhotonHitLists, maxBremsstrahlungSeparation, leadingMCToTrueHitListMap, TPC_VIEW_W, pandora);        
+    }    
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
+
+void LArMuonLeadingHelper::AddHits(const MCParticle *const pLeadingMCParticle, const LeadingMCParticleToPostPhotonHitLists &leadingMCParticleToPostPhotonHitLists,
+    const float maxBremsstrahlungSeparation, LArMCParticleHelper::MCContributionMap &leadingMCToTrueHitListMap, const HitType &tpcView, const Pandora &/*pandora*/)
+{
+       MCParticleVector pMCPhotonVector;
+        for(auto &entry : leadingMCParticleToPostPhotonHitLists.at(pLeadingMCParticle))
+            pMCPhotonVector.push_back(entry.first);
+        std::sort(pMCPhotonVector.begin(), pMCPhotonVector.end(), LArMCParticleHelper::SortByMomentum);
+
+        /*
+        if (std::fabs(pLeadingMCParticle->GetEnergy() - 0.0296) < 0.01)
+        {
+        int colourCounter(0);
+        for (const MCParticle *const pMCParticle : pMCPhotonVector)
+        {
+            ++colourCounter;
+            if (Color(colourCounter) == RED)
+                ++colourCounter;
+            
+            const CaloHitList hits(leadingMCParticleToPostPhotonHitLists.at(pLeadingMCParticle).at(pMCParticle));
+            for(const CaloHit *const pCaloHit : hits)
+            {
+                const CartesianVector shiftedPosition(pCaloHit->GetPositionVector().GetX() - pCaloHit->GetX0(), pCaloHit->GetPositionVector().GetY(), pCaloHit->GetPositionVector().GetZ());
+                PandoraMonitoringApi::AddMarkerToVisualization(pandora, &shiftedPosition, "Photon Hit", Color(colourCounter), 2);
+            }
+
+            std::cout << "ID: " << pMCParticle->GetParticleId() << std::endl;
+            MCParticleList ancestorMCParticleList;            
+            LArMCParticleHelper::GetAllAncestorMCParticles(pMCParticle, ancestorMCParticleList);
+            for (const MCParticle *const pAncestor : ancestorMCParticleList)
+                std::cout << "Tier: " << LArMCParticleHelper::GetHierarchyTier(pAncestor) << ", " << pAncestor->GetParticleId() << std::endl;
+            std::cout << "/////////" << std::endl;
+            
+        }
+        PandoraMonitoringApi::ViewEvent(pandora);
+        }
+        */
+        
+        bool hitsAdded(true);
+        CaloHitList &leadingHitList(leadingMCToTrueHitListMap.at(pLeadingMCParticle));
+        while (hitsAdded)
+        {
+            hitsAdded = false;
+            
+            CaloHitList leadingHits;
+            for (const CaloHit *const star : leadingHitList)
+            {
+                if (star->GetHitType() == tpcView)
+                    leadingHits.push_back(star);
+            }
+
+            CaloHitList hitsToAdd;
+            for (const MCParticle *const pMCPhoton : pMCPhotonVector)
+            {
+                const CaloHitList postPhotonHitList(leadingMCParticleToPostPhotonHitLists.at(pLeadingMCParticle).at(pMCPhoton));
+
+                CaloHitList postPhotonHits;
+                for (const CaloHit *const star : postPhotonHitList)
+                {
+                    if (star->GetHitType() == tpcView)
+                        postPhotonHits.push_back(star);
+                }
+
+                const float separationDistance(LArClusterHelper::GetClosestDistanceWithShiftedHits(leadingHits, postPhotonHits));
+            
+                if (separationDistance < maxBremsstrahlungSeparation)
+                {
+                    if ((separationDistance > 1.f) && (postPhotonHits.size() < 3))
+                        continue;
+                    
+                    hitsToAdd.insert(hitsToAdd.begin(), postPhotonHits.begin(), postPhotonHits.end());
+                    hitsAdded = true;
+                    pMCPhotonVector.erase(std::find(pMCPhotonVector.begin(), pMCPhotonVector.end(), pMCPhoton));
+                    break;
+                }
+            }
+
+            leadingHitList.insert(leadingHitList.begin(), hitsToAdd.begin(), hitsToAdd.end());
+        }
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------ 
 
 void LArMuonLeadingHelper::GetPfoMatchContamination(const MCParticle *const pLeadingParticle, const CaloHitList &matchedPfoHitList,
     CaloHitList &parentTrackHits, CaloHitList &otherTrackHits, CaloHitList &otherShowerHits)
@@ -444,3 +523,124 @@ void LArMuonLeadingHelper::SelectLeadingMCParticles(const MCParticleList *pMCPar
 
     
 } // namespace lar_content
+
+
+
+
+    /*
+
+        unsigned int highestTier(0);
+        for (auto &entry : leadingMCParticleToPostPhotonHitLists.at(pLeadingMCParticle))
+        {
+            if (entry.first > highestTier)
+                highestTier = entry.first;
+        }
+
+        for (unsigned int tier = 0; tier <= highestTier; ++tier)
+        {
+            if (leadingMCParticleToPostPhotonHitLists.at(pLeadingMCParticle).find(tier) == leadingMCParticleToPostPhotonHitLists.at(pLeadingMCParticle).end())
+                continue;
+
+            CaloHitList &leadingHitList(leadingMCToTrueHitListMap.at(pLeadingMCParticle));
+            for (unsigned int isElectron = 0; isElectron < 2; ++isElectron)
+            {
+                CaloHitList leadingUHits, leadingVHits, leadingWHits;
+                for (const CaloHit *const star : leadingHitList)
+                {
+                    if (star->GetHitType() == TPC_VIEW_U)
+                        leadingUHits.push_back(star);
+
+                    if (star->GetHitType() == TPC_VIEW_V)
+                        leadingVHits.push_back(star);
+
+                    if (star->GetHitType() == TPC_VIEW_W)
+                        leadingWHits.push_back(star);
+                }
+
+                CaloHitList hitsToAdd;
+                int pdg(isElectron ? 11 : -11);
+                for (auto &entry : leadingMCParticleToPostPhotonHitLists.at(pLeadingMCParticle).at(tier))
+                {
+                    if (entry.first->GetParticleId() == pdg)
+                    {
+                        const CaloHitList postPhotonHitList(leadingMCParticleToPostPhotonHitLists.at(pLeadingMCParticle).at(tier).at(entry.first));
+                        CaloHitList uHits, vHits, wHits;
+                        for (const CaloHit *const star : postPhotonHitList)
+                        {
+                            if (star->GetHitType() == TPC_VIEW_U)
+                                uHits.push_back(star);
+
+                            if (star->GetHitType() == TPC_VIEW_V)
+                                vHits.push_back(star);
+
+                            if (star->GetHitType() == TPC_VIEW_W)
+                                wHits.push_back(star);
+                        }
+
+                        if (LArClusterHelper::GetClosestDistanceWithShiftedHits(leadingUHits, uHits) < maxBremsstrahlungSeparation)
+                            hitsToAdd.insert(hitsToAdd.begin(), uHits.begin(), uHits.end());
+
+                        if (LArClusterHelper::GetClosestDistanceWithShiftedHits(leadingVHits, vHits) < maxBremsstrahlungSeparation)
+                            hitsToAdd.insert(hitsToAdd.begin(), vHits.begin(), vHits.end());
+
+                        if (LArClusterHelper::GetClosestDistanceWithShiftedHits(leadingWHits, wHits) < maxBremsstrahlungSeparation)
+                            hitsToAdd.insert(hitsToAdd.begin(), wHits.begin(), wHits.end());
+                    }
+                }
+                leadingHitList.insert(leadingHitList.begin(), hitsToAdd.begin(), hitsToAdd.end());
+            }
+        }
+    }
+}
+
+
+
+          
+                if (LArClusterHelper::GetClosestDistanceWithShiftedHits(leadingUHits, uHits) < maxBremsstrahlungSeparation)
+                {
+                if (std::fabs(pLeadingMCParticle->GetEnergy() - 0.3484) < 0.01)
+                {
+                PandoraMonitoringApi::VisualizeCaloHits(pandora, &leadingUHits, "LEADING", RED);
+                PandoraMonitoringApi::VisualizeCaloHits(pandora, &uHits, "PHOTON", BLUE);                  
+                std::cout << "U CLOSEST DISTANCE: " << LArClusterHelper::GetClosestDistanceWithShiftedHits(leadingUHits, uHits) << std::endl;
+                PandoraMonitoringApi::ViewEvent(pandora);
+                }
+                hitsToAdd.insert(hitsToAdd.begin(), uHits.begin(), uHits.end());
+            }
+
+            if (LArClusterHelper::GetClosestDistanceWithShiftedHits(leadingVHits, vHits) < maxBremsstrahlungSeparation)
+            {
+                if (std::fabs(pLeadingMCParticle->GetEnergy() - 0.3484) < 0.01)
+                {
+                PandoraMonitoringApi::VisualizeCaloHits(pandora, &leadingVHits, "LEADING", RED);
+                PandoraMonitoringApi::VisualizeCaloHits(pandora, &vHits, "PHOTON", BLUE);                  
+                std::cout << "V CLOSEST DISTANCE: " << LArClusterHelper::GetClosestDistanceWithShiftedHits(leadingVHits, vHits) << std::endl;
+
+                //for (const CaloHit *const sam : vHits)
+                //std::cout << "HitParticle Vertex: " << MCParticleHelper::GetMainMCParticle(sam)->GetVertex() << std::endl;
+
+                MCParticleList ancestorMCParticleList;
+                LArMCParticleHelper::GetAllAncestorMCParticles(MCParticleHelper::GetMainMCParticle(vHits.front()), ancestorMCParticleList);
+                for (const MCParticle *const pMCParticle : ancestorMCParticleList)
+                {
+                    std::cout << "ID: " << MCParticleHelper::GetMainMCParticle(vHits.front())->GetParticleId() << std::endl;
+                    std::cout << "Tier: " << LArMCParticleHelper::GetHierarchyTier(pMCParticle) << ", " << pMCParticle->GetParticleId() << std::endl;
+                }
+                
+                PandoraMonitoringApi::ViewEvent(pandora);
+                }
+                hitsToAdd.insert(hitsToAdd.begin(), vHits.begin(), vHits.end());
+            }
+
+            if (LArClusterHelper::GetClosestDistanceWithShiftedHits(leadingWHits, wHits) < maxBremsstrahlungSeparation)
+            {
+                if (std::fabs(pLeadingMCParticle->GetEnergy() - 0.3484) < 0.01)
+                {
+                PandoraMonitoringApi::VisualizeCaloHits(pandora, &leadingWHits, "LEADING", RED);
+                PandoraMonitoringApi::VisualizeCaloHits(pandora, &wHits, "PHOTON", BLUE);                  
+                std::cout << "W CLOSEST DISTANCE: " << LArClusterHelper::GetClosestDistanceWithShiftedHits(leadingWHits, wHits) << std::endl;
+                PandoraMonitoringApi::ViewEvent(pandora);
+                }
+                hitsToAdd.insert(hitsToAdd.begin(), wHits.begin(), wHits.end());
+            }                  
+    */

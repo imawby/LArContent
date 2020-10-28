@@ -70,7 +70,9 @@ public:
     static bool RejectBremsstrahlungHits(const pandora::CaloHit *const pCaloHit, LeadingMCParticleToPostPhotonHitLists &leadingMCParticleToPostPhotonHitLists);
 
     static void AddInReconstructablePostPhotonHits(const LeadingMCParticleToPostPhotonHitLists &leadingMCParticleToPostPhotonHitLists, const float maxBremsstrahlungSeparation,
-                                                   LArMCParticleHelper::MCContributionMap &leadingMCToTrueHitListMap, const pandora::Pandora &pandora);    
+                                                   LArMCParticleHelper::MCContributionMap &leadingMCToTrueHitListMap, const pandora::Pandora &pandora);
+    static void AddHits(const pandora::MCParticle *const pLeadingParticle, const LeadingMCParticleToPostPhotonHitLists &leadingMCParticleToPostPhotonHitLists, const float maxBremsstrahlungSeparation,
+                        LArMCParticleHelper::MCContributionMap &leadingMCToTrueHitListMap, const pandora::HitType &tpcView, const pandora::Pandora &pandora);
     
  private:
     static void SelectLeadingMCParticles(const pandora::MCParticleList *pMCParticleList, pandora::MCParticleVector &selectedParticles);
