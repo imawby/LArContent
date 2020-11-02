@@ -438,7 +438,7 @@ void LArMuonLeadingHelper::AddHits(const MCParticle *const pLeadingMCParticle, c
             
                 if (separationDistance < maxBremsstrahlungSeparation)
                 {
-                    if ((separationDistance > 1.f) && (postPhotonHits.size() < 3))
+                    if ((separationDistance > 2.f) && (postPhotonHits.size() < 3))
                         continue;
                     
                     hitsToAdd.insert(hitsToAdd.begin(), postPhotonHits.begin(), postPhotonHits.end());
