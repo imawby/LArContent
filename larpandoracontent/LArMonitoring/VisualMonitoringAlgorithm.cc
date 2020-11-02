@@ -33,7 +33,8 @@ VisualMonitoringAlgorithm::VisualMonitoringAlgorithm() :
     m_energyScaleThresholdE(1.f),
     m_scalingFactor(1.f),
     m_showPfoVertices(true),
-    m_showPfoHierarchy(true)
+    m_showPfoHierarchy(true),
+    m_positionString("")
 {
 }
 
@@ -44,6 +45,11 @@ StatusCode VisualMonitoringAlgorithm::Run()
     PANDORA_MONITORING_API(SetEveDisplayParameters(this->GetPandora(), m_showDetector, (m_detectorView.find("xz") != std::string::npos) ? DETECTOR_VIEW_XZ :
         (m_detectorView.find("xy") != std::string::npos) ? DETECTOR_VIEW_XY : DETECTOR_VIEW_DEFAULT, m_transparencyThresholdE, m_energyScaleThresholdE, m_scalingFactor));
 
+    if (!m_positionString.empty())
+    {
+        std::cout << "\033[31m" << "Visual Monitoring Position: " << "\033[33m"  << m_positionString << "\033[0m"  << std::endl;
+    }
+    
     // Show current mc particles
     if (m_showCurrentMCParticles)
     {
@@ -304,6 +310,8 @@ void VisualMonitoringAlgorithm::VisualizeParticleFlowList(const std::string &lis
         }
     }
 
+    std::cout << "sizeee: " << pPfoList->size() << std::endl;
+
     PANDORA_MONITORING_API(VisualizeParticleFlowObjects(this->GetPandora(), pPfoList, listName.empty() ? "CurrentPfos" : listName.c_str(),
         (m_hitColors.find("particleid") != std::string::npos) ? AUTOID :
         (m_hitColors.find("iterate") != std::string::npos ? AUTOITER :
@@ -449,6 +457,9 @@ StatusCode VisualMonitoringAlgorithm::ReadSettings(const TiXmlHandle xmlHandle)
 
         m_particleSuppressionMap.insert(PdgCodeToEnergyMap::value_type(pdgCode, energy));
     }
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle,
+        "PositionString", m_positionString));
 
     return STATUS_CODE_SUCCESS;
 }

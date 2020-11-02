@@ -107,6 +107,8 @@ private:
 
     pandora::StringVector   m_suppressMCParticles;      ///< List of PDG numbers and energies for MC particles to be suppressed (e.g. " 22:0.1 2112:1.0 ")
     PdgCodeToEnergyMap      m_particleSuppressionMap;   ///< Map from pdg-codes to energy for suppression of particles types below specific energies
+
+    std::string             m_positionString;
 };
 
 } // namespace lar_content
