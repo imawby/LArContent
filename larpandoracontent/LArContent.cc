@@ -56,6 +56,7 @@
 #include "larpandoracontent/LArMonitoring/TestBeamHierarchyEventValidationAlgorithm.h"
 #include "larpandoracontent/LArMonitoring/TransverseMatrixVisualizationTool.h"
 #include "larpandoracontent/LArMonitoring/TransverseTensorVisualizationTool.h"
+#include "larpandoracontent/LArMonitoring/DeltaRayTensorVisualizationTool.h"
 
 #include "larpandoracontent/LArPersistency/EventReadingAlgorithm.h"
 #include "larpandoracontent/LArPersistency/EventWritingAlgorithm.h"
@@ -68,6 +69,7 @@
 #include "larpandoracontent/LArThreeDReco/LArCosmicRay/CosmicRayVertexBuildingAlgorithm.h"
 #include "larpandoracontent/LArThreeDReco/LArCosmicRay/DeltaRayIdentificationAlgorithm.h"
 #include "larpandoracontent/LArThreeDReco/LArCosmicRay/DeltaRayMatchingAlgorithm.h"
+#include "larpandoracontent/LArThreeDReco/LArCosmicRay/ThreeViewDeltaRayMatchingAlgorithm.h"
 #include "larpandoracontent/LArThreeDReco/LArCosmicRay/UnattachedDeltaRaysAlgorithm.h"
 
 #include "larpandoracontent/LArThreeDReco/LArEventBuilding/BranchAssociatedPfosTool.h"
@@ -226,6 +228,7 @@
     d("LArCosmicRayVertexBuilding",             CosmicRayVertexBuildingAlgorithm)                                               \
     d("LArDeltaRayIdentification",              DeltaRayIdentificationAlgorithm)                                                \
     d("LArDeltaRayMatching",                    DeltaRayMatchingAlgorithm)                                                      \
+    d("LArThreeViewDeltaRayMatching",           ThreeViewDeltaRayMatchingAlgorithm)                                             \
     d("LArUnattachedDeltaRays",                 UnattachedDeltaRaysAlgorithm)                                                   \
     d("LArThreeDHitCreation",                   ThreeDHitCreationAlgorithm)                                                     \
     d("LArThreeDLongitudinalTracks",            ThreeViewLongitudinalTracksAlgorithm)                                           \
@@ -297,6 +300,7 @@
     d("LArShowerTensorVisualization",           ShowerTensorVisualizationTool)                                                  \
     d("LArTransverseMatrixVisualization",       TransverseMatrixVisualizationTool)                                              \
     d("LArTransverseTensorVisualization",       TransverseTensorVisualizationTool)                                              \
+    d("LArDeltaRayTensorVisualization",         DeltaRayTensorVisualizationTool)                                                \
     d("LArCheatingBeamParticleId",              CheatingBeamParticleIdTool)                                                     \
     d("LArCheatingBeamParticleSliceSelection",  CheatingBeamParticleSliceSelectionTool)                                         \
     d("LArCheatingEventSlicing",                CheatingEventSlicingTool)                                                       \
