@@ -112,7 +112,8 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
     std::sort(mcCRVector.begin(), mcCRVector.end(), LArMCParticleHelper::SortByMomentum);
 
     // Process matches
-    int muonCount(0);    
+    int muonCount(0);
+    int totalReconstructableCRLs(0);
     std::stringstream stringStream;
     for (const MCParticle *const pCosmicRay : mcCRVector)
     {
@@ -230,6 +231,7 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
             // Pull delta ray MC info
             const CaloHitList &leadingParticleHitList(foldedAllMCToHitsMap.at(pLeadingParticle));
             ++leadingCount;
+            ++totalReconstructableCRLs;
 
             ///////////////////////////////
             if (m_visualize)
@@ -251,6 +253,9 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
                 PandoraMonitoringApi::ViewEvent(this->GetPandora());
             }
             ///////////////////////////////
+
+            //std::cout << "DELTA RAY ENERGY: " << pLeadingParticle->GetEnergy() << std::endl;
+            //this->PrintHits(leadingParticleHitList, "MC_DR", RED, false);
             
             mcE_CRL.push_back(pLeadingParticle->GetEnergy());
             ID_CRL.push_back(leadingCount);
@@ -547,6 +552,12 @@ void MuonLeadingEventValidationAlgorithm::ProcessOutput(const ValidationInfo &va
     {
         std::cout << stringStream.str() << std::endl;
     }
+
+    
+    //std::cout << "Muon Count: " << muonCount << std::endl;
+    //std::cout << "Reconstructable CRL Count: " << totalReconstructableCRLs << std::endl;
+    //PandoraMonitoringApi::ViewEvent(this->GetPandora());    
+    
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------    
@@ -666,6 +677,7 @@ void MuonLeadingEventValidationAlgorithm::PrintHits(const CaloHitList caloHitLis
             //PandoraMonitoringApi::Pause(this->GetPandora());
         }
     }
+    /*
     PandoraMonitoringApi::ViewEvent(this->GetPandora());
 
     for (const CaloHit *const pCaloHit : caloHitList)
@@ -715,6 +727,7 @@ void MuonLeadingEventValidationAlgorithm::PrintHits(const CaloHitList caloHitLis
         }
     }
     PandoraMonitoringApi::ViewEvent(this->GetPandora());
+    */
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
