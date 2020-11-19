@@ -260,7 +260,8 @@ void OverlapMatrix<T>::ExploreConnections(const Cluster *const pCluster, const b
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 template class OverlapMatrix<float>;
-template class OverlapMatrix<TwoViewTransverseOverlapResult>;
+template class OverlapMatrix<TrackTwoViewTopologyOverlapResult>; 
+template class OverlapMatrix<TwoViewTransverseOverlapResult>; 
 
 
 } // namespace lar_content
