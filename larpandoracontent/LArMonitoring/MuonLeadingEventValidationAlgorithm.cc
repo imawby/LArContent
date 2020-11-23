@@ -52,7 +52,7 @@ void MuonLeadingEventValidationAlgorithm::FillValidationInfo(const MCParticleLis
         // Get reconstructable MCParticle hit ownership map (non-muon leading hierarchy is folded whilst muon is unfolded)
         LArMuonLeadingHelper::ValidationParameters recoValidationParams(m_validationParameters);
         recoValidationParams.m_minHitSharingFraction = 0.7f;//0.90f;
-        recoValidationParams.m_maxBremsstrahlungSeparation = 5.f; //0.f;//5.f;        
+        recoValidationParams.m_maxBremsstrahlungSeparation = 2.5f; //0.f;//5.f;        
         LArMCParticleHelper::MCContributionMap targetMCParticleToHitsMap;        
         LArMuonLeadingHelper::SelectReconstructableLeadingParticles(pMCParticleList, pCaloHitList, recoValidationParams, targetMCParticleToHitsMap, this->GetPandora());    
         
@@ -60,7 +60,7 @@ void MuonLeadingEventValidationAlgorithm::FillValidationInfo(const MCParticleLis
         allValidationParams.m_minPrimaryGoodHits = 0;
         allValidationParams.m_minHitsForGoodView = 0;
         allValidationParams.m_minHitSharingFraction = 0.7f;//0.90f;
-        allValidationParams.m_maxBremsstrahlungSeparation = 5.f; //0.f;//5.f;
+        allValidationParams.m_maxBremsstrahlungSeparation = 2.5f; //0.f;//5.f;
         LArMCParticleHelper::MCContributionMap allMCParticleToHitsMap;
         LArMuonLeadingHelper::SelectReconstructableLeadingParticles(pMCParticleList, pCaloHitList, allValidationParams, allMCParticleToHitsMap, this->GetPandora());
         
