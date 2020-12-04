@@ -62,12 +62,21 @@ public:
          */
         const pandora::Cluster *GetClusterW() const;
 
+        const pandora::Cluster *GetCluster(const pandora::HitType &hitType) const;
+
         /**
          *  @brief  Get the overlap result
          *
          *  @return the overlap result
          */
         const OverlapResult &GetOverlapResult() const;
+
+        /**
+         *  @brief  Get the overlap result
+         *
+         *  @return the overlap result
+         */
+        OverlapResult &GetOverlapResultToModify();
 
         /**
          *  @brief  Element less than operator
@@ -433,6 +442,14 @@ inline const pandora::Cluster *OverlapTensor<T>::Element::GetClusterW() const
 
 template <typename T>
 inline const typename OverlapTensor<T>::OverlapResult &OverlapTensor<T>::Element::GetOverlapResult() const
+{
+    return m_overlapResult;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+template <typename T>
+inline typename OverlapTensor<T>::OverlapResult &OverlapTensor<T>::Element::GetOverlapResultToModify()
 {
     return m_overlapResult;
 }
