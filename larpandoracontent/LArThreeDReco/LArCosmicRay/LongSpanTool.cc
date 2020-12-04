@@ -189,18 +189,9 @@ bool LongSpanTool::IsConnected(const TensorType::Element &element) const
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
-/*
-void LongSpanTool::IsMuonContaminant(const TensorType::Element &element, const HitType &badHitType, float &minX, float &maxX) const
-{
-
-}
-*/
-//------------------------------------------------------------------------------------------------------------------------------------------
 
 void LongSpanTool::IsMuonEndpoint(const TensorType::Element &element, const HitType &badHitType) const
 {
-    //float longViewMinX(element.GetOverlapResult().GetViewMinX(badHitType)), longViewMaxX(element.GetOverlapResult().GetViewMaxX(badHitType));
-    
     PfoList commonMuonPfoList(element.GetOverlapResult().GetCommonMuonPfoList());
 
     if (commonMuonPfoList.size() != 1)
@@ -208,7 +199,6 @@ void LongSpanTool::IsMuonEndpoint(const TensorType::Element &element, const HitT
         std::cout << "ISOBEL MORE THAN ONE MUON PFO" << std::endl;
         return; //false
     }
-
 
     ClusterList muonClusterList;
     LArPfoHelper::GetClusters(commonMuonPfoList.front(), badHitType, muonClusterList);
@@ -238,6 +228,31 @@ void LongSpanTool::IsMuonEndpoint(const TensorType::Element &element, const HitT
         if (this->ShouldSplitDeltaRay( muonClusterList.front(), element.GetCluster(badHitType), muonPoint, slidingFitResult))
         {
             std::cout << "split delta ray!" << std::endl;
+
+            CaloHitList caloHitList;
+            element.GetCluster(badHitType)->GetOrderedCaloHitList().FillCaloHitList(caloHitList);
+            for (const CaloHit *const pCaloHit : caloHitList)
+            {
+                const LArCaloHit *const pLArCaloHit(dynamic_cast<const LArCaloHit*>(pCaloHit));
+                const float showerProb(pLArCaloHit->GetShowerProbability());
+                const float trackProb(pLArCaloHit->GetTrackProbability());
+                const CartesianVector &position(pCaloHit->GetPositionVector());
+                
+                if (trackProb > 0.5f)
+                    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &position, "track", BLUE, 2);
+                
+                if (showerProb > 0.5f)
+                    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &position, "shower", RED, 2);
+            }
+            
+            PandoraMonitoringApi::ViewEvent(this->GetPandora());
+            CaloHitList collectedHits;
+            this->CollectHits(element, badHitType, collectedHits);
+            for (cont CaloHit pCaloHit : collectedHits)
+            {
+                const CartesianVector &position(pCaloHit->GetPositionVector);
+                PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &position, "collected", VIOLET, 2);
+            }
         }
         else
         {
@@ -246,8 +261,113 @@ void LongSpanTool::IsMuonEndpoint(const TensorType::Element &element, const HitT
         
         PandoraMonitoringApi::ViewEvent(this->GetPandora());
     }
+}
 
+//------------------------------------------------------------------------------------------------------------------------------------------
 
+void LongSpanTool::CollectHits(const TensorType::Element &element, const HitType &badHitType, const CaloHitList &collectedHits) const
+{
+    CartesianPointVector projectedPositions;
+    this->ProjectPositions(element, badHitType, projectedPositions);
+
+    CaloHitList longClusterCaloHitList;
+    element.GetCluster(badHitType)->GetOrderedCaloHitList().FillCaloHitList(caloHitList);
+    
+    for (const CaloHit *const pCaloHit : longClusterCaloHitList)
+    {
+        const LArCaloHit *const pLArCaloHit(dynamic_cast<const LArCaloHit*>(pCaloHit));
+
+        if (pLArCaloHit->GetShowerProbability() < 0.5f)
+            continue;
+
+        const CartesianVector &position(pCaloHit->GetPositionVector());
+
+        for (const CartesianVector &projectedPosition : projectedPositions)
+        {
+            const float distanceSquared((position - projectedPosition).GetMagnitude());
+
+            if (distanceSquared < 4.f)
+                collectedHits.push_back(pCaloHit);
+        }
+    }
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void LongSpanTool::ProjectPositions(const TensorType::Element &element, const HitType &badHitType, CartesianPointVector &projectedPositions) const
+{
+    HitTypeVector hitTypeVector({TPC_VIEW_U, TPC_VIEW_V, TPC_VIEW_W});
+
+    const Cluster *pCluster1(nullptr), *pCluster2(nullptr);
+    for (const HitType &hitType1 : hitTypeVector)
+    {
+        if (hitType1 == badHitType)
+            continue;
+        
+        for (const HitType &hitType2 : hitTypeVector)
+        {
+            if ((hitType2 == badHitType) || (hitType1 == hitType2))
+                continue;
+
+            pCluster1 = element.GetCluster(hitType1);
+            pCluster2 = element.GetCluster(hitType2);
+        }
+    }
+    
+    float xMin1(-std::numeric_limits<float>::max()), xMax1(+std::numeric_limits<float>::max());
+    float xMin2(-std::numeric_limits<float>::max()), xMax2(+std::numeric_limits<float>::max());
+
+    pCluster1->GetClusterSpanX(xMin1, xMax1);
+    pCluster2->GetClusterSpanX(xMin2, xMax2);
+
+    const float xPitch(0.5 * m_xOverlapWindow);
+    const float xMin(std::max(xMin1, xMin2) - xPitch);
+    const float xMax(std::min(xMax1, xMax2) + xPitch);
+    const float xOverlap(xMax - xMin);
+
+    // this has already been done...
+    if (xOverlap < std::numeric_limits<float>::epsilon())
+         return STATUS_CODE_NOT_FOUND;
+    
+    const HitType hitType1(LArClusterHelper::GetClusterHitType(pCluster1));
+    const HitType hitType2(LArClusterHelper::GetClusterHitType(pCluster2));
+
+    if (hitType1 == hitType2)
+        return STATUS_CODE_FAILURE;
+
+    const unsigned int nPoints(1 + static_cast<unsigned int>(xOverlap / xPitch));
+
+    // Projection into third view
+    for (unsigned int n = 0; n < nPoints; ++n)
+    {
+        const float x(xMin + (xMax - xMin) * (static_cast<float>(n) + 0.5f) / static_cast<float>(nPoints));
+        const float xmin(x - xPitch);
+        const float xmax(x + xPitch);
+
+        try
+        {
+            float zMin1(0.f), zMin2(0.f), zMax1(0.f), zMax2(0.f);
+            pCluster1->GetClusterSpanZ(xmin, xmax, zMin1, zMax1);
+            pCluster2->GetClusterSpanZ(xmin, xmax, zMin2, zMax2);
+
+            const float z1(0.5f * (zMin1 + zMax1));
+            const float z2(0.5f * (zMin2 + zMax2));
+
+            // could make use of the chi-squared?
+            float chi2;
+            CartesianVector projection(0.f, 0.f, 0.f);
+            LArGeometryHelper::MergeTwoPositions(this->GetPandora(), hitType1, hitType2, CartesianVector(x, 0.f, z1), CartesianVector(x, 0.f, z2), projection, chi2);
+
+            projectedPositions.push_back(projection);
+        }
+        catch(StatusCodeException &statusCodeException)
+        {
+            if (statusCodeException.GetStatusCode() != STATUS_CODE_NOT_FOUND)
+                return statusCodeException.GetStatusCode();
+
+            continue;
+        }
+    }
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -269,10 +389,12 @@ bool LongSpanTool::ShouldSplitDeltaRay(const Cluster *const pMuonCluster, const 
     CaloHitList minusMuonHits, minusDeltaRayHits;    
     CaloHitList plusMuonHits, plusDeltaRayHits;
 
-    this->FindExtrapolatedHits(pMuonCluster, muonPosition, minusPosition, minusMuonHits);
-    this->FindExtrapolatedHits(pMuonCluster, muonPosition, plusPosition, plusMuonHits);
-    this->FindExtrapolatedHits(pDeltaRayCluster, muonPosition, minusPosition, minusDeltaRayHits);
-    this->FindExtrapolatedHits(pDeltaRayCluster, muonPosition, plusPosition, plusDeltaRayHits);
+    unsigned int minusTrackCount(0), plusTrackCount(0), minusShowerCount(0), plusShowerCount(0);
+
+    this->FindExtrapolatedHits(pMuonCluster, muonPosition, minusPosition, minusMuonHits, minusTrackCount);
+    this->FindExtrapolatedHits(pMuonCluster, muonPosition, plusPosition, plusMuonHits, plusTrackCount);
+    this->FindExtrapolatedHits(pDeltaRayCluster, muonPosition, minusPosition, minusDeltaRayHits, minusShowerCount);
+    this->FindExtrapolatedHits(pDeltaRayCluster, muonPosition, plusPosition, plusDeltaRayHits, plusShowerCount);
 
     for (const CaloHit *const pCaloHit : minusMuonHits)
     {
@@ -304,11 +426,11 @@ bool LongSpanTool::ShouldSplitDeltaRay(const Cluster *const pMuonCluster, const 
     if (minusDeltaRayHits.empty() && plusDeltaRayHits.empty())
         return false;
 
-
-    if (minusMuonHits.empty() && plusDeltaRayHits.empty() && (minusDeltaRayHits.size() > 2) && (plusMuonHits.size() > 2))
+    // change this to be like, is the delta ray hits on the rhs close to that of the muons on the lhs?
+    if ((minusMuonHits.size() < 2) && (plusDeltaRayHits.size() < 2) && (minusDeltaRayHits.size() > 2) && (plusMuonHits.size() > 2) && (minusTrackCount > 0))
         return true;
 
-    if (plusMuonHits.empty() && minusDeltaRayHits.empty() && (plusDeltaRayHits.size() > 2) && (minusMuonHits.size() > 2))
+    if ((plusMuonHits.size() < 2) && (minusDeltaRayHits.size() < 2) && (plusDeltaRayHits.size() > 2) && (minusMuonHits.size() > 2) && (plusTrackCount > 0))
         return true;
 
     return false;
@@ -317,13 +439,20 @@ bool LongSpanTool::ShouldSplitDeltaRay(const Cluster *const pMuonCluster, const 
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void LongSpanTool::FindExtrapolatedHits(const Cluster *const pCluster, const CartesianVector &lowerBoundary, const CartesianVector &upperBoundary,  CaloHitList &collectedHits) const
+void LongSpanTool::FindExtrapolatedHits(const Cluster *const pCluster, const CartesianVector &lowerBoundary, const CartesianVector &upperBoundary,
+    const bool isTypeTrack, CaloHitList &collectedHits, unsigned int &typeCount, const bool isTrack) const
 {
     CaloHitList caloHitList;
     pCluster->GetOrderedCaloHitList().FillCaloHitList(caloHitList);
 
     for (const CaloHit *const pCaloHit : caloHitList)
     {
+        const LArCaloHit *const pLArCaloHit(dynamic_cast<const LArCaloHit*>(pCaloHit));
+
+        const float typeProb(isTrack ? pLArCaloHit->GetTrackProbability() : pLArCaloHit->GetShowerProbability());
+        if (typeProb > 0.5f)
+            ++typeCount;
+        
         if (!this->IsInLineSegment(lowerBoundary, upperBoundary, pCaloHit->GetPositionVector()))
             continue;
 
