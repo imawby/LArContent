@@ -50,11 +50,6 @@ public:
 
     static void GetMCToLeadingMap(const pandora::MCParticleList *const pMCParticleList, LArMCParticleHelper::MCRelationMap &mcToLeadingMap);
 
-    static void RemoveMuonPfosFromList(const pandora::PfoList *const pPfoList, const LArMCParticleHelper::MCParticleToPfoHitSharingMap &unfoldedInterepretedMatchingMap,
-        pandora::PfoList &outputList);
-
-    static void SelectNonMuonLeadingPfos(const pandora::PfoList &inputPfoList, pandora::PfoList &outputList);
-
     static void SelectReconstructableLeadingParticles(const pandora::MCParticleList *pMCParticleList, const pandora::CaloHitList *pCaloHitList, const ValidationParameters &parameters,
                                                       LArMCParticleHelper::MCContributionMap &selectedMCParticlesToHitsMap,  const pandora::Pandora &pandora);
 

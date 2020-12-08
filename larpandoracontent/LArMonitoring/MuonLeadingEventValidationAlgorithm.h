@@ -82,11 +82,6 @@ private:
     pandora::StatusCode ReadSettings(const pandora::TiXmlHandle xmlHandle);
 
 
-    void Investigate(const pandora::MCParticleList *const pMCParticleList, const pandora::CaloHitList *const pCaloHitList, const pandora::PfoList &pfoList) const;
-
-    bool PrintPhoton(const pandora::MCParticle *const pOriginalPrimary, const pandora::MCParticle *const pThisMCParticle,
-                     const pandora::MCParticle *const pHitMCParticle, const float maxPhotonPropagation, const pandora::HitType &hitType) const;
-
     typedef std::vector<pandora::HitType> HitTypeVector;
     
     LArMuonLeadingHelper::ValidationParameters  m_validationParameters;
