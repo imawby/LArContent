@@ -157,7 +157,7 @@ void LArMuonLeadingHelper::SelectReconstructableLeadingParticles(const MCParticl
     LArMuonLeadingHelper::SelectLeadingMCParticles(pMCParticleList, leadingMCVector);
     
     // Ensure the MCParticles have enough "good" hits to be reconstructed
-    LArMCParticleHelper::SelectParticlesByHitCount(leadingMCVector, leadingMCToTrueHitListMap, mcToLeadingMCMap, parameters, selectedMCParticlesToHitsMap);
+    LArMCParticleHelper::SelectParticlesByHitCount(leadingMCVector, leadingMCToTrueHitListMap, mcToLeadingMCMap, parameters, selectedMCParticlesToHitsMap, &pandora);
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------

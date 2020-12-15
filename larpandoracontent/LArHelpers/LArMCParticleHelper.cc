@@ -20,6 +20,8 @@
 #include "larpandoracontent/LArHelpers/LArMonitoringHelper.h"
 #include "larpandoracontent/LArHelpers/LArPfoHelper.h"
 
+#include "PandoraMonitoringApi.h"
+
 #include <algorithm>
 #include <cstdlib>
 
@@ -893,7 +895,7 @@ void LArMCParticleHelper::SelectParticlesMatchingCriteria(const MCParticleVector
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 void LArMCParticleHelper::SelectParticlesByHitCount(const MCParticleVector &candidateTargets, const MCContributionMap &mcToTrueHitListMap,
-    const MCRelationMap &mcToTargetMCMap, const PrimaryParameters &parameters, MCContributionMap &selectedMCParticlesToHitsMap)
+    const MCRelationMap &mcToTargetMCMap, const PrimaryParameters &parameters, MCContributionMap &selectedMCParticlesToHitsMap, const Pandora *const /*pandora*/)
 {
     // Apply restrictions on the number of good hits associated with the MCParticles
     for (const MCParticle * const pMCTarget : candidateTargets)
@@ -909,7 +911,18 @@ void LArMCParticleHelper::SelectParticlesByHitCount(const MCParticleVector &cand
         LArMCParticleHelper::SelectGoodCaloHits(&caloHitList, mcToTargetMCMap, goodCaloHitList, parameters.m_selectInputHits, parameters.m_minHitSharingFraction);
 
         if (goodCaloHitList.size() < parameters.m_minPrimaryGoodHits)
+        {
+            /*
+            for (const CaloHit *const pJam : goodCaloHitList)
+            {
+                const CartesianVector &position(pJam->GetPositionVector());
+                PandoraMonitoringApi::AddMarkerToVisualization(*pandora, &position, "unreconstructable DR", RED, 2);
+            }
+            std::cout << "NOT ENOUGH HITS OVERALL" << std::endl;
+            PandoraMonitoringApi::ViewEvent(*pandora); 
+            */
             continue;
+        }
 
         unsigned int nGoodViews(0);
         if (LArMonitoringHelper::CountHitsByType(TPC_VIEW_U, goodCaloHitList) >= parameters.m_minHitsForGoodView)
@@ -922,7 +935,18 @@ void LArMCParticleHelper::SelectParticlesByHitCount(const MCParticleVector &cand
             ++nGoodViews;
 
         if (nGoodViews < parameters.m_minPrimaryGoodViews)
+        {
+            /*
+            for (const CaloHit *const pJam : goodCaloHitList)
+            {
+                const CartesianVector &position(pJam->GetPositionVector());
+                PandoraMonitoringApi::AddMarkerToVisualization(*pandora, &position, "unreconstructable DR", RED, 2);
+            }
+            std::cout << "NOT ENOUGH HITS IN 2 VIEWS" << std::endl;
+            PandoraMonitoringApi::ViewEvent(*pandora);         
+            */    
             continue;
+        }
 
         if (!selectedMCParticlesToHitsMap.insert(MCContributionMap::value_type(pMCTarget, caloHitList)).second)
             throw StatusCodeException(STATUS_CODE_ALREADY_PRESENT);

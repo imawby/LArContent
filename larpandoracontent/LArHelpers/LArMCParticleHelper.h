@@ -393,7 +393,7 @@ public:
      *  @param  selectedMCParticlesToHitsMap the output mapping from selected mcparticles to their hits
      */
     static void SelectParticlesByHitCount(const pandora::MCParticleVector &candidateTargets, const MCContributionMap &mcToTrueHitListMap,
-        const MCRelationMap &mcToTargetMCMap, const PrimaryParameters &parameters, MCContributionMap &selectedMCParticlesToHitsMap);    
+                                          const MCRelationMap &mcToTargetMCMap, const PrimaryParameters &parameters, MCContributionMap &selectedMCParticlesToHitsMap, const pandora::Pandora *const pandora = nullptr);    
 
 private:
     /**
