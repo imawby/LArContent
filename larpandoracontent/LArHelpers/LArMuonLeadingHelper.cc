@@ -352,7 +352,7 @@ void LArMuonLeadingHelper::AddHits(const MCParticle *const pLeadingMCParticle, c
     //////////////////////////////    
 
 
-    std::cout << "maxBremsstrahlungSeparation: " << maxBremsstrahlungSeparation << std::endl;
+    //std::cout << "maxBremsstrahlungSeparation: " << maxBremsstrahlungSeparation << std::endl;
     
     bool hitsAdded(true);
     while (hitsAdded)
