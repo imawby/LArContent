@@ -75,6 +75,8 @@
 #include "larpandoracontent/LArThreeDReco/LArCosmicRay/DeltaRayParentAlgorithm.h"
 #include "larpandoracontent/LArThreeDReco/LArCosmicRay/DeltaRayMergeTool.h"
 #include "larpandoracontent/LArThreeDReco/LArCosmicRay/TwoViewDeltaRayMergeTool.h"
+#include "larpandoracontent/LArThreeDReco/LArCosmicRay/TwoViewDeltaRayRecoveryTool.h"
+#include "larpandoracontent/LArThreeDReco/LArCosmicRay/DeltaRayRecoveryTool.h"
 #include "larpandoracontent/LArThreeDReco/LArCosmicRay/CosmicRayRemovalTool.h"
 #include "larpandoracontent/LArThreeDReco/LArCosmicRay/DeltaRayRemovalTool.h"
 #include "larpandoracontent/LArThreeDReco/LArCosmicRay/SpanAcceptanceTool.h"
@@ -318,9 +320,11 @@
     d("LArCosmicRayRemoval",                    CosmicRayRemovalTool)                                                           \
     d("LArDeltaRayRemoval",                     DeltaRayRemovalTool)                                                            \
     d("LArDeltaRayMerge",                       DeltaRayMergeTool)                                                              \
+    d("LArDeltaRayRecovery",                    DeltaRayRecoveryTool)                                                           \
     d("LArTwoViewDeltaRayMerge",                TwoViewDeltaRayMergeTool)                                                       \
     d("LArSpanAcceptance",                      SpanAcceptanceTool)                                                             \
     d("LArTwoViewClearDeltaRay",                TwoViewClearDeltaRayTool)                                                       \
+    d("LArTwoViewDeltaRayRecovery",             TwoViewDeltaRayRecoveryTool)                                                    \
     d("LArDeltaRayTensorVisualization",         DeltaRayTensorVisualizationTool)                                                \
     d("LArDeltaRayMatrixVisualization",         DeltaRayMatrixVisualizationTool)                                                \
     d("LArCheatingBeamParticleId",              CheatingBeamParticleIdTool)                                                     \
