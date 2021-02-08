@@ -65,6 +65,7 @@
 
 #include "larpandoracontent/LArPlugins/LArParticleIdPlugins.h"
 
+#include "larpandoracontent/LArThreeDReco/LArCosmicRay/AmbiguousDeltaRayTool.h"
 #include "larpandoracontent/LArThreeDReco/LArCosmicRay/ClearDeltaRayTool.h"
 #include "larpandoracontent/LArThreeDReco/LArCosmicRay/CosmicRayShowerMatchingAlgorithm.h"
 #include "larpandoracontent/LArThreeDReco/LArCosmicRay/CosmicRayTrackMatchingAlgorithm.h"
@@ -77,7 +78,6 @@
 #include "larpandoracontent/LArThreeDReco/LArCosmicRay/TwoViewDeltaRayMergeTool.h"
 #include "larpandoracontent/LArThreeDReco/LArCosmicRay/TwoViewCosmicRayRemovalTool.h"
 #include "larpandoracontent/LArThreeDReco/LArCosmicRay/TwoViewDeltaRayRecoveryTool.h"
-#include "larpandoracontent/LArThreeDReco/LArCosmicRay/DeltaRayRecoveryTool.h"
 #include "larpandoracontent/LArThreeDReco/LArCosmicRay/CosmicRayRemovalTool.h"
 #include "larpandoracontent/LArThreeDReco/LArCosmicRay/DeltaRayRemovalTool.h"
 #include "larpandoracontent/LArThreeDReco/LArCosmicRay/SpanAcceptanceTool.h"
@@ -319,11 +319,11 @@
     d("LArShowerTensorVisualization",           ShowerTensorVisualizationTool)                                                  \
     d("LArTransverseMatrixVisualization",       TransverseMatrixVisualizationTool)                                              \
     d("LArTransverseTensorVisualization",       TransverseTensorVisualizationTool)                                              \
+    d("LArAmbiguousDeltaRay",                   AmbiguousDeltaRayTool)                                                          \
     d("LArClearDeltaRay",                       ClearDeltaRayTool)                                                              \
     d("LArCosmicRayRemoval",                    CosmicRayRemovalTool)                                                           \
     d("LArDeltaRayRemoval",                     DeltaRayRemovalTool)                                                            \
     d("LArDeltaRayMerge",                       DeltaRayMergeTool)                                                              \
-    d("LArDeltaRayRecovery",                    DeltaRayRecoveryTool)                                                           \
     d("LArTwoViewDeltaRayMerge",                TwoViewDeltaRayMergeTool)                                                       \
     d("LArTwoViewCosmicRayRemoval",             TwoViewCosmicRayRemovalTool)                                                    \
     d("LArSpanAcceptance",                      SpanAcceptanceTool)                                                             \
