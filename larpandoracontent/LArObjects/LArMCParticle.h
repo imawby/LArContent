@@ -59,6 +59,7 @@ class LArMCParticleParameters : public object_creation::MCParticle::Parameters
 public:
     pandora::InputInt m_nuanceCode; ///< The nuance code
     pandora::InputInt m_process;    ///< The process creating the particle
+    pandora::InputBool m_isNC;
 };
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -90,9 +91,12 @@ public:
      */
     MCProcess GetProcess() const;
 
+    bool GetIsNC() const;
+
 private:
     int m_nuanceCode; ///< The nuance code
     int m_process;    ///< The process that created the particle
+    bool m_isNC;
 };
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -151,7 +155,8 @@ private:
 inline LArMCParticle::LArMCParticle(const LArMCParticleParameters &parameters) :
     object_creation::MCParticle::Object(parameters),
     m_nuanceCode(parameters.m_nuanceCode.Get()),
-    m_process(parameters.m_process.Get())
+    m_process(parameters.m_process.Get()),
+    m_isNC(parameters.m_isNC.Get())
 {
 }
 
@@ -167,6 +172,13 @@ inline int LArMCParticle::GetNuanceCode() const
 inline MCProcess LArMCParticle::GetProcess() const
 {
     return MCProcess(m_process);
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+inline bool LArMCParticle::GetIsNC() const
+{
+    return m_isNC;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -200,11 +212,13 @@ inline pandora::StatusCode LArMCParticleFactory::Read(Parameters &parameters, pa
     // ATTN: To receive this call-back must have already set file reader mc particle factory to this factory
     int nuanceCode(0);
     int process(0);
+    bool isNC(false);
 
     if (pandora::BINARY == fileReader.GetFileType())
     {
         pandora::BinaryFileReader &binaryFileReader(dynamic_cast<pandora::BinaryFileReader &>(fileReader));
         PANDORA_RETURN_RESULT_IF(pandora::STATUS_CODE_SUCCESS, !=, binaryFileReader.ReadVariable(nuanceCode));
+        PANDORA_RETURN_RESULT_IF(pandora::STATUS_CODE_SUCCESS, !=, binaryFileReader.ReadVariable(isNC));
 
         if (m_version > 1)
             PANDORA_RETURN_RESULT_IF(pandora::STATUS_CODE_SUCCESS, !=, binaryFileReader.ReadVariable(process));
@@ -213,6 +227,7 @@ inline pandora::StatusCode LArMCParticleFactory::Read(Parameters &parameters, pa
     {
         pandora::XmlFileReader &xmlFileReader(dynamic_cast<pandora::XmlFileReader &>(fileReader));
         PANDORA_RETURN_RESULT_IF(pandora::STATUS_CODE_SUCCESS, !=, xmlFileReader.ReadVariable("NuanceCode", nuanceCode));
+        PANDORA_RETURN_RESULT_IF(pandora::STATUS_CODE_SUCCESS, !=, xmlFileReader.ReadVariable("IsNC", isNC));
 
         if (m_version > 1)
             PANDORA_RETURN_RESULT_IF(pandora::STATUS_CODE_SUCCESS, !=, xmlFileReader.ReadVariable("Process", process));
@@ -225,6 +240,7 @@ inline pandora::StatusCode LArMCParticleFactory::Read(Parameters &parameters, pa
     LArMCParticleParameters &larMCParticleParameters(dynamic_cast<LArMCParticleParameters &>(parameters));
     larMCParticleParameters.m_nuanceCode = nuanceCode;
     larMCParticleParameters.m_process = process;
+    larMCParticleParameters.m_isNC = isNC;
 
     return pandora::STATUS_CODE_SUCCESS;
 }
@@ -243,6 +259,7 @@ inline pandora::StatusCode LArMCParticleFactory::Write(const Object *const pObje
     {
         pandora::BinaryFileWriter &binaryFileWriter(dynamic_cast<pandora::BinaryFileWriter &>(fileWriter));
         PANDORA_RETURN_RESULT_IF(pandora::STATUS_CODE_SUCCESS, !=, binaryFileWriter.WriteVariable(pLArMCParticle->GetNuanceCode()));
+        PANDORA_RETURN_RESULT_IF(pandora::STATUS_CODE_SUCCESS, !=, binaryFileWriter.WriteVariable(pLArMCParticle->GetIsNC()));
 
         if (m_version > 1)
             PANDORA_RETURN_RESULT_IF(
@@ -252,6 +269,7 @@ inline pandora::StatusCode LArMCParticleFactory::Write(const Object *const pObje
     {
         pandora::XmlFileWriter &xmlFileWriter(dynamic_cast<pandora::XmlFileWriter &>(fileWriter));
         PANDORA_RETURN_RESULT_IF(pandora::STATUS_CODE_SUCCESS, !=, xmlFileWriter.WriteVariable("NuanceCode", pLArMCParticle->GetNuanceCode()));
+        PANDORA_RETURN_RESULT_IF(pandora::STATUS_CODE_SUCCESS, !=, xmlFileWriter.WriteVariable("IsNC", pLArMCParticle->GetIsNC()));
 
         if (m_version > 1)
             PANDORA_RETURN_RESULT_IF(
