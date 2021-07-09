@@ -59,7 +59,7 @@ class LArMCParticleParameters : public object_creation::MCParticle::Parameters
 public:
     pandora::InputInt m_nuanceCode; ///< The nuance code
     pandora::InputInt m_process;    ///< The process creating the particle
-    pandora::InputBool m_isNC;
+    pandora::InputInt m_isNC;
 };
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -91,12 +91,12 @@ public:
      */
     MCProcess GetProcess() const;
 
-    bool GetIsNC() const;
+    int GetIsNC() const;
 
 private:
     int m_nuanceCode; ///< The nuance code
     int m_process;    ///< The process that created the particle
-    bool m_isNC;
+    int m_isNC;
 };
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -176,7 +176,7 @@ inline MCProcess LArMCParticle::GetProcess() const
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-inline bool LArMCParticle::GetIsNC() const
+inline int LArMCParticle::GetIsNC() const
 {
     return m_isNC;
 }
@@ -212,7 +212,7 @@ inline pandora::StatusCode LArMCParticleFactory::Read(Parameters &parameters, pa
     // ATTN: To receive this call-back must have already set file reader mc particle factory to this factory
     int nuanceCode(0);
     int process(0);
-    bool isNC(false);
+    int isNC(false);
 
     if (pandora::BINARY == fileReader.GetFileType())
     {

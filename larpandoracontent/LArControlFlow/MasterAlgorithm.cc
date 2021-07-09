@@ -709,6 +709,8 @@ StatusCode MasterAlgorithm::Copy(const Pandora *const pPandora, const MCParticle
         return STATUS_CODE_INVALID_PARAMETER;
     }
 
+    parameters.m_process = pLArMCParticle->GetProcess();
+    parameters.m_isNC = pLArMCParticle->GetIsNC();
     parameters.m_nuanceCode = pLArMCParticle->GetNuanceCode();
     parameters.m_energy = pMCParticle->GetEnergy();
     parameters.m_momentum = pMCParticle->GetMomentum();
