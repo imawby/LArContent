@@ -273,58 +273,39 @@ void TrackRefinementBaseAlgorithm::GetTrackSegmentBoundaries(const ClusterAssoci
         throw STATUS_CODE_INVALID_PARAMETER;
     }
 
+    // ATTN: To handle final segment merge track remainder with preceding segment and if track remainder was more than half of the segment length split into two
     const CartesianVector &trackDirection(clusterAssociation.GetConnectingLineDirection());
-    float trackLength((clusterAssociation.GetUpstreamMergePoint() - clusterAssociation.GetDownstreamMergePoint()).GetMagnitude());
-
-    // ATTN: Consider the existence of gaps where no hits will be found
-    DetectorGapList consideredGaps;
-    trackLength -= this->DistanceInGap(clusterAssociation.GetUpstreamMergePoint(), clusterAssociation.GetDownstreamMergePoint(), trackDirection, consideredGaps);
-    consideredGaps.clear();
-
+    const float trackLength((clusterAssociation.GetDownstreamMergePoint() - clusterAssociation.GetUpstreamMergePoint()).GetMagnitude());
     const int fullSegments(std::floor(trackLength / m_lineSegmentLength));
 
     if (fullSegments == 0)
-    {
         trackSegmentBoundaries = {clusterAssociation.GetUpstreamMergePoint(), clusterAssociation.GetDownstreamMergePoint()};
-        return;
-    }
-
-    // ATTN: To handle final segment merge track remainder with preceding segment and if track remainder was more than half of the segment length split into two
+    
     const float lengthOfTrackRemainder(trackLength - (fullSegments * m_lineSegmentLength));
     const bool splitFinalSegment(lengthOfTrackRemainder > m_lineSegmentLength * 0.5f);
     const int numberOfBoundaries(fullSegments + (splitFinalSegment ? 2 : 1));
 
-    CartesianVector segmentUpstreamBoundary(clusterAssociation.GetUpstreamMergePoint()), segmentDownstreamBoundary(segmentUpstreamBoundary);
-    this->RepositionIfInGap(trackDirection, segmentUpstreamBoundary);
-    trackSegmentBoundaries.push_back(segmentUpstreamBoundary);
-
-    for (int i = 1; i < numberOfBoundaries; ++i)
+    for (int i = 0; i < numberOfBoundaries; ++i)
     {
-        if (i < fullSegments)
+        if (i == 0)
         {
-            segmentDownstreamBoundary += trackDirection * m_lineSegmentLength;
+  	    trackSegmentBoundaries.push_back(clusterAssociation.GetUpstreamMergePoint());
         }
+        else if (i < fullSegments)
+        {
+   	    trackSegmentBoundaries.push_back(trackSegmentBoundaries.back() + (trackDirection * m_lineSegmentLength));
+	}
         else
         {
-            if (splitFinalSegment)
+  	    if (splitFinalSegment)
             {
-                segmentDownstreamBoundary += trackDirection * (m_lineSegmentLength + lengthOfTrackRemainder) * 0.5f;
+	        trackSegmentBoundaries.push_back(trackSegmentBoundaries.back() + (trackDirection * (m_lineSegmentLength + lengthOfTrackRemainder) * 0.5f));
             }
-            else
+	    else
             {
-                segmentDownstreamBoundary += trackDirection * (m_lineSegmentLength + lengthOfTrackRemainder);
+	        trackSegmentBoundaries.push_back(trackSegmentBoundaries.back() + (trackDirection * (m_lineSegmentLength + lengthOfTrackRemainder)));
             }
-        }
-
-        float distanceInGap(this->DistanceInGap(segmentUpstreamBoundary, segmentDownstreamBoundary, trackDirection, consideredGaps));
-        while (distanceInGap > std::numeric_limits<float>::epsilon())
-        {
-            this->RepositionIfInGap(trackDirection, segmentDownstreamBoundary);
-            segmentDownstreamBoundary += trackDirection * distanceInGap;
-            distanceInGap = this->DistanceInGap(segmentUpstreamBoundary, segmentDownstreamBoundary, trackDirection, consideredGaps);
-        }
-
-        trackSegmentBoundaries.push_back(segmentDownstreamBoundary);
+	}
     }
 }
 
