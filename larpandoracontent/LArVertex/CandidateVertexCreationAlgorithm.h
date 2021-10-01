@@ -130,6 +130,7 @@ private:
 
     pandora::StringVector m_inputClusterListNames; ///< The list of cluster list names
     std::string m_outputVertexListName;            ///< The name under which to save the output vertex list
+    pandora::IntVector m_nuToCheatList; ///< list of particle ids of MCPFOs to be selected
     bool m_replaceCurrentVertexList;               ///< Whether to replace the current vertex list with the output list
 
     unsigned int m_slidingFitWindow;               ///< The layer window for the sliding linear fits
