@@ -36,6 +36,7 @@
 #include "larpandoracontent/LArCheating/CheatingVisibleVertexCreationAlgorithm.h"
 #include "larpandoracontent/LArCheating/CheatingVertexCreationAlgorithm.h"
 #include "larpandoracontent/LArCheating/CheatingVertexSelectionAlgorithm.h"
+#include "larpandoracontent/LArCheating/ThreeDHitRemovalAlgorithm.h"
 
 #include "larpandoracontent/LArControlFlow/BdtBeamParticleIdTool.h"
 #include "larpandoracontent/LArControlFlow/BeamParticleIdTool.h"
@@ -69,6 +70,10 @@
 #include "larpandoracontent/LArPersistency/EventWritingAlgorithm.h"
 
 #include "larpandoracontent/LArPlugins/LArParticleIdPlugins.h"
+
+#include "larpandoracontent/LArShowerRefinement/ElectronStartRefinementAlgorithm.h"
+#include "larpandoracontent/LArShowerRefinement/GammaStartRefinementAlgorithm.h"
+#include "larpandoracontent/LArShowerRefinement/ShowerCharacterisationAlgorithm.h"
 
 #include "larpandoracontent/LArThreeDReco/LArCosmicRay/CosmicRayShowerMatchingAlgorithm.h"
 #include "larpandoracontent/LArThreeDReco/LArCosmicRay/CosmicRayTrackMatchingAlgorithm.h"
@@ -228,10 +233,12 @@
     d("LArCheatingCosmicRayRemoval",            CheatingCosmicRayRemovalAlgorithm)                                              \
     d("LArCheatingVertexCreation",              CheatingVertexCreationAlgorithm)                                                \
     d("LArCheatingVertexSelection",             CheatingVertexSelectionAlgorithm)                                               \
+    d("LArThreeDHitRemovalAlgorithm",           ThreeDHitRemovalAlgorithm)                                                      \
     d("LArPcaShowerParticleBuilding",           PcaShowerParticleBuildingAlgorithm)                                             \
     d("LArMaster",                              MasterAlgorithm)                                                                \
     d("LArPostProcessing",                      PostProcessingAlgorithm)                                                        \
     d("LArPreProcessing",                       PreProcessingAlgorithm)                                                         \
+    d("LArShowerCharacterisation",              ShowerCharacterisationAlgorithm)                                                \
     d("LArSlicing",                             SlicingAlgorithm)                                                               \
     d("LArTrackParticleBuilding",               TrackParticleBuildingAlgorithm)                                                 \
     d("LArNeutrinoCreation",                    NeutrinoCreationAlgorithm)                                                      \

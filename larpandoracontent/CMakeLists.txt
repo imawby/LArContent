@@ -8,6 +8,7 @@ set( subdir_list LArCheating
 		 LArObjects
 		 LArPersistency
 		 LArPlugins
+         LArShowerRefinement
 		 LArThreeDReco
 		 LArThreeDReco/LArCosmicRay
 		 LArThreeDReco/LArEventBuilding
