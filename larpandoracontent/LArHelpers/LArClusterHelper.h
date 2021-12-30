@@ -155,6 +155,10 @@ public:
      */
     static float GetClosestDistance(const pandora::CartesianVector &position, const pandora::Cluster *const pCluster);
 
+    static float GetClosestDistance(const pandora::CartesianVector &position, const pandora::CaloHitList &caloHitList);
+
+    static pandora::CartesianVector GetClosestPosition(const pandora::CartesianVector &position, const pandora::CaloHitList &caloHitList);
+
     /**
      *  @brief  Get closest position in a list of clusters to a specified input position vector
      *

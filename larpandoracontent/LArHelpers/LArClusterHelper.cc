@@ -211,6 +211,13 @@ float LArClusterHelper::GetClosestDistance(const CartesianVector &position, cons
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
+float LArClusterHelper::GetClosestDistance(const CartesianVector &position, const CaloHitList &caloHitList)
+{
+    return (position - LArClusterHelper::GetClosestPosition(position, caloHitList)).GetMagnitude();
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
 CartesianVector LArClusterHelper::GetClosestPosition(const CartesianVector &position, const ClusterList &clusterList)
 {
     bool distanceFound(false);
@@ -266,6 +273,30 @@ CartesianVector LArClusterHelper::GetClosestPosition(const CartesianVector &posi
 
     throw StatusCodeException(STATUS_CODE_NOT_FOUND);
 }
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+    CartesianVector LArClusterHelper::GetClosestPosition(const CartesianVector &position, const CaloHitList &caloHitList)
+    {
+        const CaloHit *pClosestCaloHit(nullptr);
+        float closestDistanceSquared(std::numeric_limits<float>::max());
+
+        for (const CaloHit *const pCaloHit : caloHitList)
+            {
+                const float distanceSquared((pCaloHit->GetPositionVector() - position).GetMagnitudeSquared());
+
+                if (distanceSquared < closestDistanceSquared)
+                    {
+                        closestDistanceSquared = distanceSquared;
+                        pClosestCaloHit = pCaloHit;
+                    }
+            }
+
+        if (pClosestCaloHit)
+            return pClosestCaloHit->GetPositionVector();
+
+        throw StatusCodeException(STATUS_CODE_NOT_FOUND);
+    }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
