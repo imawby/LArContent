@@ -37,7 +37,11 @@ cet_make( LIBRARY_NAME LArPandoraContent
           SUBDIRS ${subdir_list}
 	  LIBRARIES ${PANDORASDK}
 	            ${PANDORAMONITORING}
+    ${ROOT_LIBRARIES} ${ROOT_COMPONENT_LIBRARIES}
+$ENV{ROOTSYS}/lib/libCore.so
+$ENV{ROOTSYS}/lib/libTMVA.so
 )
+
 
 install_source( SUBDIRS ${subdir_list} )
 install_headers( SUBDIRS ${subdir_list} )

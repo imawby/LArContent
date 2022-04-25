@@ -23,6 +23,8 @@ if(DEFINED ENV{CETBUILDTOOLS_VERSION})
     find_package(cetbuildtools REQUIRED)
     ##message(STATUS "larpandoracontent: CMAKE_MODULE_PATH is ${CMAKE_MODULE_PATH}")
 
+    #list(APPEND CMAKE_MODULE_PATH $ENV{CANVAS_ROOT_IO_DIR}/Modules $ENV{ART_DIR}/Modules)
+
     include(CetCMakeEnv)
     cet_cmake_env()
 
@@ -36,6 +38,18 @@ if(DEFINED ENV{CETBUILDTOOLS_VERSION})
 
     find_ups_product( pandora )
     find_ups_product( eigen )
+    #find_ups_product( art )
+    find_ups_product( root )
+    #find_ups_product( larcore )
+
+message(ROOT_LIBS="${ROOT_LIBRARIES} ${ROOT_COMPONENT_LIBRARIES}")
+message(ROOT_SYS="$ENV{ROOTSYS}")
+message(JAM="$ENV{ROOTSYS}/lib/libCore.so")
+
+# macros for dictionary and simple_plugin
+#include(ArtDictionary)
+#include(ArtMake)
+#include(BuildPlugins)
 
     cet_find_library( PANDORASDK NAMES PandoraSDK PATHS ENV PANDORA_LIB )
     cet_find_library( PANDORAMONITORING NAMES PandoraMonitoring PATHS ENV PANDORA_LIB )
