@@ -47,6 +47,7 @@
 
 #include "larpandoracontent/LArHelpers/LArGeometryHelper.h"
 
+#include "larpandoracontent/LArMonitoring/VertexDrawingAlgorithm.h"
 #include "larpandoracontent/LArMonitoring/CosmicRayTaggingMonitoringTool.h"
 #include "larpandoracontent/LArMonitoring/HierarchyMonitoringAlgorithm.h"
 #include "larpandoracontent/LArMonitoring/HierarchyValidationAlgorithm.h"
@@ -223,6 +224,7 @@
 
 // clang-format off
 #define LAR_ALGORITHM_LIST(d)                                                                                                   \
+    d("LArVertexDrawing",                       VertexDrawingAlgorithm)                                                         \
     d("LArMuonLeadingEventValidation",          MuonLeadingEventValidationAlgorithm)                                            \
     d("LArElectronInitialRegionRefinement",     ElectronInitialRegionRefinementAlgorithm)                                       \
     d("LArNeutrinoEventValidation",             NeutrinoEventValidationAlgorithm)                                               \
