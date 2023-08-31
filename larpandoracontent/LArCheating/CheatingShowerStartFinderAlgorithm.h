@@ -10,6 +10,8 @@
 
 #include "larpandoracontent/LArControlFlow/MasterAlgorithm.h"
 
+#include "larpandoracontent/LArHelpers/LArMCParticleHelper.h"
+
 namespace lar_content
 {
 
@@ -31,11 +33,18 @@ private:
 
     pandora::StatusCode ReadSettings(const pandora::TiXmlHandle xmlHandle);
 
-    void FillHierarchyMap(const pandora::MCParticle *const pParentMCParticle, const int generation, 
-        HierarchyMap &hierarchyMap);
+    void FillHierarchyVector(const pandora::MCParticle *const pParentMCParticle, pandora::MCParticleVector &particleHierarchy) const;
+
+    void PrepareHierarchyVector(const pandora::MCParticle *const pMCPrimary, 
+        const LArMCParticleHelper::MCContributionMap &mcToCaloHitListMap, const pandora::MCParticleVector &particleHierarchy,
+        pandora::MCParticleVector &filteredHierarchyU, pandora::MCParticleVector &filteredHierarchyV, pandora::MCParticleVector &filteredHierarchyW) const;
 
     std::string m_mcParticleListName;
     std::string m_caloHitListName;
+    float m_hitDistanceThreshold;
+    unsigned int m_branchHitThreshold;
+    float m_branchAngleThreshold;
+    float m_branchDistanceThreshold;
 };
 
 } // namespace lar_content
