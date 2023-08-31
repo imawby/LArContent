@@ -24,6 +24,10 @@
 #include "larpandoracontent/LArShowerRefinement/ShowerSpineFinderTool.h"
 #include "larpandoracontent/LArShowerRefinement/ShowerStartFinderTool.h"
 
+#ifdef MONITORING
+#include "PandoraMonitoringApi.h"
+#endif
+
 using namespace pandora;
 
 namespace lar_content
@@ -51,6 +55,10 @@ ElectronInitialRegionRefinementAlgorithm::ElectronInitialRegionRefinementAlgorit
 
 StatusCode ElectronInitialRegionRefinementAlgorithm::Run()
 {
+    //////////////////////////////////////////
+    PANDORA_MONITORING_API(SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_XZ, -1.f, -1.f, 1.f));
+    //////////////////////////////////////////
+
     PfoVector showerPfoVector;
     this->FillShowerPfoVector(showerPfoVector);
 
@@ -136,6 +144,140 @@ void ElectronInitialRegionRefinementAlgorithm::RefineShower(const ParticleFlowOb
             continue;
         }
 
+        //////////////////////////////////////////
+        // Display shower pfo
+        PfoList showerPfo_DISPLAY;
+        showerPfo_DISPLAY.push_back(pShowerPfo);
+        PANDORA_MONITORING_API(VisualizeParticleFlowObjects(this->GetPandora(), &showerPfo_DISPLAY, "ShowerPfo", RED));
+
+        // Nu vertex (U, V, W)
+        const CartesianVector nuVertexU(LArGeometryHelper::ProjectPosition(this->GetPandora(), nuVertex3D, TPC_VIEW_U));
+        const CartesianVector nuVertexV(LArGeometryHelper::ProjectPosition(this->GetPandora(), nuVertex3D, TPC_VIEW_V));
+        const CartesianVector nuVertexW(LArGeometryHelper::ProjectPosition(this->GetPandora(), nuVertex3D, TPC_VIEW_W));
+
+        PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &nuVertexU, "NuVertexU", BLACK, 2));
+        PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &nuVertexV, "NuVertexV", BLACK, 2));
+        PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &nuVertexW, "NuVertexW", BLACK, 2));
+
+        // True shower vertex...
+        CaloHitList theseHits;
+        LArPfoHelper::GetAllCaloHits(pShowerPfo, theseHits);
+
+        std::map<const MCParticle*, int>  hitCountMap;
+
+        for (const CaloHit *const pCaloHit : theseHits)
+        {
+            MCParticleVector contributingMCParticleVector;
+            const MCParticleWeightMap &weightMap(pCaloHit->GetMCParticleWeightMap());
+
+            for (const auto &mapEntry : weightMap)
+                contributingMCParticleVector.push_back(mapEntry.first);
+
+            std::sort(contributingMCParticleVector.begin(), contributingMCParticleVector.end(), PointerLessThan<MCParticle>());
+
+            float highestWeight(0.f);
+            const MCParticle *highestContributor(nullptr);
+
+            for (const MCParticle *const pMCParticle : contributingMCParticleVector)
+            {
+                const float weight(weightMap.at(pMCParticle));
+
+                if (weight > highestWeight)
+                {
+                    highestWeight = weight;
+                    highestContributor = pMCParticle;
+                }
+            }
+
+            if (highestContributor)
+            {
+                if (hitCountMap.find(highestContributor) == hitCountMap.end())
+                    hitCountMap[highestContributor] = 1;
+                else
+                    hitCountMap[highestContributor] += 1;
+            }
+        }
+
+        int highestHits(-1);
+        const MCParticle *bestMatchedMCParticle(nullptr);
+
+        for (auto &entry : hitCountMap)
+        {
+            if (entry.second > highestHits)
+            {
+                highestHits = entry.second;
+                bestMatchedMCParticle = entry.first;
+            }
+        }
+
+        if (bestMatchedMCParticle)
+        {
+            std::cout << "Matched PDG Code: " << bestMatchedMCParticle->GetParticleId() << std::endl;
+            const CartesianVector &trueVertex(bestMatchedMCParticle->GetVertex());
+
+            const CartesianVector trueVertexU(LArGeometryHelper::ProjectPosition(this->GetPandora(), trueVertex, TPC_VIEW_U));
+            const CartesianVector trueVertexV(LArGeometryHelper::ProjectPosition(this->GetPandora(), trueVertex, TPC_VIEW_V));
+            const CartesianVector trueVertexW(LArGeometryHelper::ProjectPosition(this->GetPandora(), trueVertex, TPC_VIEW_W));
+
+            PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &trueVertexU, "TrueShowerVertexU", BLACK, 2));
+            PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &trueVertexV, "TrueShowerVertexV", BLACK, 2));
+            PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &trueVertexW, "TrueShowerVertexW", BLACK, 2));
+        }
+
+        // Shower start position (U, V, W)
+        const CartesianVector showerStartU_MIN(LArGeometryHelper::ProjectPosition(this->GetPandora(), showerStarts3D.at(0), TPC_VIEW_U));
+        const CartesianVector showerStartV_MIN(LArGeometryHelper::ProjectPosition(this->GetPandora(), showerStarts3D.at(0), TPC_VIEW_V));
+        const CartesianVector showerStartW_MIN(LArGeometryHelper::ProjectPosition(this->GetPandora(), showerStarts3D.at(0), TPC_VIEW_W));
+
+        PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &showerStartU_MIN, "ShowerStartU", BLUE, 2));
+        PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &showerStartV_MIN, "ShowerStartV", BLUE, 2));
+        PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &showerStartW_MIN, "ShowerStartW", BLUE, 2));
+
+        const CartesianVector showerStartU_MID(LArGeometryHelper::ProjectPosition(this->GetPandora(), showerStarts3D.at(1), TPC_VIEW_U));
+        const CartesianVector showerStartV_MID(LArGeometryHelper::ProjectPosition(this->GetPandora(), showerStarts3D.at(1), TPC_VIEW_V));
+        const CartesianVector showerStartW_MID(LArGeometryHelper::ProjectPosition(this->GetPandora(), showerStarts3D.at(1), TPC_VIEW_W));
+
+        PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &showerStartU_MID, "ShowerStartU", BLUE, 2));
+        PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &showerStartV_MID, "ShowerStartV", BLUE, 2));
+        PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &showerStartW_MID, "ShowerStartW", BLUE, 2));
+
+        const CartesianVector showerStartU_MAX(LArGeometryHelper::ProjectPosition(this->GetPandora(), showerStarts3D.at(2), TPC_VIEW_U));
+        const CartesianVector showerStartV_MAX(LArGeometryHelper::ProjectPosition(this->GetPandora(), showerStarts3D.at(2), TPC_VIEW_V));
+        const CartesianVector showerStartW_MAX(LArGeometryHelper::ProjectPosition(this->GetPandora(), showerStarts3D.at(2), TPC_VIEW_W));
+
+        PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &showerStartU_MAX, "ShowerStartU", BLUE, 2));
+        PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &showerStartV_MAX, "ShowerStartV", BLUE, 2));
+        PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &showerStartW_MAX, "ShowerStartW", BLUE, 2));
+
+        // Connection pathways
+        PANDORA_MONITORING_API(VisualizeCaloHits(this->GetPandora(), &protoShowerMatch.GetProtoShowerU().GetSpineHitList(), "ShowerSpineU", VIOLET));
+        PANDORA_MONITORING_API(VisualizeCaloHits(this->GetPandora(), &protoShowerMatch.GetProtoShowerV().GetSpineHitList(), "ShowerSpineV", VIOLET));
+        PANDORA_MONITORING_API(VisualizeCaloHits(this->GetPandora(), &protoShowerMatch.GetProtoShowerW().GetSpineHitList(), "ShowerSpineW", VIOLET));
+
+        /*
+        for (const CaloHit *const hit : protoShowerMatch.GetProtoShowerU().GetSpineHitList())
+        {
+            const CartesianVector &hitPosition(hit->GetPositionVector());
+            PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &hitPosition, "ShowerSpineU", VIOLET, 2));
+        }
+
+        for (const CaloHit *const hit : protoShowerMatch.GetProtoShowerV().GetSpineHitList())
+        {
+            const CartesianVector &hitPosition(hit->GetPositionVector());
+            PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &hitPosition, "ShowerSpineV", VIOLET, 2));
+        }
+
+        for (const CaloHit *const hit : protoShowerMatch.GetProtoShowerW().GetSpineHitList())
+        {
+            const CartesianVector &hitPosition(hit->GetPositionVector());
+            PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &hitPosition, "ShowerSpineW", VIOLET, 2));
+        }
+        */
+        PANDORA_MONITORING_API(ViewEvent(this->GetPandora()));
+        return;
+        //////////////////////////////////////////
+
+                               /*
         // Fill BDT information
         StringVector featureOrder;
         const LArMvaHelper::MvaFeatureMap featureMap(LArMvaHelper::CalculateFeatures(
@@ -159,6 +301,7 @@ void ElectronInitialRegionRefinementAlgorithm::RefineShower(const ParticleFlowOb
 
             break;
         }
+                               */
     }
 }
 
