@@ -28,6 +28,8 @@
 #include "larpandoracontent/LArCheating/CheatingPfoCharacterisationAlgorithm.h"
 #include "larpandoracontent/LArCheating/CheatingPfoCreationAlgorithm.h"
 #include "larpandoracontent/LArCheating/CheatingShowerStartFinderAlgorithm.h" 
+#include "larpandoracontent/LArCheating/CheatingEventShowerStartFinderTool.h" 
+#include "larpandoracontent/LArCheating/CheatingShowerStartFinderTool.h" 
 #include "larpandoracontent/LArCheating/CheatingVertexCreationAlgorithm.h"
 #include "larpandoracontent/LArCheating/CheatingVertexSelectionAlgorithm.h"
 
@@ -72,6 +74,8 @@
 
 #include "larpandoracontent/LArShowerRefinement/ConnectionPathwayFeatureTool.h"
 #include "larpandoracontent/LArShowerRefinement/ElectronInitialRegionRefinementAlgorithm.h"
+#include "larpandoracontent/LArShowerRefinement/EventMLShowerInitialRegionRefinementAlgorithm.h"
+#include "larpandoracontent/LArShowerRefinement/MLShowerInitialRegionRefinementAlgorithm.h"
 #include "larpandoracontent/LArShowerRefinement/PeakDirectionFinderTool.h"
 #include "larpandoracontent/LArShowerRefinement/ProtoShowerMatchingTool.h"
 #include "larpandoracontent/LArShowerRefinement/ShowerSpineFinderTool.h"
@@ -227,6 +231,8 @@
 #define LAR_ALGORITHM_LIST(d)                                                                                                   \
     d("LArMuonLeadingEventValidation",          MuonLeadingEventValidationAlgorithm)                                            \
     d("LArElectronInitialRegionRefinement",     ElectronInitialRegionRefinementAlgorithm)                                       \
+    d("LArEventMLShowerInitialRegionRefinement",EventMLShowerInitialRegionRefinementAlgorithm)                                  \
+    d("LArMLShowerInitialRegionRefinement",     MLShowerInitialRegionRefinementAlgorithm)                                       \
     d("LArNeutrinoEventValidation",             NeutrinoEventValidationAlgorithm)                                               \
     d("LArTestBeamEventValidation",             TestBeamEventValidationAlgorithm)                                               \
     d("LArTestBeamHierarchyEventValidation",    TestBeamHierarchyEventValidationAlgorithm)                                      \
@@ -340,6 +346,8 @@
 
 #define LAR_ALGORITHM_TOOL_LIST(d)                                                                                              \
     d("LArConnectionRegionFeatureTool",         ConnectionRegionFeatureTool)                                                    \
+    d("LArCheatingEventShowerStartFinder",      CheatingEventShowerStartFinderTool)                                             \
+    d("LArCheatingShowerStartFinder",           CheatingShowerStartFinderTool)                                                  \
     d("LArShowerRegionFeatureTool",             ShowerRegionFeatureTool)                                                        \
     d("LArAmbiguousRegionFeatureTool",          AmbiguousRegionFeatureTool)                                                     \
     d("LArInitialRegionFeatureTool",            InitialRegionFeatureTool)                                                       \
