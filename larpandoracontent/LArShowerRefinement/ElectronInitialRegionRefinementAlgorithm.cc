@@ -8,7 +8,7 @@
 
 #include "Pandora/AlgorithmHeaders.h"
 
-#include "larpandoracontent/LArObjects/LArTwoDSlidingShowerFitResult.h"
+#include "larpandoracontent/LArCheating/CheatingShowerStartFinderTool.h"
 
 #include "larpandoracontent/LArHelpers/LArClusterHelper.h"
 #include "larpandoracontent/LArHelpers/LArConnectionPathwayHelper.h"
@@ -16,6 +16,8 @@
 #include "larpandoracontent/LArHelpers/LArMCParticleHelper.h"
 #include "larpandoracontent/LArHelpers/LArMvaHelper.h"
 #include "larpandoracontent/LArHelpers/LArPfoHelper.h"
+
+#include "larpandoracontent/LArObjects/LArTwoDSlidingShowerFitResult.h"
 
 #include "larpandoracontent/LArShowerRefinement/ElectronInitialRegionRefinementAlgorithm.h"
 #include "larpandoracontent/LArShowerRefinement/LArProtoShower.h"
@@ -47,7 +49,9 @@ ElectronInitialRegionRefinementAlgorithm::ElectronInitialRegionRefinementAlgorit
     m_minElectronPurity(0.5f),
     m_maxSeparationFromHit(3.f),
     m_maxProjectionSeparation(5.f),
-    m_maxXSeparation(0.5f)
+    m_maxXSeparation(0.5f),
+    m_cheatShowerStart(false),
+    m_visualize(false)
 {
 }
 
@@ -56,7 +60,8 @@ ElectronInitialRegionRefinementAlgorithm::ElectronInitialRegionRefinementAlgorit
 StatusCode ElectronInitialRegionRefinementAlgorithm::Run()
 {
     //////////////////////////////////////////
-    PANDORA_MONITORING_API(SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_XZ, -1.f, -1.f, 1.f));
+    if (m_visualize)
+        PANDORA_MONITORING_API(SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_XZ, -1.f, -1.f, 1.f));
     //////////////////////////////////////////
 
     PfoVector showerPfoVector;
@@ -75,6 +80,11 @@ StatusCode ElectronInitialRegionRefinementAlgorithm::Run()
             continue;
 
         this->RefineShower(pShowerPfo);
+
+        //////////////////////////////////////////
+        if (m_visualize)
+            PandoraMonitoringApi::ViewEvent(this->GetPandora());
+        //////////////////////////////////////////
     }
 
     return STATUS_CODE_SUCCESS;
@@ -145,10 +155,15 @@ void ElectronInitialRegionRefinementAlgorithm::RefineShower(const ParticleFlowOb
         }
 
         //////////////////////////////////////////
+        /*
         // Display shower pfo
-        PfoList showerPfo_DISPLAY;
-        showerPfo_DISPLAY.push_back(pShowerPfo);
-        PANDORA_MONITORING_API(VisualizeParticleFlowObjects(this->GetPandora(), &showerPfo_DISPLAY, "ShowerPfo", RED));
+        CaloHitList showerPfo_DISPLAY_U, showerPfo_DISPLAY_V, showerPfo_DISPLAY_W;
+        LArPfoHelper::GetCaloHits(pShowerPfo, TPC_VIEW_U, showerPfo_DISPLAY_U);
+        LArPfoHelper::GetCaloHits(pShowerPfo, TPC_VIEW_V, showerPfo_DISPLAY_V);
+        LArPfoHelper::GetCaloHits(pShowerPfo, TPC_VIEW_W, showerPfo_DISPLAY_W);
+        PANDORA_MONITORING_API(VisualizeCaloHits(this->GetPandora(), &showerPfo_DISPLAY_U, "ShowerPfoU", RED));
+        PANDORA_MONITORING_API(VisualizeCaloHits(this->GetPandora(), &showerPfo_DISPLAY_V, "ShowerPfoV", RED));
+        PANDORA_MONITORING_API(VisualizeCaloHits(this->GetPandora(), &showerPfo_DISPLAY_W, "ShowerPfoW", RED));
 
         // Nu vertex (U, V, W)
         const CartesianVector nuVertexU(LArGeometryHelper::ProjectPosition(this->GetPandora(), nuVertex3D, TPC_VIEW_U));
@@ -158,71 +173,6 @@ void ElectronInitialRegionRefinementAlgorithm::RefineShower(const ParticleFlowOb
         PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &nuVertexU, "NuVertexU", BLACK, 2));
         PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &nuVertexV, "NuVertexV", BLACK, 2));
         PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &nuVertexW, "NuVertexW", BLACK, 2));
-
-        // True shower vertex...
-        CaloHitList theseHits;
-        LArPfoHelper::GetAllCaloHits(pShowerPfo, theseHits);
-
-        std::map<const MCParticle*, int>  hitCountMap;
-
-        for (const CaloHit *const pCaloHit : theseHits)
-        {
-            MCParticleVector contributingMCParticleVector;
-            const MCParticleWeightMap &weightMap(pCaloHit->GetMCParticleWeightMap());
-
-            for (const auto &mapEntry : weightMap)
-                contributingMCParticleVector.push_back(mapEntry.first);
-
-            std::sort(contributingMCParticleVector.begin(), contributingMCParticleVector.end(), PointerLessThan<MCParticle>());
-
-            float highestWeight(0.f);
-            const MCParticle *highestContributor(nullptr);
-
-            for (const MCParticle *const pMCParticle : contributingMCParticleVector)
-            {
-                const float weight(weightMap.at(pMCParticle));
-
-                if (weight > highestWeight)
-                {
-                    highestWeight = weight;
-                    highestContributor = pMCParticle;
-                }
-            }
-
-            if (highestContributor)
-            {
-                if (hitCountMap.find(highestContributor) == hitCountMap.end())
-                    hitCountMap[highestContributor] = 1;
-                else
-                    hitCountMap[highestContributor] += 1;
-            }
-        }
-
-        int highestHits(-1);
-        const MCParticle *bestMatchedMCParticle(nullptr);
-
-        for (auto &entry : hitCountMap)
-        {
-            if (entry.second > highestHits)
-            {
-                highestHits = entry.second;
-                bestMatchedMCParticle = entry.first;
-            }
-        }
-
-        if (bestMatchedMCParticle)
-        {
-            std::cout << "Matched PDG Code: " << bestMatchedMCParticle->GetParticleId() << std::endl;
-            const CartesianVector &trueVertex(bestMatchedMCParticle->GetVertex());
-
-            const CartesianVector trueVertexU(LArGeometryHelper::ProjectPosition(this->GetPandora(), trueVertex, TPC_VIEW_U));
-            const CartesianVector trueVertexV(LArGeometryHelper::ProjectPosition(this->GetPandora(), trueVertex, TPC_VIEW_V));
-            const CartesianVector trueVertexW(LArGeometryHelper::ProjectPosition(this->GetPandora(), trueVertex, TPC_VIEW_W));
-
-            PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &trueVertexU, "TrueShowerVertexU", BLACK, 2));
-            PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &trueVertexV, "TrueShowerVertexV", BLACK, 2));
-            PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &trueVertexW, "TrueShowerVertexW", BLACK, 2));
-        }
 
         // Shower start position (U, V, W)
         const CartesianVector showerStartU_MIN(LArGeometryHelper::ProjectPosition(this->GetPandora(), showerStarts3D.at(0), TPC_VIEW_U));
@@ -254,30 +204,11 @@ void ElectronInitialRegionRefinementAlgorithm::RefineShower(const ParticleFlowOb
         PANDORA_MONITORING_API(VisualizeCaloHits(this->GetPandora(), &protoShowerMatch.GetProtoShowerV().GetSpineHitList(), "ShowerSpineV", VIOLET));
         PANDORA_MONITORING_API(VisualizeCaloHits(this->GetPandora(), &protoShowerMatch.GetProtoShowerW().GetSpineHitList(), "ShowerSpineW", VIOLET));
 
-        /*
-        for (const CaloHit *const hit : protoShowerMatch.GetProtoShowerU().GetSpineHitList())
-        {
-            const CartesianVector &hitPosition(hit->GetPositionVector());
-            PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &hitPosition, "ShowerSpineU", VIOLET, 2));
-        }
-
-        for (const CaloHit *const hit : protoShowerMatch.GetProtoShowerV().GetSpineHitList())
-        {
-            const CartesianVector &hitPosition(hit->GetPositionVector());
-            PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &hitPosition, "ShowerSpineV", VIOLET, 2));
-        }
-
-        for (const CaloHit *const hit : protoShowerMatch.GetProtoShowerW().GetSpineHitList())
-        {
-            const CartesianVector &hitPosition(hit->GetPositionVector());
-            PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &hitPosition, "ShowerSpineW", VIOLET, 2));
-        }
-        */
         PANDORA_MONITORING_API(ViewEvent(this->GetPandora()));
         return;
+        */
         //////////////////////////////////////////
 
-                               /*
         // Fill BDT information
         StringVector featureOrder;
         const LArMvaHelper::MvaFeatureMap featureMap(LArMvaHelper::CalculateFeatures(
@@ -301,7 +232,6 @@ void ElectronInitialRegionRefinementAlgorithm::RefineShower(const ParticleFlowOb
 
             break;
         }
-                               */
     }
 }
 
@@ -371,10 +301,27 @@ void ElectronInitialRegionRefinementAlgorithm::BuildViewProtoShowers(const Parti
 
         // Find the 2D shower start position
         CartesianVector showerStartPosition(0.f, 0.f, 0.f);
-        CartesianVector showerStartDirection(0.f, 0.f, 0.f);
 
-        if (m_pShowerStartFinderTool->Run(pShowerPfo, peakDirection, hitType, showerSpineHitList, showerStartPosition, showerStartDirection) != STATUS_CODE_SUCCESS)
-            continue;
+        if (m_cheatShowerStart)
+        {
+            if (!this->GetShowerStart(pShowerPfo, hitType, showerSpineHitList, showerStartPosition))
+                continue;
+
+            //////////////////////////////////////////
+            if (m_visualize)
+            {
+                PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &showerStartPosition, "CHOSEN", ORANGE, 2);
+                PandoraMonitoringApi::ViewEvent(this->GetPandora());
+            }
+            ////////////////////////////////////////// 
+        }
+        else
+        {
+            CartesianVector showerStartDirection(0.f, 0.f, 0.f);
+
+            if (m_pShowerStartFinderTool->Run(pShowerPfo, peakDirection, hitType, showerSpineHitList, showerStartPosition, showerStartDirection) != STATUS_CODE_SUCCESS)
+                continue;
+        }
 
         // Create the ProtoShower object
         const CartesianVector nuVertex2D(LArGeometryHelper::ProjectPosition(this->GetPandora(), nuVertex3D, hitType));
@@ -538,6 +485,36 @@ bool ElectronInitialRegionRefinementAlgorithm::IsSpineCoincident(const ParticleF
         return false;
 
     return true;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+bool ElectronInitialRegionRefinementAlgorithm::GetShowerStart(const ParticleFlowObject *const pPfo, const HitType hitType, 
+    const CaloHitList &showerSpineHitList, CartesianVector &showerStart) const
+{
+    // Combine HitLists
+    //CaloHitList combinedHitList;
+    //LArPfoHelper::GetCaloHits(pPfo, hitType, combinedHitList);
+
+    //for (const CaloHit *const pCaloHit : showerSpineHitList)
+    //{
+    //if (std::find(combinedHitList.begin(), combinedHitList.end(), pCaloHit) == combinedHitList.end())
+    //combinedHitList.push_back(pCaloHit);
+    //}
+
+    // Get MCParticle List
+    const MCParticleList *pMCParticleList(nullptr);
+
+    if (PandoraContentApi::GetList(*this, m_mcParticleListName, pMCParticleList) != STATUS_CODE_SUCCESS)
+        return false;
+
+    if (!pMCParticleList || pMCParticleList->empty())
+    {
+        std::cout << "MLShowerInitialRegionRefinementAlgorithm: unable to find mc particle list " << m_mcParticleListName << std::endl;
+        return false;
+    }
+
+    return (m_pCheatingShowerStartFinderTool->Run(pPfo, pMCParticleList, showerSpineHitList, hitType, showerStart) == STATUS_CODE_SUCCESS);
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -814,11 +791,54 @@ bool ElectronInitialRegionRefinementAlgorithm::IsElectron(const ParticleFlowObje
 
 StatusCode ElectronInitialRegionRefinementAlgorithm::ReadSettings(const TiXmlHandle xmlHandle)
 {
+    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle, "MCParticleListName", m_mcParticleListName));
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle, "ShowerPfoListName", m_showerPfoListName));
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle, "NeutrinoVertexListName", m_neutrinoVertexListName));
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle, "CaloHitListNameU", m_caloHitListNameU));
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle, "CaloHitListNameV", m_caloHitListNameV));
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle, "CaloHitListNameW", m_caloHitListNameW));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "MinShowerHits3D", m_minShowerHits3D));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(
+        STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "ShowerSlidingFitWindow", m_showerSlidingFitWindow));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
+        XmlHelper::ReadValue(xmlHandle, "MaxCoincidenceTransverseSeparation", m_maxCoincidenceTransverseSeparation));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "MinSpinePurity", m_minSpinePurity));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "TrainingMode", m_trainingMode));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(
+        STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "TrainingFileName", m_trainingFileName));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(
+        STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "UnambiguousThreshold", m_unambiguousThreshold));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(
+        STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "MaxConnectionDistance", m_maxConnectionDistance));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(
+        STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "MinNConnectedHits", m_minNConnectedHits));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
+        XmlHelper::ReadValue(xmlHandle, "MinElectronCompleteness", m_minElectronCompleteness));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(
+        STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "MinElectronPurity", m_minElectronPurity));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(
+        STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "MaxSeparationFromHit", m_maxSeparationFromHit));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
+        XmlHelper::ReadValue(xmlHandle, "MaxProjectionSeparation", m_maxProjectionSeparation));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "MaxXSeparation", m_maxXSeparation));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "CheatShowerStart", m_cheatShowerStart));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "Visualize", m_visualize));
 
     AlgorithmTool *pAlgorithmTool1(nullptr);
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ProcessAlgorithmTool(*this, xmlHandle, "ShowerPeakDirectionFinder", pAlgorithmTool1));
@@ -862,43 +882,15 @@ StatusCode ElectronInitialRegionRefinementAlgorithm::ReadSettings(const TiXmlHan
     if (!m_pProtoShowerMatchingTool)
         return STATUS_CODE_INVALID_PARAMETER;
 
-    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "MinShowerHits3D", m_minShowerHits3D));
+    if (m_cheatShowerStart)
+    {
+        AlgorithmTool *pAlgorithmTool7(nullptr);
+        PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ProcessAlgorithmTool(*this, xmlHandle, "CheatingShowerStartFinder", pAlgorithmTool7));
+        m_pCheatingShowerStartFinderTool = dynamic_cast<CheatingShowerStartFinderTool *>(pAlgorithmTool7);
 
-    PANDORA_RETURN_RESULT_IF_AND_IF(
-        STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "ShowerSlidingFitWindow", m_showerSlidingFitWindow));
-
-    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
-        XmlHelper::ReadValue(xmlHandle, "MaxCoincidenceTransverseSeparation", m_maxCoincidenceTransverseSeparation));
-
-    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "MinSpinePurity", m_minSpinePurity));
-
-    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "TrainingMode", m_trainingMode));
-
-    PANDORA_RETURN_RESULT_IF_AND_IF(
-        STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "TrainingFileName", m_trainingFileName));
-
-    PANDORA_RETURN_RESULT_IF_AND_IF(
-        STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "UnambiguousThreshold", m_unambiguousThreshold));
-
-    PANDORA_RETURN_RESULT_IF_AND_IF(
-        STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "MaxConnectionDistance", m_maxConnectionDistance));
-
-    PANDORA_RETURN_RESULT_IF_AND_IF(
-        STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "MinNConnectedHits", m_minNConnectedHits));
-
-    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
-        XmlHelper::ReadValue(xmlHandle, "MinElectronCompleteness", m_minElectronCompleteness));
-
-    PANDORA_RETURN_RESULT_IF_AND_IF(
-        STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "MinElectronPurity", m_minElectronPurity));
-
-    PANDORA_RETURN_RESULT_IF_AND_IF(
-        STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "MaxSeparationFromHit", m_maxSeparationFromHit));
-
-    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
-        XmlHelper::ReadValue(xmlHandle, "MaxProjectionSeparation", m_maxProjectionSeparation));
-
-    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "MaxXSeparation", m_maxXSeparation));
+        if (!m_pCheatingShowerStartFinderTool)
+            return STATUS_CODE_INVALID_PARAMETER;
+    }
 
     AlgorithmToolVector algorithmToolVector;
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ProcessAlgorithmToolList(*this, xmlHandle, "FeatureTools", algorithmToolVector));

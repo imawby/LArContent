@@ -1,12 +1,12 @@
 /**
- *  @file   larpandoracontent/LArShowerRefinement/ElectronInitialRegionRefinementAlgorithm.h
+ *  @file   larpandoracontent/LArShowerRefinement/CPValidationAlgorithm.h
  *
- *  @brief  Header file for the electron initial region refinement algorithm class.
+ *  @brief  Header file for the connection pathway validation algorithm class.
  *
  *  $Log: $
  */
-#ifndef LAR_ELECTRON_INITIAL_REGION_REFINEMENT_ALGORITHM_H
-#define LAR_ELECTRON_INITIAL_REGION_REFINEMENT_ALGORITHM_H 1
+#ifndef LAR_CONNECTION_PATHWAY_VALIDATION_ALGORITHM_H
+#define LAR_CONNECTION_PATHWAY_VALIDATION_ALGORITHM_H 1
 
 #include "Pandora/Algorithm.h"
 
@@ -23,15 +23,17 @@ namespace lar_content
 {
 
 /**
- *  @brief  ElectronInitialRegionRefinementAlgorithm class
+ *  @brief  CPValidationAlgorithm class
  */
-class ElectronInitialRegionRefinementAlgorithm : public pandora::Algorithm
+class CPValidationAlgorithm : public pandora::Algorithm
 {
 public:
     /**
      *  @brief  Default constructor
      */
-    ElectronInitialRegionRefinementAlgorithm();
+    CPValidationAlgorithm();
+
+    ~CPValidationAlgorithm();
 
 private:
     typedef std::map<const pandora::MCParticle *, pandora::CaloHitList> HitOwnershipMap;
@@ -51,7 +53,7 @@ private:
      *
      *  @param  pShowerPfo the input shower pfo
      */
-    void RefineShower(const pandora::ParticleFlowObject *const pShowerPfo) const;
+    void RefineShower(const pandora::ParticleFlowObject *const pShowerPfo);
 
     /**
      *  @brief  Obtain the reconstructed neutrino vertex
@@ -137,47 +139,6 @@ private:
                         const pandora::CaloHitList &showerSpineHitList, pandora::CartesianVector &showerStart) const;
 
     /**
-     *  @brief  Build the connection pathways of all other particles in the event
-     *
-     *  @param  pShowerPfo the input shower pfo
-     *  @param  protectedHits the list of protected hits which will not be considered
-     *  @param  nuVertex3D the 3D neutrino vertex
-     *  @param  hitType the 2D view
-     *  @param  viewPathways the output vector of found connection pathways
-     */
-    void BuildViewPathways(const pandora::ParticleFlowObject *const pShowerPfo, const pandora::CaloHitList &protectedHits,
-        const pandora::CartesianVector &nuVertex3D, pandora::HitType hitType, ConnectionPathwayVector &viewPathways) const;
-
-    /**
-     *  @brief  Determine the continuous and unambiguous hits to add to an electron-like shower pfo
-     *
-     *  @param  nuVertex3D the 3D neutrino vertex
-     *  @param  hitType the 2D view
-     *  @param  viewPathways the vector of other event connection pathways
-     *  @param  protoShower the ProtoShower object associated with the input shower
-     */
-    void RefineHitsToAdd(const pandora::CartesianVector &nuVertex3D, const pandora::HitType hitType,
-        const ConnectionPathwayVector &viewPathways, ProtoShower &protoShower) const;
-
-    /**
-     *  @brief  Find the continuous path of hits that lies closest to a given point
-     *
-     *  @param  refinedHitList the input hit list
-     *  @param  nuVertex2D the given point (the 2D neutrino vertex)
-     *  @param  continuousHitList the input hit list to be filled
-     */
-    void FindContinuousPath(const pandora::CaloHitList &refinedHitList, const pandora::CartesianVector &nuVertex2D,
-        pandora::CaloHitList &continuousHitList) const;
-
-    /**
-     *  @brief  Add the shower characterisation information to the pfo metadata
-     *
-     *  @param  pShowerPfo the input shower pfo
-     *  @param  featureMap the map of [characterisation variable -> value]
-     */
-    void SetMetadata(const pandora::ParticleFlowObject *const pShowerPfo, const LArMvaHelper::MvaFeatureMap &featureMap) const;
-
-    /**
      *  @brief  Determine the one-to-one mapping of leading MCParticle electrons and the hits which contain their energy depositions
      *
      *  @param  electronHitMap the output [MCParticle -> CaloHitList] map
@@ -193,9 +154,7 @@ private:
     bool IsElectron(const pandora::ParticleFlowObject *const pShowerPfo, const HitOwnershipMap &electronHitMap) const;
 
     PeakDirectionFinderTool *m_pShowerPeakDirectionFinderTool; ///< The shower initial pathway direction finder tool
-    PeakDirectionFinderTool *m_pEventPeakDirectionFinderTool;  ///< The other (not incl. shower) initial pathway direction finder tool
     ShowerSpineFinderTool *m_pShowerSpineFinderTool;           ///< The shower spine finder tool for the shower
-    ShowerSpineFinderTool *m_pEventPathwayFinderTool;          ///< The shower spine finder tool for all other event particles
     ShowerStartFinderTool *m_pShowerStartFinderTool;           ///< The shower start finder tool
     CheatingShowerStartFinderTool *m_pCheatingShowerStartFinderTool;
     ProtoShowerMatchingTool *m_pProtoShowerMatchingTool;       ///< The 2D -> 3D ProtoShower matching tool
@@ -209,20 +168,20 @@ private:
     unsigned int m_showerSlidingFitWindow;                     ///< The sliding fit window for shower fits
     float m_maxCoincidenceTransverseSeparation; ///< The max. transverse distance from the pathway direction of a coincident shower vertex
     float m_minSpinePurity;                     ///< The min. purity of a coincident shower spine downstream of the shower vertex
-    bool m_trainingMode;                        ///< Whether to run the algorithm to train the BDT
-    std::string m_trainingFileName;             ///< The name of the output training file name
-    float m_unambiguousThreshold;     ///< The min. transverse distance of an unambiguous shower hit from another pathway direction
-    float m_maxConnectionDistance;    ///< The max. distance between connected hits
-    unsigned int m_minNConnectedHits; ///< The number of connected hits needed for a conntected pathway
     float m_minElectronCompleteness;  ///< The min. completeness of an electron-like pfo
     float m_minElectronPurity;        ///< The min. purity of an electron-like pfo
     float m_maxSeparationFromHit;     ///< The max. separation between the projected 3D shower start and the closest 2D shower hit
     float m_maxProjectionSeparation;  ///< The max. separation between the projected 3D shower start and the shower start of that view
     float m_maxXSeparation;           ///< The max. drift-coordinate separation between a 3D shower start and a matched 2D shower hit
-    ConnectionPathwayFeatureTool::FeatureToolMap m_featureToolMap; ///< The feature tool map
-    pandora::StringVector m_algorithmToolNames;                    ///< The algorithm tool names
     bool m_cheatShowerStart;
-    bool m_visualize;
+    int m_eventCounter;
+
+    ///////// These are for the Validation tree
+    int m_foundCPU;
+    int m_foundCPV;
+    int m_foundCPW;
+    int m_matchIn3D;
+    int m_createdShowerStarts3D;
 };
 
 } // namespace lar_content
