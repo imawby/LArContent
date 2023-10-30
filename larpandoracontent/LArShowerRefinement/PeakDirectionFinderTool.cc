@@ -60,6 +60,17 @@ StatusCode PeakDirectionFinderTool::Run(const ParticleFlowObject *const pShowerP
     if (peakDirectionVector.empty())
         return STATUS_CODE_NOT_FOUND;
 
+    /////////////////////////////
+    /*
+    for (const CartesianVector &peakDirection : peakDirectionVector)
+    {
+        const CartesianVector end(nuVertex2D + (peakDirection * 20.f));
+        PandoraMonitoringApi::AddLineToVisualization(this->GetPandora(), &nuVertex2D, &end, "FU", BLACK, 2, 2);
+    }
+    PandoraMonitoringApi::ViewEvent(this->GetPandora());
+    */
+    /////////////////////////////
+
     return STATUS_CODE_SUCCESS;
 }
 
@@ -137,6 +148,13 @@ void PeakDirectionFinderTool::CollectHitsWithinExtrema(const CaloHitList *const 
 
         viewROIHits.push_back(pCaloHit);
     }
+
+    ////////////////////
+    /*
+    PandoraMonitoringApi::VisualizeCaloHits(this->GetPandora(), &viewROIHits, "viewROIHits", GREEN);
+    PandoraMonitoringApi::ViewEvent(this->GetPandora());
+    */
+    ////////////////////
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -200,11 +218,17 @@ void PeakDirectionFinderTool::SmoothAngularDecompositionMap(AngularDecomposition
 
 void PeakDirectionFinderTool::RetrievePeakDirections(const AngularDecompositionMap &angularDecompositionMap, CartesianPointVector &peakDirectionVector) const
 {
+    /*
+    std::cout << "///////////////////////" << std::endl;
+    for (auto &entry : angularDecompositionMap)
+        std::cout << "(" << entry.first << ", " << entry.second << ")" << std::endl;
+    std::cout << "///////////////////////" << std::endl;
+    */
     IntVector orderedBinIndexVector;
 
     for (const auto &entry : angularDecompositionMap)
         orderedBinIndexVector.push_back(entry.first);
-
+    
     // Order peak bin vector from highest to lowest bin height
     // Tie-break: highest index wins
     std::sort(orderedBinIndexVector.begin(), orderedBinIndexVector.end(),
@@ -260,13 +284,14 @@ void PeakDirectionFinderTool::RetrievePeakDirections(const AngularDecompositionM
 
         if ((binWeight < precedingBinWeight) || (binWeight < followingBinWeight))
             continue;
-
+    
         // Convert to a direction
         const float theta0XZ(binIndex * m_theta0XZBinSize);
         const CartesianVector peakDirection(std::cos(theta0XZ), 0.f, std::sin(theta0XZ));
 
         peakDirectionVector.push_back(peakDirection);
     }
+    
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------

@@ -73,6 +73,7 @@
 #include "larpandoracontent/LArPlugins/LArParticleIdPlugins.h"
 
 #include "larpandoracontent/LArShowerRefinement/ConnectionPathwayFeatureTool.h"
+#include "larpandoracontent/LArShowerRefinement/CPValidationAlgorithm.h"
 #include "larpandoracontent/LArShowerRefinement/ElectronInitialRegionRefinementAlgorithm.h"
 #include "larpandoracontent/LArShowerRefinement/EventMLShowerInitialRegionRefinementAlgorithm.h"
 #include "larpandoracontent/LArShowerRefinement/MLShowerInitialRegionRefinementAlgorithm.h"
@@ -229,6 +230,7 @@
 
 // clang-format off
 #define LAR_ALGORITHM_LIST(d)                                                                                                   \
+    d("LArCPValidation",                        CPValidationAlgorithm)                                                          \
     d("LArMuonLeadingEventValidation",          MuonLeadingEventValidationAlgorithm)                                            \
     d("LArElectronInitialRegionRefinement",     ElectronInitialRegionRefinementAlgorithm)                                       \
     d("LArEventMLShowerInitialRegionRefinement",EventMLShowerInitialRegionRefinementAlgorithm)                                  \

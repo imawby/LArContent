@@ -9,11 +9,17 @@
 #include "Pandora/AlgorithmHeaders.h"
 #include "Pandora/AlgorithmTool.h"
 
+#include "larpandoracontent/LArHelpers/LArClusterHelper.h"
+#include "larpandoracontent/LArHelpers/LArConnectionPathwayHelper.h"
 #include "larpandoracontent/LArHelpers/LArGeometryHelper.h"
+#include "larpandoracontent/LArHelpers/LArHitWidthHelper.h"
 #include "larpandoracontent/LArHelpers/LArMCParticleHelper.h"
+#include "larpandoracontent/LArHelpers/LArPfoHelper.h"
 
+#include "larpandoracontent/LArObjects/LArTwoDSlidingFitResult.h"
 
 #include "larpandoracontent/LArCheating/CheatingShowerStartFinderTool.h"
+
 
 using namespace pandora;
 
@@ -21,29 +27,43 @@ namespace lar_content
 {
 
 CheatingShowerStartFinderTool::CheatingShowerStartFinderTool() : 
+    m_mcToCaloHitListMap(),
     m_threshold2DHitCount(100),
     m_hitDistanceThreshold(1.f),
-    m_branchHitThreshold(5)
+    m_branchHitThreshold(5),
+    m_visualize(false)
 {
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
-
-StatusCode CheatingShowerStartFinderTool::Run(const MCParticleList *const pMCParticleList, const CaloHitList &caloHitList, const HitType hitType,
-    CartesianVector &viewShowerStart)
+// calo hit list is the shower spine hit list
+StatusCode CheatingShowerStartFinderTool::Run(const ParticleFlowObject *const pShowerPfo, const MCParticleList *const pMCParticleList, 
+    const CaloHitList &caloHitList, const HitType hitType, CartesianVector &viewShowerStart)
 {
-    this->ResetMaps();
-    this->FillTrueHitMaps(pMCParticleList, caloHitList);
-
     const MCParticle *pTargetMCParticle(nullptr);
 
-    if (!this->GetTargetShower(pTargetMCParticle))
+    if (this->GetTargetShower(pShowerPfo, hitType, pTargetMCParticle) != STATUS_CODE_SUCCESS)
         return STATUS_CODE_NOT_FOUND;
+
+    /////////////////////////////////////////
+    if (m_visualize)
+    {
+        CaloHitList showerCaloHits;
+        LArPfoHelper::GetCaloHits(pShowerPfo, hitType, showerCaloHits);
+        PandoraMonitoringApi::VisualizeCaloHits(this->GetPandora(), &showerCaloHits, "showerCaloHits", RED);
+        PandoraMonitoringApi::VisualizeCaloHits(this->GetPandora(), &caloHitList, "showerSpine", VIOLET);
+        PandoraMonitoringApi::ViewEvent(this->GetPandora());
+    }
+    /////////////////////////////////////////
+
+    // Do truth information for the shower spine
+    this->ResetMaps();
+    this->FillTrueHitMaps(pShowerPfo, hitType, pMCParticleList, caloHitList);
 
     MCParticleVector particleHierarchy;
     this->FillHierarchyVector(pTargetMCParticle, particleHierarchy);
 
-    if (this->GetViewShowerStart(pTargetMCParticle, particleHierarchy, hitType, viewShowerStart))
+    if (this->GetViewShowerStart(caloHitList, pTargetMCParticle, particleHierarchy, hitType, viewShowerStart))
         return STATUS_CODE_SUCCESS;
 
     return STATUS_CODE_NOT_FOUND;
@@ -51,58 +71,59 @@ StatusCode CheatingShowerStartFinderTool::Run(const MCParticleList *const pMCPar
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void CheatingShowerStartFinderTool::ResetMaps()
+StatusCode CheatingShowerStartFinderTool::GetTargetShower(const ParticleFlowObject *const pShowerPfo, const HitType &hitType, 
+    const MCParticle *&pTargetMCParticle) const
 {
-    m_mcToSelfMap.clear();
-    m_caloHitToMCMap.clear();
-    m_mcToCaloHitListMap.clear();
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-
-void CheatingShowerStartFinderTool::FillTrueHitMaps(const MCParticleList *const pMCParticleList, const CaloHitList &caloHitList)
-{
-    LArMCParticleHelper::GetMCToSelfMap(pMCParticleList, m_mcToSelfMap);
-    LArMCParticleHelper::GetMCParticleToCaloHitMatches(&caloHitList, m_mcToSelfMap, m_caloHitToMCMap, m_mcToCaloHitListMap);
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-
-bool CheatingShowerStartFinderTool::GetTargetShower(const MCParticle *&pTargetMCParticle) const
-{
-    bool found(false);
+    CaloHitList showerCaloHits;
+    LArPfoHelper::GetCaloHits(pShowerPfo, hitType, showerCaloHits);
 
     std::map<const MCParticle*, int> contributionMap;
     int highestHitNumber(-std::numeric_limits<int>::max());
     double highestEnergy(-std::numeric_limits<double>::max());
+    const MCParticle *pMainMCParticle(nullptr);
 
-    for (auto &entry : m_mcToCaloHitListMap)
+    for (const CaloHit *const pCaloHit : showerCaloHits)
     {
-        const MCParticle *const pMCParticle(entry.first);
-
-        if (!this->IsEM(pMCParticle))
-            continue;
-
-        found = true;
-
-        const MCParticle *pEMShowerLead(pMCParticle);
-        this->GetEMShowerLead(pMCParticle, pEMShowerLead);
-
-        if (contributionMap.find(pEMShowerLead) == contributionMap.end())
-            contributionMap[pEMShowerLead] = entry.second.size();
-        else
-            contributionMap[pEMShowerLead] += entry.second.size();
-
-        if ((contributionMap[pEMShowerLead] > highestHitNumber) || 
-            ((contributionMap[pEMShowerLead] == highestHitNumber) && (pEMShowerLead->GetEnergy() > highestEnergy)))
+        try
         {
-            highestHitNumber = contributionMap[pEMShowerLead];
-            highestEnergy = pEMShowerLead->GetEnergy();
-            pTargetMCParticle = pEMShowerLead;
+            const MCParticle *pMCParticle(MCParticleHelper::GetMainMCParticle(pCaloHit));
+
+            if (this->IsEM(pMCParticle))
+            {
+                const MCParticle *pLeadMCParticle(pMCParticle);
+                this->GetEMShowerLead(pMCParticle, pLeadMCParticle);
+
+                pMCParticle = pLeadMCParticle;
+            }
+
+            if (contributionMap.find(pMCParticle) == contributionMap.end())
+                contributionMap[pMCParticle] = 1;
+            else
+                contributionMap[pMCParticle] += 1;
+
+
+            if ((contributionMap[pMCParticle] > highestHitNumber) || 
+               ((contributionMap[pMCParticle] == highestHitNumber) && (pMCParticle->GetEnergy() > highestEnergy)))
+            {
+                highestHitNumber = contributionMap[pMCParticle];
+                highestEnergy = pMCParticle->GetEnergy();
+                pMainMCParticle = pMCParticle;
+            }
+        }
+        catch (const StatusCodeException &)
+        {
         }
     }
 
-    return found;
+    if (!pMainMCParticle)
+        return STATUS_CODE_NOT_FOUND;
+
+    if ((pMainMCParticle->GetParticleId() != 22) && (pMainMCParticle->GetParticleId() != 11))
+        return STATUS_CODE_NOT_FOUND;
+
+    pTargetMCParticle = pMainMCParticle;
+
+    return STATUS_CODE_SUCCESS;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -144,6 +165,44 @@ void CheatingShowerStartFinderTool::GetEMShowerLead(const MCParticle *const pMCP
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
+void CheatingShowerStartFinderTool::ResetMaps()
+{
+    m_mcToCaloHitListMap.clear();
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void CheatingShowerStartFinderTool::FillTrueHitMaps(const ParticleFlowObject *const pShowerPfo, const HitType hitType, 
+    const MCParticleList *const pMCParticleList, const CaloHitList &showerSpineHitList)
+{
+    // Combine HitLists
+    CaloHitList combinedHitList;
+    LArPfoHelper::GetCaloHits(pShowerPfo, hitType, combinedHitList);
+
+    for (const CaloHit *const pCaloHit : showerSpineHitList)
+    {
+        if (std::find(combinedHitList.begin(), combinedHitList.end(), pCaloHit) == combinedHitList.end())
+            combinedHitList.push_back(pCaloHit);
+    }
+
+    // Fill m_mcToCaloHitListMap
+    for (const CaloHit *const pCaloHit : combinedHitList)
+    {
+        try
+        {
+            const MCParticleWeightMap &weightMap(pCaloHit->GetMCParticleWeightMap());
+
+            for (auto &entry : weightMap)
+                m_mcToCaloHitListMap[entry.first].push_back(pCaloHit);
+        }
+        catch (const StatusCodeException &)
+        {
+        }
+    }
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
 void CheatingShowerStartFinderTool::FillHierarchyVector(const MCParticle *const pParentMCParticle, MCParticleVector &particleHierarchy) const
 {
     for (const MCParticle *const pMCParticle : pParentMCParticle->GetDaughterList())
@@ -159,70 +218,149 @@ void CheatingShowerStartFinderTool::FillHierarchyVector(const MCParticle *const 
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-bool CheatingShowerStartFinderTool::GetViewShowerStart(const MCParticle *const pParentMCParticle, const MCParticleVector &hierarchyParticles, 
-    const HitType hitType, CartesianVector &viewShowerStart) const
+bool CheatingShowerStartFinderTool::GetViewShowerStart(const CaloHitList &showerSpine, const MCParticle *const pParentMCParticle, 
+    const MCParticleVector &hierarchyParticles, const HitType hitType, CartesianVector &viewShowerStart) const
 {
-    const CartesianVector &primaryVertex(pParentMCParticle->GetVertex());
-    const CartesianVector viewPrimaryVertex(LArGeometryHelper::ProjectPosition(this->GetPandora(), primaryVertex, hitType));
-    const CartesianVector &primaryDirection(pParentMCParticle->GetMomentum().GetUnitVector());
-    const CartesianVector viewPrimaryDirection(LArGeometryHelper::ProjectDirection(this->GetPandora(), primaryDirection, hitType));
-
-    const CartesianVector end(viewPrimaryVertex + (viewPrimaryDirection * 100));
-    PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &viewPrimaryVertex, "viewPrimaryVertex", BLUE, 2);
-    PandoraMonitoringApi::AddLineToVisualization(this->GetPandora(), &viewPrimaryVertex, &end, "viewPrimaryDirection", BLUE, 2, 2);
-
-
-
-
-    // Find closest clear shower branch to primary vertex
-    bool found(false);
-    float closestSepSq(std::numeric_limits<float>::max());
-
-    for (const MCParticle *const pHierarchyParticle : hierarchyParticles)
+    try
     {
-        if (m_mcToCaloHitListMap.find(pHierarchyParticle) == m_mcToCaloHitListMap.end())
-            continue;
+        // Fit the spine...
+        CartesianPointVector showerSpinePositions;
 
-        // Collect branch hits
-        unsigned int viewCaloHitCount(0);
-        const CaloHitList &caloHitList(m_mcToCaloHitListMap.at(pHierarchyParticle));
+        for (const CaloHit *const pJam : showerSpine)
+            showerSpinePositions.push_back(pJam->GetPositionVector());
 
-        for (const CaloHit *const pCaloHit : caloHitList)
+        const TwoDSlidingFitResult spineFitResult(&showerSpinePositions, 20, LArGeometryHelper::GetWirePitch(this->GetPandora(), hitType));
+
+        const CartesianVector &primaryVertex(pParentMCParticle->GetVertex());
+        const CartesianVector viewPrimaryVertex(LArGeometryHelper::ProjectPosition(this->GetPandora(), primaryVertex, hitType));
+        const CartesianVector &primaryDirection(pParentMCParticle->GetMomentum().GetUnitVector());
+        const CartesianVector viewPrimaryDirection(LArGeometryHelper::ProjectDirection(this->GetPandora(), primaryDirection, hitType));
+
+        // Find closest clear shower branch to primary vertex
+        bool found(false);
+        float closestSepSq(std::numeric_limits<float>::max());
+        CaloHitList candidateHits;
+
+        for (const MCParticle *const pHierarchyParticle : hierarchyParticles)
         {
-            const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
+            if (m_mcToCaloHitListMap.find(pHierarchyParticle) == m_mcToCaloHitListMap.end())
+                continue;
 
-            //if (pParentMCParticle->GetParticleId() == 22)
-            //{
-                const float separationSquared(viewPrimaryDirection.GetCrossProduct(hitPosition - viewPrimaryVertex).GetMagnitudeSquared());
+            // Collect branch hits
+            const CartesianVector &vertex(pHierarchyParticle->GetVertex());
+            const CartesianVector viewVertex(LArGeometryHelper::ProjectPosition(this->GetPandora(), vertex, hitType));
+            CaloHitVector offAxisHits;
 
-                if (separationSquared < (m_hitDistanceThreshold * m_hitDistanceThreshold))
+            for (const CaloHit *const pCaloHit : m_mcToCaloHitListMap.at(pHierarchyParticle))
+            {
+                const CartesianVector &hitPosition(pCaloHit->GetPositionVector());
+               const float separationSquared(viewPrimaryDirection.GetCrossProduct(hitPosition - viewPrimaryVertex).GetMagnitudeSquared());
+
+               if (separationSquared < (0.5f * 0.5f))
                     continue;
-                //}
 
-            ++viewCaloHitCount;
+                offAxisHits.push_back(pCaloHit);
+            }
+
+            // Need branch to be significant
+            if (offAxisHits.size() < m_branchHitThreshold)
+                continue;
+
+            // Sort by distance to vertex to find a closest connected branch.. 
+            std::sort(offAxisHits.begin(), offAxisHits.end(),
+            LArConnectionPathwayHelper::SortByDistanceToPoint(viewVertex));
+
+            // Find closest branch (this is inefficient isobel)
+            bool foundBranch(false);
+            CartesianVector branchVertex(0.f, 0.f, 0.f);
+            CaloHitList branchHits;
+
+            for (const CaloHit *const pSeedCaloHit : offAxisHits)
+            {
+                CaloHitList branch;
+                branch.push_back(pSeedCaloHit);
+
+                bool hitsAdded(true);
+
+                while (hitsAdded)
+                {
+                    hitsAdded = false;
+
+                    for (const CaloHit *const pCaloHit : offAxisHits)
+                    {
+                        if (std::find(branch.begin(), branch.end(), pCaloHit) != branch.end())
+                            continue;
+
+                        const float closestDistance(LArHitWidthHelper::GetClosestDistance(pCaloHit, branch));
+
+                        if (closestDistance < m_hitDistanceThreshold)
+                        {
+                            branch.push_back(pCaloHit);
+                            hitsAdded = true;
+                        }
+                    }
+                }
+
+                if (branch.size() >= m_branchHitThreshold)
+                {
+                    branchHits.insert(branchHits.begin(), branch.begin(), branch.end());
+                    foundBranch = true;
+                    branchVertex = branch.front()->GetPositionVector();
+
+                    break;
+                }
+            }
+
+            if (!foundBranch)
+                continue;
+
+            // Is it the closest?
+            const float primaryVertexSepSq((viewPrimaryVertex - branchVertex).GetMagnitudeSquared());
+
+            if (primaryVertexSepSq < closestSepSq)
+            {
+                found = true;
+                closestSepSq = primaryVertexSepSq;
+                viewShowerStart = branchVertex;
+                candidateHits.clear();
+                candidateHits.insert(candidateHits.begin(), branchHits.begin(), branchHits.end());
+            }
         }
 
-        if (viewCaloHitCount < m_branchHitThreshold)
-            continue;
+        if (!found)
+            return false;
 
-        // Is it the closest?
-        const CartesianVector &vertex(pHierarchyParticle->GetVertex());
-        const CartesianVector viewVertex(LArGeometryHelper::ProjectPosition(this->GetPandora(), vertex, hitType));
-        const float primaryVertexSepSq((viewPrimaryVertex - viewVertex).GetMagnitudeSquared());
+        // Adjust so that vertex lies on spine axis...
+        float rL(0.f), rT(0.f);
+        spineFitResult.GetLocalPosition(viewShowerStart, rL, rT);
 
-        if (primaryVertexSepSq < closestSepSq)
+        ///////////////////////
+        if (m_visualize)
         {
-            found = true;
-            closestSepSq = primaryVertexSepSq;
-            viewShowerStart = viewVertex;
+            std::cout << "rL: " << rL << std::endl;
+            std::cout << "rT: " << rT << std::endl;
+            PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &viewShowerStart, "viewShowerStart", BLUE, 2);
+            PandoraMonitoringApi::ViewEvent(this->GetPandora());
         }
+
+        if (spineFitResult.GetGlobalFitPosition(rL, viewShowerStart) != STATUS_CODE_SUCCESS)
+            return false;
+
+        int minLayer(spineFitResult.GetMinLayer());
+        int maxLayer(spineFitResult.GetMaxLayer());
+
+        if ((rL > spineFitResult.GetL(maxLayer)) || (rL < spineFitResult.GetL(minLayer)))
+            return false;
+
+        if (rT > 3.f)
+            return false;
+
+        return true;
     }
-
-    // Adjust so that vertex lies on shower axis...
-    const float longitudinalProjection(viewPrimaryDirection.GetDotProduct(viewShowerStart - viewPrimaryVertex));
-    viewShowerStart = (viewPrimaryVertex + (viewPrimaryDirection * longitudinalProjection));
-
-    return found;
+    catch (const StatusCodeException &)
+    {
+        return false;
+    }
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -237,6 +375,9 @@ StatusCode CheatingShowerStartFinderTool::ReadSettings(const TiXmlHandle xmlHand
 
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
         XmlHelper::ReadValue(xmlHandle, "BranchHitThreshold", m_branchHitThreshold));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
+        XmlHelper::ReadValue(xmlHandle, "Visualize", m_visualize));
 
     return STATUS_CODE_SUCCESS;
 }

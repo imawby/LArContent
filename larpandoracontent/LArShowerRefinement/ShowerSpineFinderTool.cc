@@ -17,6 +17,8 @@
 
 #include "larpandoracontent/LArShowerRefinement/ShowerSpineFinderTool.h"
 
+#include "PandoraMonitoringApi.h"
+
 using namespace pandora;
 
 namespace lar_content
@@ -82,6 +84,18 @@ void ShowerSpineFinderTool::FindShowerSpine(const CaloHitList *const pViewHitLis
         }
     }
 
+    HitType hitType(TPC_3D);//pViewHitList->front()->GetHitType());
+
+
+    ///////////////////////
+    if (hitType == TPC_VIEW_V)
+    {
+        PandoraMonitoringApi::VisualizeCaloHits(this->GetPandora(), &showerSpineHitList, "showerSpineHitList", GREEN);
+        PandoraMonitoringApi::ViewEvent(this->GetPandora());
+    }
+    ///////////////////////
+
+
     // Require significant number of initial hits
     if (runningFitPositionVector.size() < m_minInitialHitsFound)
     {
@@ -92,10 +106,18 @@ void ShowerSpineFinderTool::FindShowerSpine(const CaloHitList *const pViewHitLis
     // Perform a running fit to collect a pathway of hits
     unsigned int count(0);
     bool hitsCollected(true);
+    //std::cout << "initialDirection: " << initialDirection << std::endl;
+    //std::cout << "highestL: " << highestL << std::endl;
     const bool isEndDownstream(initialDirection.GetZ() > 0.f);
     const float slidingFitPitch(LArGeometryHelper::GetWirePitch(this->GetPandora(), pViewHitList->front()->GetHitType()));
     CartesianVector extrapolatedStartPosition(nuVertex2D), extrapolatedDirection(initialDirection);
     CartesianVector extrapolatedEndPosition(extrapolatedStartPosition + (extrapolatedDirection * highestL));
+
+    if (hitType == TPC_VIEW_V)
+    {
+        PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &extrapolatedStartPosition, "extrapolatedStartPosition", GREEN, 2);
+        PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &extrapolatedEndPosition, "extrapolatedEndPosition", GREEN, 2);
+    }
 
     while (hitsCollected)
     {
@@ -124,6 +146,12 @@ void ShowerSpineFinderTool::FindShowerSpine(const CaloHitList *const pViewHitLis
                 isEndDownstream ? extrapolatedFit.GetGlobalMaxLayerDirection() : extrapolatedFit.GetGlobalMinLayerDirection() * (-1.f);
             extrapolatedEndPosition = extrapolatedStartPosition + (extrapolatedDirection * m_growingFitSegmentLength);
 
+            if (hitType == TPC_VIEW_V)
+            {
+                PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &extrapolatedStartPosition, "extrapolatedStartPosition", BLUE, 2);
+                PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &extrapolatedEndPosition, "extrapolatedEndPosition", RED, 2);
+            }
+
             hitsCollected = this->CollectSubsectionHits(extrapolatedFit, extrapolatedStartPosition, extrapolatedEndPosition,
                 extrapolatedDirection, isEndDownstream, pViewHitList, runningFitPositionVector, unavailableHitList, showerSpineHitList);
 
@@ -145,8 +173,19 @@ void ShowerSpineFinderTool::FindShowerSpine(const CaloHitList *const pViewHitLis
         }
         catch (const StatusCodeException &)
         {
+            if (hitType == TPC_VIEW_V)
+            {
+                std::cout << "threw error!" << std::endl;
+                PandoraMonitoringApi::ViewEvent(this->GetPandora());
+            }
             return;
         }
+    }
+
+    //////////////////////////
+    if (hitType == TPC_VIEW_V)
+    {
+        PandoraMonitoringApi::ViewEvent(this->GetPandora());
     }
 }
 

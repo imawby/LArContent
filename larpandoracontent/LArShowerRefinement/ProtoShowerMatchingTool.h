@@ -76,6 +76,11 @@ private:
      */
     bool AreDirectionsConsistent(pandora::CartesianVector directionU, pandora::CartesianVector directionV, pandora::CartesianVector directionW) const;
 
+
+    bool AreDirectionsConsistent(pandora::CartesianVector nuVertexU, pandora::CartesianVector nuVertexV, pandora::CartesianVector nuVertexW,
+                                 pandora::CartesianVector directionU, pandora::CartesianVector directionV, pandora::CartesianVector directionW) const;
+
+
     unsigned int m_spineSlidingFitWindow; ///< The shower spine sliding fit window
     float m_maxXSeparation;               ///< The max. drift-coordinate separation between matched 2D shower start positions
     float m_maxSeparation;                ///< The max. average separation between true and projected 2D shower start positions for a match

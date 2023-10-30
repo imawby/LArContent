@@ -162,9 +162,10 @@ void MLShowerInitialRegionRefinementAlgorithm::BuildViewProtoShowers(const Parti
         visualisationPfo.push_back(pShowerPfo);
         PandoraMonitoringApi::VisualizeParticleFlowObjects(this->GetPandora(), &visualisationPfo, "ShowerPfos", RED);
         PandoraMonitoringApi::VisualizeCaloHits(this->GetPandora(), &showerSpineHitList, "ShowerSpine", RED);
-        PandoraMonitoringApi::ViewEvent(this->GetPandora());
         PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &showerStartPosition, "showerStartPosition", BLACK, 2);
         PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &cheatedShowerStartPosition, "cheatedShowerStartPosition", BLACK, 2);
+        PandoraMonitoringApi::ViewEvent(this->GetPandora());
+        break;
         ////////////////////////////////////////////
     }
 }
@@ -196,7 +197,7 @@ bool MLShowerInitialRegionRefinementAlgorithm::GetShowerStart(const ParticleFlow
         return false;
     }
 
-    return (m_pCheatingShowerStartFinderTool->Run(pMCParticleList, combinedHitList, hitType, showerStart) == STATUS_CODE_SUCCESS);
+    return (m_pCheatingShowerStartFinderTool->Run(pPfo, pMCParticleList, combinedHitList, hitType, showerStart) == STATUS_CODE_SUCCESS);
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
