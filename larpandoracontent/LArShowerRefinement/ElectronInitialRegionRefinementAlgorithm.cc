@@ -36,6 +36,8 @@ namespace lar_content
 {
 
 ElectronInitialRegionRefinementAlgorithm::ElectronInitialRegionRefinementAlgorithm() :
+    m_allOutcomes(false),
+    m_trackPfoListName(""),
     m_minShowerHits3D(50),
     m_showerSlidingFitWindow(1000),
     m_maxCoincidenceTransverseSeparation(5.f),
@@ -94,18 +96,28 @@ StatusCode ElectronInitialRegionRefinementAlgorithm::Run()
 
 void ElectronInitialRegionRefinementAlgorithm::FillShowerPfoVector(PfoVector &showerPfoVector) const
 {
-    const PfoList *pPfoList(nullptr);
+    const PfoList *pShowerPfoList(nullptr);
 
-    if (PandoraContentApi::GetList(*this, m_showerPfoListName, pPfoList) != STATUS_CODE_SUCCESS)
+    if (PandoraContentApi::GetList(*this, m_showerPfoListName, pShowerPfoList) != STATUS_CODE_SUCCESS)
         return;
 
-    if (!pPfoList || pPfoList->empty())
-    {
+    if (!pShowerPfoList || pShowerPfoList->empty())
         std::cout << "ElectronInitialRegionRefinementAlgorithm: unable to find shower pfo list " << m_showerPfoListName << std::endl;
-        return;
-    }
+    else
+        showerPfoVector.insert(showerPfoVector.begin(), pShowerPfoList->begin(), pShowerPfoList->end());
 
-    showerPfoVector.insert(showerPfoVector.begin(), pPfoList->begin(), pPfoList->end());
+    if (m_allOutcomes)
+    {
+        const PfoList *pTrackPfoList(nullptr);
+
+        if (PandoraContentApi::GetList(*this, m_trackPfoListName, pTrackPfoList) != STATUS_CODE_SUCCESS)
+            return;
+
+        if (!pTrackPfoList || pTrackPfoList->empty())
+            std::cout << "ElectronInitialRegionRefinementAlgorithm: unable to find track pfo list " << m_trackPfoListName << std::endl;
+        else
+            showerPfoVector.insert(showerPfoVector.begin(), pTrackPfoList->begin(), pTrackPfoList->end());
+    }
 
     std::sort(showerPfoVector.begin(), showerPfoVector.end(), LArPfoHelper::SortByNHits);
 }
@@ -797,6 +809,10 @@ StatusCode ElectronInitialRegionRefinementAlgorithm::ReadSettings(const TiXmlHan
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle, "CaloHitListNameU", m_caloHitListNameU));
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle, "CaloHitListNameV", m_caloHitListNameV));
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle, "CaloHitListNameW", m_caloHitListNameW));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "AllOutcomes", m_allOutcomes));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "TrackPfoListName", m_trackPfoListName));
 
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "MinShowerHits3D", m_minShowerHits3D));
 
