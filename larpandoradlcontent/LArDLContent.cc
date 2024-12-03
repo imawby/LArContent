@@ -15,6 +15,7 @@
 #include "larpandoradlcontent/LArControlFlow/DLMasterAlgorithm.h"
 #include "larpandoradlcontent/LArMonitoring/DlHitValidationAlgorithm.h"
 #include "larpandoradlcontent/LArSignalId/DlSNSignalAlgorithm.h"
+#include "larpandoradlcontent/LArThreeDReco/LArEventBuilding/MLPNeutrinoHierarchyAlgorithm.h"
 #include "larpandoradlcontent/LArTrackShowerId/DlClusterCharacterisationAlgorithm.h"
 #include "larpandoradlcontent/LArTrackShowerId/DlHitTrackShowerIdAlgorithm.h"
 #include "larpandoradlcontent/LArTrackShowerId/DlPfoCharacterisationAlgorithm.h"
@@ -25,14 +26,15 @@
 
 // clang-format off
 #define LAR_DL_ALGORITHM_LIST(d)                                                                                                           \
-    d("LArDLMaster", DLMasterAlgorithm)                                                                                                    \
-    d("LArDLClusterCharacterisation", DlClusterCharacterisationAlgorithm)                                                                  \
-    d("LArDLHitTrackShowerId", DlHitTrackShowerIdAlgorithm)                                                                                \
-    d("LArDLPfoCharacterisation", DlPfoCharacterisationAlgorithm)                                                                          \
-    d("LArDLHitValidation", DlHitValidationAlgorithm)                                                                                      \
-    d("LArDLTrackShowerStreamSelection", DlTrackShowerStreamSelectionAlgorithm)                                                            \
-    d("LArDLVertexing",                         DlVertexingAlgorithm)                                                                      \
-    d("LArDLSNSignal",                               DlSNSignalAlgorithm)
+    d("LArDLMaster",                            DLMasterAlgorithm)                                                                         \
+    d("LArDLHitValidation",                     DlHitValidationAlgorithm)                                                                  \
+    d("LArDLSNSignal",                          DlSNSignalAlgorithm)                                                                       \
+    d("LArMLPNeutrinoHierarchy",                MLPNeutrinoHierarchyAlgorithm)                                                             \
+    d("LArDLClusterCharacterisation",           DlClusterCharacterisationAlgorithm)                                                        \
+    d("LArDLHitTrackShowerId",                  DlHitTrackShowerIdAlgorithm)                                                               \
+    d("LArDLPfoCharacterisation",               DlPfoCharacterisationAlgorithm)                                                            \
+    d("LArDLTrackShowerStreamSelection",        DlTrackShowerStreamSelectionAlgorithm)                                                     \
+    d("LArDLVertexing",                         DlVertexingAlgorithm)
 
 #define LAR_DL_ALGORITHM_TOOL_LIST(d)
 
