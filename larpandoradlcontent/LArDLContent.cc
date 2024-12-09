@@ -22,6 +22,8 @@
 #include "larpandoradlcontent/LArTwoDReco/DlTrackShowerStreamSelectionAlgorithm.h"
 #include "larpandoradlcontent/LArVertex/DlVertexingAlgorithm.h"
 
+#include "larpandoradlcontent/LArThreeDReco/LArEventBuilding/MLPPrimaryHierarchyTool.h"
+
 #include "larpandoradlcontent/LArDLContent.h"
 
 // clang-format off
@@ -36,7 +38,8 @@
     d("LArDLTrackShowerStreamSelection",        DlTrackShowerStreamSelectionAlgorithm)                                                     \
     d("LArDLVertexing",                         DlVertexingAlgorithm)
 
-#define LAR_DL_ALGORITHM_TOOL_LIST(d)
+#define LAR_DL_ALGORITHM_TOOL_LIST(d)                                                                                                      \
+    d("LArMLPPrimaryHierarchy",                 MLPPrimaryHierarchyTool)
 
 #define DL_FACTORY Factory
 
