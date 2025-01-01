@@ -52,7 +52,7 @@ MLPPrimaryHierarchyTool::MLPPrimaryHierarchyTool() :
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 StatusCode MLPPrimaryHierarchyTool::Run(const Algorithm *const pAlgorithm, const ParticleFlowObject *const pNeutrinoPfo, 
-    const HierarchyPfoMap &trackPfos, HierarchyPfo &hierarchyPfo)
+    const HierarchyPfoMap &trackPfos, const HierarchyPfo &hierarchyPfo, float &primaryScore)
 {
     this->SetDetectorBoundaries();
 
@@ -74,9 +74,7 @@ StatusCode MLPPrimaryHierarchyTool::Run(const Algorithm *const pAlgorithm, const
             return statusCodeDown;
 
         // Now run the model!
-        const float primaryScore(this->ClassifyTrack(primaryNetworkParamsUp, primaryNetworkParamsDown));
-
-        hierarchyPfo.SetPrimaryScore(primaryScore);
+        primaryScore = this->ClassifyTrack(primaryNetworkParamsUp, primaryNetworkParamsDown);
     }
     else
     {
@@ -90,9 +88,7 @@ StatusCode MLPPrimaryHierarchyTool::Run(const Algorithm *const pAlgorithm, const
             return statusCode;
 
         // Now run the model!
-        const float primaryScore(this->ClassifyShower(primaryNetworkParams));
-
-        hierarchyPfo.SetPrimaryScore(primaryScore);
+        primaryScore = this->ClassifyShower(primaryNetworkParams);
     }
 
     return STATUS_CODE_SUCCESS;

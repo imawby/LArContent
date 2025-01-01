@@ -49,7 +49,7 @@ public:
     MLPPrimaryHierarchyTool();
 
     pandora::StatusCode Run(const pandora::Algorithm *const pAlgorithm, const pandora::ParticleFlowObject *const pNeutrinoPfo, 
-        const HierarchyPfoMap &trackPfos, HierarchyPfo &hierarchyPfo);
+        const HierarchyPfoMap &trackPfos, const HierarchyPfo &hierarchyPfo, float &primaryScore);
 
 private:
     pandora::StatusCode ReadSettings(const pandora::TiXmlHandle xmlHandle);

@@ -73,8 +73,8 @@ MLPLaterTierHierarchyTool::MLPLaterTierHierarchyTool() :
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-StatusCode MLPLaterTierHierarchyTool::Run(const Algorithm *const pAlgorithm, const ParticleFlowObject *const pNeutrinoPfo, HierarchyPfo &parentHierarchyPfo, 
-    HierarchyPfo &childHierarchyPfo)
+StatusCode MLPLaterTierHierarchyTool::Run(const Algorithm *const pAlgorithm, const ParticleFlowObject *const pNeutrinoPfo, const HierarchyPfo &parentHierarchyPfo, 
+    const HierarchyPfo &childHierarchyPfo, float &laterTierScore)
 {
     this->SetDetectorBoundaries();
 
@@ -122,10 +122,7 @@ StatusCode MLPLaterTierHierarchyTool::Run(const Algorithm *const pAlgorithm, con
             return statusCodeDownDown;
 
         // Now run the model!
-        const float laterTierScore(this->ClassifyTrackTrack(edgeParamsUpUp, edgeParamsUpDown, 
-            edgeParamsDownUp, edgeParamsDownDown));
-
-        childHierarchyPfo.SetLaterTierScore(laterTierScore);
+        laterTierScore = this->ClassifyTrackTrack(edgeParamsUpUp, edgeParamsUpDown, edgeParamsDownUp, edgeParamsDownDown);
 
         return STATUS_CODE_SUCCESS;
     }
@@ -155,9 +152,7 @@ StatusCode MLPLaterTierHierarchyTool::Run(const Algorithm *const pAlgorithm, con
             return statusCodeDown;
 
         // Now run the model!
-        const float laterTierScore(this->ClassifyTrackShower(edgeParamsUp, edgeParamsDown)); 
-
-        childHierarchyPfo.SetLaterTierScore(laterTierScore);
+        laterTierScore = this->ClassifyTrackShower(edgeParamsUp, edgeParamsDown); 
     }
 
     return STATUS_CODE_SUCCESS;
@@ -576,9 +571,9 @@ float MLPLaterTierHierarchyTool::ClassifyTrackTrack(const MLPLaterTierNetworkPar
     const MLPLaterTierNetworkParams &edgeParamsDownUp, const MLPLaterTierNetworkParams &edgeParamsDownDown)
 {
     ////////////////////////////////////////////////////////////
-    std::cout << "------------------------" << std::endl;
-    std::cout << "Classifying track-track edge with " << edgeParamsUpUp.m_parentNSpacepoints << " parent spacepoints and " << 
-        edgeParamsUpUp.m_childNSpacepoints << " child spacepoints" << std::endl;
+    // std::cout << "------------------------" << std::endl;
+    // std::cout << "Classifying track-track edge with " << edgeParamsUpUp.m_parentNSpacepoints << " parent spacepoints and " << 
+    //     edgeParamsUpUp.m_childNSpacepoints << " child spacepoints" << std::endl;
     ////////////////////////////////////////////////////////////
 
     // Invoke branch model for each edge
@@ -588,10 +583,10 @@ float MLPLaterTierHierarchyTool::ClassifyTrackTrack(const MLPLaterTierNetworkPar
     const FloatVector outputDownDown(this->ClassifyTrackTrackEdge(edgeParamsDownDown, edgeParamsUpUp, edgeParamsUpDown, edgeParamsDownUp));
 
     ////////////////////////////////////////////////////////////
-    std::cout << "outputUpUp: " << outputUpUp.at(0) << ", " << outputUpUp.at(1) << ", " << outputUpUp.at(2) << std::endl;
-    std::cout << "outputUpDown: " << outputUpDown.at(0) << ", " << outputUpDown.at(1) << ", " << outputUpDown.at(2) << std::endl;
-    std::cout << "outputDownUp: " << outputDownUp.at(0) << ", " << outputDownUp.at(1) << ", " << outputDownUp.at(2) << std::endl;
-    std::cout << "outputDownDown: " << outputDownDown.at(0) << ", " << outputDownDown.at(1) << ", " << outputDownDown.at(2) << std::endl;
+    // std::cout << "outputUpUp: " << outputUpUp.at(0) << ", " << outputUpUp.at(1) << ", " << outputUpUp.at(2) << std::endl;
+    // std::cout << "outputUpDown: " << outputUpDown.at(0) << ", " << outputUpDown.at(1) << ", " << outputUpDown.at(2) << std::endl;
+    // std::cout << "outputDownUp: " << outputDownUp.at(0) << ", " << outputDownUp.at(1) << ", " << outputDownUp.at(2) << std::endl;
+    // std::cout << "outputDownDown: " << outputDownDown.at(0) << ", " << outputDownDown.at(1) << ", " << outputDownDown.at(2) << std::endl;
     ////////////////////////////////////////////////////////////
 
     // Invoke classifier model for final output
@@ -614,8 +609,8 @@ float MLPLaterTierHierarchyTool::ClassifyTrackTrack(const MLPLaterTierNetworkPar
     const torch::TensorAccessor<float, 2> outputAccessor = output.accessor<float, 2>();
 
     ////////////////////////////////////////////////////////////
-    std::cout << "Track-track classification score: " << outputAccessor[0][0] << std::endl;
-    std::cout << "------------------------" << std::endl;
+    // std::cout << "Track-track classification score: " << outputAccessor[0][0] << std::endl;
+    // std::cout << "------------------------" << std::endl;
     ////////////////////////////////////////////////////////////
 
     return outputAccessor[0][0];
@@ -648,9 +643,9 @@ FloatVector MLPLaterTierHierarchyTool::ClassifyTrackTrackEdge(const MLPLaterTier
 float MLPLaterTierHierarchyTool::ClassifyTrackShower(const MLPLaterTierNetworkParams &edgeParamsUp, const MLPLaterTierNetworkParams &edgeParamsDown)
 {
     ////////////////////////////////////////////////////////////
-    std::cout << "------------------------" << std::endl;
-    std::cout << "Classifying track-shower edge with " << edgeParamsUp.m_parentNSpacepoints << " parent spacepoints and " << 
-        edgeParamsUp.m_childNSpacepoints << " child spacepoints" << std::endl;
+    // std::cout << "------------------------" << std::endl;
+    // std::cout << "Classifying track-shower edge with " << edgeParamsUp.m_parentNSpacepoints << " parent spacepoints and " << 
+    //     edgeParamsUp.m_childNSpacepoints << " child spacepoints" << std::endl;
     ////////////////////////////////////////////////////////////
 
     // Invoke branch model for each edge
@@ -658,8 +653,8 @@ float MLPLaterTierHierarchyTool::ClassifyTrackShower(const MLPLaterTierNetworkPa
     const FloatVector outputDown(this->ClassifyTrackShowerEdge(edgeParamsDown, edgeParamsUp));
 
     ////////////////////////////////////////////////////////////
-    std::cout << "outputUp: " << outputUp.at(0) << ", " << outputUp.at(1) << ", " << outputUp.at(2) << std::endl;
-    std::cout << "outputDown: " << outputDown.at(0) << ", " << outputDown.at(1) << ", " << outputDown.at(2) << std::endl;
+    // std::cout << "outputUp: " << outputUp.at(0) << ", " << outputUp.at(1) << ", " << outputUp.at(2) << std::endl;
+    // std::cout << "outputDown: " << outputDown.at(0) << ", " << outputDown.at(1) << ", " << outputDown.at(2) << std::endl;
     ////////////////////////////////////////////////////////////
 
     // Invoke classifier model for final output
@@ -682,8 +677,8 @@ float MLPLaterTierHierarchyTool::ClassifyTrackShower(const MLPLaterTierNetworkPa
     const torch::TensorAccessor<float, 2> outputAccessor = output.accessor<float, 2>();
 
     ////////////////////////////////////////////////////////////
-    std::cout << "Track-shower classification score: " << outputAccessor[0][0] << std::endl;
-    std::cout << "------------------------" << std::endl;
+    // std::cout << "Track-shower classification score: " << outputAccessor[0][0] << std::endl;
+    // std::cout << "------------------------" << std::endl;
     ////////////////////////////////////////////////////////////
 
     return outputAccessor[0][0];

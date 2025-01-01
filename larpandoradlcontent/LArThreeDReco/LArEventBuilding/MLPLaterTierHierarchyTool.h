@@ -68,7 +68,7 @@ public:
     MLPLaterTierHierarchyTool();
 
     pandora::StatusCode Run(const pandora::Algorithm *const pAlgorithm, const pandora::ParticleFlowObject *const pNeutrinoPfo, 
-        HierarchyPfo &parentHierarchyPfo, HierarchyPfo &childHierarchyPfo);
+        const HierarchyPfo &parentHierarchyPfo, const HierarchyPfo &childHierarchyPfo, float &laterTierScore);
 
 private:
     pandora::StatusCode ReadSettings(const pandora::TiXmlHandle xmlHandle);
