@@ -54,8 +54,7 @@ private:
         const ThreeDSlidingFitResult &slidingFitResult, pandora::CartesianVector &upstreamVertex, pandora::CartesianVector &upstreamDirection, 
         pandora::CartesianVector &downstreamVertex, pandora::CartesianVector &downstreamDirection) const;
 
-    bool GetShowerDirection(const pandora::ParticleFlowObject *const pPfp, const pandora::CartesianVector &vertex, const float searchRegion, 
-        pandora::CartesianVector &direction) const;
+    bool GetShowerDirection(const pandora::ParticleFlowObject *const pPfp, const pandora::CartesianVector &vertex, pandora::CartesianVector &direction) const;
 
     void SetPrimaryScores(const pandora::ParticleFlowObject *const pNeutrinoPfo, HierarchyPfoMap &trackPfos, HierarchyPfoMap &showerPfos) const;
 
@@ -79,10 +78,12 @@ private:
 
     std::string m_neutrinoPfoListName;
     pandora::StringVector m_pfoListNames;
-
-    MLPPrimaryHierarchyTool *m_primaryHierarchyTool;
-    MLPLaterTierHierarchyTool *m_laterTierHierarchyTool;
-
+    float m_bogusFloat;
+    int m_minClusterSize;
+    int m_slidingFitWindow;
+    float m_regionForDirFit;
+    int m_nAngularBins;
+    float m_primaryRegion;
     float m_primaryThresholdTrackPass1;
     float m_primaryThresholdShowerPass1;
     float m_laterTierThresholdTrackPass1;
@@ -91,6 +92,8 @@ private:
     float m_primaryThresholdShowerPass2;
     float m_laterTierThresholdTrackPass2;
     float m_laterTierThresholdShowerPass2;
+    MLPPrimaryHierarchyTool *m_primaryHierarchyTool;
+    MLPLaterTierHierarchyTool *m_laterTierHierarchyTool;
 
     ///////////////////////////
     std::map<const pandora::ParticleFlowObject*, int> m_isobelID;
