@@ -13,9 +13,7 @@
 #include "larpandoracontent/LArHelpers/LArPfoHelper.h"
 
 #include "larpandoradlcontent/LArHelpers/LArDLHelper.h"
-
 #include "larpandoradlcontent/LArThreeDReco/LArEventBuilding/LArHierarchyPfo.h"
-
 #include "larpandoradlcontent/LArThreeDReco/LArEventBuilding/MLPPrimaryHierarchyTool.h"
 
 #include <torch/script.h>
@@ -54,6 +52,8 @@ MLPPrimaryHierarchyTool::MLPPrimaryHierarchyTool() :
 StatusCode MLPPrimaryHierarchyTool::Run(const Algorithm *const pAlgorithm, const ParticleFlowObject *const pNeutrinoPfo, 
     const HierarchyPfoMap &trackPfos, const HierarchyPfo &hierarchyPfo, float &primaryScore)
 {
+    primaryScore = m_bogusFloat;
+
     this->SetDetectorBoundaries();
 
     if (hierarchyPfo.GetIsTrack())
@@ -97,7 +97,7 @@ StatusCode MLPPrimaryHierarchyTool::Run(const Algorithm *const pAlgorithm, const
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 StatusCode MLPPrimaryHierarchyTool::CalculateNetworkVariables(const Algorithm *const pAlgorithm, const HierarchyPfo &hierarchyPfo, 
-    const ParticleFlowObject *const pNeutrinoPfo, const HierarchyPfoMap &trackPfos, const bool useUpstream, MLPPrimaryNetworkParams &primaryNetworkParams)
+    const ParticleFlowObject *const pNeutrinoPfo, const HierarchyPfoMap &trackPfos, const bool useUpstream, MLPPrimaryNetworkParams &primaryNetworkParams) const
 {
     // Pick out neutrino vertex
     if (pNeutrinoPfo->GetVertexList().empty())
@@ -191,7 +191,7 @@ void MLPPrimaryHierarchyTool::SetContextParams(const ParticleFlowObject *const p
         if (thisNuVertexSepSq > nuVertexSepSq)
             continue;
 
-        float thisParentConnectionDistance(-999.f), thisChildConnectionDistance(-999.f);
+        float thisParentConnectionDistance(m_bogusFloat), thisChildConnectionDistance(m_bogusFloat);
 
         this->CalculateConnectionDistances(hierarchyTrackPfo.GetDownstreamVertex(), hierarchyTrackPfo.GetDownstreamDirection(), 
             particleVertex, particleDirection, thisParentConnectionDistance, thisChildConnectionDistance);
@@ -220,7 +220,7 @@ void MLPPrimaryHierarchyTool::CalculateConnectionDistances(const CartesianVector
     float smallestT(std::numeric_limits<float>::max());
     bool isGettingCloser(true);
     bool found(false);
-    CartesianVector connectionPoint(-999.f, -999.f, -999.f);
+    CartesianVector connectionPoint(m_bogusFloat, m_bogusFloat, m_bogusFloat);
 
     // start the seed
     CartesianVector extrapolatedPoint(childVertex);
@@ -245,9 +245,9 @@ void MLPPrimaryHierarchyTool::CalculateConnectionDistances(const CartesianVector
     }        
 
     // Distance from parent end to connection point
-    parentConnectionDistance = found ? (parentDirection * (-1.f)).GetDotProduct(connectionPoint - parentEndpoint) : -999.f; // need to turn parent direction around
+    parentConnectionDistance = found ? (parentDirection * (-1.f)).GetDotProduct(connectionPoint - parentEndpoint) : m_bogusFloat; // need to turn parent direction around
     // Distance from child start to connection point
-    childConnectionDistance = found ? (childVertex - connectionPoint).GetMagnitude() : -999.f;
+    childConnectionDistance = found ? (childVertex - connectionPoint).GetMagnitude() : m_bogusFloat;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
