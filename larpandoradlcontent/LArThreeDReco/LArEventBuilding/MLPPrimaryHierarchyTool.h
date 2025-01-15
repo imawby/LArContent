@@ -41,7 +41,7 @@ public:
         void Print() const;
 
         /**
-         *  @brief  Return the vector of orinetation independent primary network parameters
+         *  @brief  Return the vector of orientation independent primary network parameters
          *
          *  @return The vector of orientation independent primary network parameters
          *
@@ -49,7 +49,7 @@ public:
         pandora::FloatVector GetCommonParamsForModel() const;
 
         /**
-         *  @brief  Return the vector of orinetation dependent primary network parameters
+         *  @brief  Return the vector of orientation dependent primary network parameters
          *
          *  @return The vector of orientation dependent primary network parameters
          *
@@ -66,6 +66,9 @@ public:
      */
     MLPPrimaryHierarchyTool();
 
+private:
+    pandora::StatusCode ReadSettings(const pandora::TiXmlHandle xmlHandle);
+
     /**
      *  @brief  Function to calculate the MLPPrimaryNetworkParams
      *
@@ -76,14 +79,13 @@ public:
      *  @param  useUpstream whether the POI is the endpoint closest to the nu vertex
      *  @param  primaryNetworkParams the primary network parameters to fill
      *
+     *  @return a StatusCode to signify whether the network variables could be correctly calculated
+     *
      */
     pandora::StatusCode CalculateNetworkVariables(const pandora::Algorithm *const pAlgorithm, const HierarchyPfo &hierarchyPfo, 
         const pandora::ParticleFlowObject *const pNeutrinoPfo, const HierarchyPfoMap &trackPfos, const bool useUpstream, 
         MLPPrimaryNetworkParams &primaryNetworkParams) const;
-
-private:
-    pandora::StatusCode ReadSettings(const pandora::TiXmlHandle xmlHandle);
-
+  
     /**
      *  @brief  Set the vertex region MLPPrimaryNetworkParams params
      *          (m_vertexRegionNHits, m_vertexRegionNParticles)
@@ -145,9 +147,7 @@ private:
     /**
      *  @brief  Shift and normalise the primary network parameters
      *
-     *  @param  minLimit the minimum allowed value of the variable
-     *  @param  maxLimit the maximum allowed value of the variable
-     *  @param  networkParam the input network parameter value
+     *  @param  primaryNetworkParam the input primary network parameters
      *
      */
     void NormaliseNetworkParams(MLPPrimaryNetworkParams &primaryNetworkParams) const;
@@ -158,16 +158,18 @@ private:
      *  @param  edgeParamsUp the primary network parameters associated with the upstream endpoint
      *  @param  edgeParamsDown the primary network parameters associated with the downstream endpoint
      *
+     *  @return the network score
      */
     float ClassifyTrack(const MLPPrimaryNetworkParams &edgeParamsUp, const MLPPrimaryNetworkParams &edgeParamsDown);
 
     /**
-     *  @brief  Apply the primary track edge network
-     *          Determine whether an edge is signal, wrong orientation or background edge
+     *  @brief  Apply the primary track orientation edge network - determine whether an edge is
+     *          signal (with correct orientation), signal (with the wrong orientation) or background
      *
      *  @param  edgeParams the primary network parameters associated with the edge to classify
      *  @param  otherEdgeParams the primary network parameters associated with the other edge
      *
+     *  @return the float vector of (signal, wrong orientation, background) scores
      */
     pandora::FloatVector ClassifyTrackEdge(const MLPPrimaryNetworkParams &edgeParams, 
         const MLPPrimaryNetworkParams &otherEdgeParams);

@@ -72,7 +72,7 @@ protected:
         const pandora::ParticleFlowObject *const pPfo, const pandora::CartesianVector &pointOfInterest) const;
 
     /**
-     *  @brief  Shift and normalise a netwrok parameter with respect to an input range
+     *  @brief  Shift and normalise a network parameter with respect to an input range
      *
      *  @param  minLimit the minimum allowed value of the variable
      *  @param  maxLimit the maximum allowed value of the variable
