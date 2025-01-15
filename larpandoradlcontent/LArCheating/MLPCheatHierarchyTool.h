@@ -27,7 +27,7 @@ class MLPCheatHierarchyTool : public pandora::AlgorithmTool
 public:
 
     typedef std::map<const pandora::ParticleFlowObject*, const pandora::MCParticle*> PfoToMCParticleMap;
-    typedef std::map<const pandora::ParticleFlowObject*, const pandora::ParticleFlowObject*> PfoToPfoMap;
+    typedef std::map<const pandora::ParticleFlowObject*, std::pair<const pandora::ParticleFlowObject*, int>> ChildToParentPfoMap;
     
     /**
      *  @brief  Default constructor
@@ -44,6 +44,9 @@ public:
 
     void FillHierarchyMap(const pandora::Algorithm *const pAlgorithm, PfoToMCParticleMap &pfoToMCParticleMap,
         PfoToPfoMap &childToParentPfoMap) const;
+
+    pandora::StatusCode IsNeutronChild(const pandora::ParticleFlowObject *const pPfo, const PfoToMCParticleMap &pfoToMCParticleMap, 
+        bool &isNeutronChild) const;
 
 private:
 
