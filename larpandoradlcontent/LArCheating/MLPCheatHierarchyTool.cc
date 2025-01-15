@@ -282,6 +282,9 @@ bool MLPCheatHierarchyTool::IsEMParticle(const MCParticle *const pMCParticle) co
 
 const MCParticle* MLPCheatHierarchyTool::GetLeadEMParticle(const MCParticle *const pMCParticle) const
 {
+    if (!this->IsEMParticle(pThisMCParticle))
+      throw StatusCodeException(STATUS_CODE_NOT_ALLOWED);
+  
     const MCParticle *pThisMCParticle(pMCParticle);
     const MCParticle *pParentMCParticle(pMCParticle);
 
@@ -311,7 +314,10 @@ float MLPCheatHierarchyTool::SumEnergy(const CaloHitList &caloHitList) const
     float totalEnergy(0.f);
 
     for (const CaloHit *const pCaloHit : caloHitList)
-        totalEnergy += pCaloHit->GetElectromagneticEnergy();
+    {
+        if (pCaloHit->GetHitType() == TPC_VIEW_W)
+	  totalEnergy += pCaloHit->GetElectromagneticEnergy();
+    }
 
     return totalEnergy;
 }
