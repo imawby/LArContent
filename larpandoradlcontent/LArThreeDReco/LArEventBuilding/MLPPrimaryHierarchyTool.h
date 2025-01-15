@@ -36,7 +36,6 @@ public:
 
         /**
          *  @brief  Print the value of the MLPPrimaryNetworkParams 
-         *
          */
         void Print() const;
 
@@ -44,7 +43,6 @@ public:
          *  @brief  Return the vector of orientation independent primary network parameters
          *
          *  @return The vector of orientation independent primary network parameters
-         *
          */
         pandora::FloatVector GetCommonParamsForModel() const;
 
@@ -52,7 +50,6 @@ public:
          *  @brief  Return the vector of orientation dependent primary network parameters
          *
          *  @return The vector of orientation dependent primary network parameters
-         *
          */
         pandora::FloatVector GetOrientationParamsForModel() const;
     };
@@ -80,7 +77,6 @@ private:
      *  @param  primaryNetworkParams the primary network parameters to fill
      *
      *  @return a StatusCode to signify whether the network variables could be correctly calculated
-     *
      */
     pandora::StatusCode CalculateNetworkVariables(const pandora::Algorithm *const pAlgorithm, const HierarchyPfo &hierarchyPfo, 
         const pandora::ParticleFlowObject *const pNeutrinoPfo, const HierarchyPfoMap &trackPfos, const bool useUpstream, 
@@ -94,7 +90,6 @@ private:
      *  @param  pPfo a pointer to the input pfo
      *  @param  particleVertex the position of the pfo vertex
      *  @param  primaryNetworkParams the primary network parameters
-     *
      */
     void SetVertexRegionParams(const pandora::Algorithm *const pAlgorithm, const pandora::ParticleFlowObject *const pPfo, 
         const pandora::CartesianVector &particleVertex, MLPPrimaryNetworkParams &primaryNetworkParams) const;
@@ -107,7 +102,6 @@ private:
      *  @param  particleDirection the direction at the pfo vertex
      *  @param  nuVertex the neutrino vertex
      *  @param  primaryNetworkParams the primary network parameters
-     *
      */
     void SetConnectionParams(const pandora::CartesianVector &particleVertex, const pandora::CartesianVector &particleDirection, 
         const pandora::CartesianVector &nuVertex, MLPPrimaryNetworkParams &primaryNetworkParams) const;
@@ -122,7 +116,6 @@ private:
      *  @param  nuVertex the neutrino vertex
      *  @param  trackPfos the <HierarchyPfo -> pfo> map for the track-like particles
      *  @param  primaryNetworkParams the primary network parameters
-     *
      */
     void SetContextParams(const pandora::ParticleFlowObject *const pPfo, const pandora::CartesianVector &particleVertex, 
         const pandora::CartesianVector &particleDirection, const pandora::CartesianVector &nuVertex, 
@@ -138,7 +131,6 @@ private:
      *  @param  childDirection the direction at the child vertex
      *  @param  parentConnectionDistance the DCA to the parent vertex
      *  @param  childConnectionDistance the extension of the child to the DCA point
-     *
      */
     void CalculateConnectionDistances(const pandora::CartesianVector &parentVertex, const pandora::CartesianVector &parentDirection, 
         const pandora::CartesianVector &childVertex, const pandora::CartesianVector &childDirection, 
@@ -148,7 +140,6 @@ private:
      *  @brief  Shift and normalise the primary network parameters
      *
      *  @param  primaryNetworkParam the input primary network parameters
-     *
      */
     void NormaliseNetworkParams(MLPPrimaryNetworkParams &primaryNetworkParams) const;
 
@@ -179,6 +170,7 @@ private:
      *
      *  @param  primaryNetworkParams the primary network parameters associated with the shower endpoint
      *
+     *  @return the network score
      */
     float ClassifyShower(const MLPPrimaryNetworkParams &primaryNetworkParams);
 
