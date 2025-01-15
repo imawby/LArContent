@@ -31,9 +31,10 @@ public:
     MLPBaseHierarchyTool();
 
 protected:
+    pandora::StatusCode ReadSettings(const pandora::TiXmlHandle xmlHandle);
+  
     /**
      *  @brief  Set the detector boundaries 
-     *
      */
     void SetDetectorBoundaries();
 
@@ -43,7 +44,6 @@ protected:
      *  @param  position the input CartesianVector
      *
      *  @return Whether the input position is within the detector
-     *
      */
     bool IsInFV(const pandora::CartesianVector &position) const;
 
@@ -53,7 +53,6 @@ protected:
      *  @param  hierarchyPfo the HierarchyPfo of the corresponding pfo
      *
      *  @return The number of 3D hits
-     *
      */
     float GetNSpacepoints(const HierarchyPfo &hierarchyPfo) const;
 
@@ -66,7 +65,6 @@ protected:
      *  @param  pointOfInterest the input position
      *
      *  @return std::pair of the number of 3D hits and the number of corresponding pfos
-     *
      */
     std::pair<float, float> GetParticleInfoAboutPfoPosition(const pandora::Algorithm *const pAlgorithm, 
         const pandora::ParticleFlowObject *const pPfo, const pandora::CartesianVector &pointOfInterest) const;
@@ -77,7 +75,6 @@ protected:
      *  @param  minLimit the minimum allowed value of the variable
      *  @param  maxLimit the maximum allowed value of the variable
      *  @param  networkParam the input network parameter value
-     *
      */
     void NormaliseNetworkParam(const float minLimit, const float maxLimit, float &networkParam) const;
 
@@ -88,7 +85,6 @@ protected:
      *  @param  vector the input vector
      *
      *  @return whether the input vector is not equal to a default value
-     *
      */
     bool IsVectorSet(const pandora::CartesianVector &vector) const;
 
@@ -98,11 +94,8 @@ protected:
      *  @param  startIndex the index from which to begin the insert
      *  @param  paramVector the vector of network parameter values
      *  @param  modelInput the torch vector to which to add
-     *
      */
     int AddToInput(const int startIndex, const pandora::FloatVector &paramVector, LArDLHelper::TorchInput &modelInput) const;
-
-    pandora::StatusCode ReadSettings(const pandora::TiXmlHandle xmlHandle);
 
     float m_bogusFloat;                   ///< a default float value
     float m_vertexRegionRadius;           ///< the radius in which to search for particle hits
