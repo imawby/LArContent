@@ -94,6 +94,8 @@ StatusCode MLPNeutrinoHierarchyAlgorithm::Run()
     HierarchyPfoMap trackPfos, showerPfos;
     this->FillTrackShowerVectors(pNeutrinoPfo, trackPfos, showerPfos);
 
+    #ifdef MONITORING
+    
     if (m_trainingMode)
     {
         std::cout << "Got the training wheels on!!" << std::endl;
@@ -123,6 +125,8 @@ StatusCode MLPNeutrinoHierarchyAlgorithm::Run()
 
         return STATUS_CODE_SUCCESS;
     }
+
+    #endif
 
     // Calculate primary scores
     this->SetPrimaryScores(pNeutrinoPfo, trackPfos, showerPfos);
@@ -627,6 +631,8 @@ void MLPNeutrinoHierarchyAlgorithm::BuildPandoraHierarchy(const ParticleFlowObje
 // Training functions
 //------------------------------------------------------------------------------------------------------------------------------------------
 
+#ifdef MONITORING
+
 bool MLPNeutrinoHierarchyAlgorithm::ShouldTrainOnEvent(const ParticleFlowObject *const pNeutrinoPfo) const
 {
     const MCParticleList *pMCParticleList(nullptr);
@@ -674,8 +680,6 @@ void MLPNeutrinoHierarchyAlgorithm::GetParticleIDMap(const HierarchyPfoMap &trac
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-#ifdef MONITORING
-
 void MLPNeutrinoHierarchyAlgorithm::FillEventTree(const HierarchyPfoMap &trackPfos, const HierarchyPfoMap &showerPfos,
     const int nPrimaryTrackLinks, const int nPrimaryShowerLinks, const int nLaterTierTrackTrackLinks, const int nLaterTierTrackShowerLinks) const
 {
@@ -690,8 +694,6 @@ void MLPNeutrinoHierarchyAlgorithm::FillEventTree(const HierarchyPfoMap &trackPf
     
     PANDORA_MONITORING_API(FillTree(this->GetPandora(), m_eventTreeName.c_str()));
 }
-
-#endif
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -744,8 +746,6 @@ void MLPNeutrinoHierarchyAlgorithm::FillPrimaryTrees(const PfoToMCParticleMap &m
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-#ifdef MONITORING
-
 void MLPNeutrinoHierarchyAlgorithm::FillPrimaryTree(const std::string &treeName, const bool isTrueLink, const bool isOrientationCorrect, 
     const int particleID, const MLPPrimaryHierarchyTool::MLPPrimaryNetworkParams &primaryNetworkParams) const
 {
@@ -764,8 +764,6 @@ void MLPNeutrinoHierarchyAlgorithm::FillPrimaryTree(const std::string &treeName,
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), treeName.c_str(), "ChildConnectionDistance", primaryNetworkParams.m_childConnectionDistance));
     PANDORA_MONITORING_API(FillTree(this->GetPandora(), treeName.c_str()));
 }
-
-#endif
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -883,8 +881,6 @@ std::pair<float, float> MLPNeutrinoHierarchyAlgorithm::GetTrainingCuts(const Hie
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
-
-#ifdef MONITORING
 
 void MLPNeutrinoHierarchyAlgorithm::FillLaterTierTree(const std::string &treeName, const bool isTrueLink, const bool isOrientationCorrect, 
     const int childTrueGen, const std::pair<float, float> &trainingCuts, const int parentID, const int childID, 
