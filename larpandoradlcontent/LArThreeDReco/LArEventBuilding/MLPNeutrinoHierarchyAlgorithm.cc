@@ -33,6 +33,9 @@ namespace lar_dl_content
 
 MLPNeutrinoHierarchyAlgorithm::MLPNeutrinoHierarchyAlgorithm() :
     m_eventID(0),
+    m_validationMode(false),
+    m_validationFileName("MLPHierarchyValidationFile.root"),
+    m_validationTreeName("ValidationTree"),    
     m_trainingMode(false),
     m_trainingFileName("MLPHierarchyTrainingFile.root"),
     m_eventTreeName("EventTree"),
@@ -75,6 +78,15 @@ MLPNeutrinoHierarchyAlgorithm::~MLPNeutrinoHierarchyAlgorithm()
         }
         catch (...) {}
     }
+
+    if (m_validationMode)
+    {
+        try
+        {
+            PANDORA_MONITORING_API(SaveTree(this->GetPandora(), m_validationTreeName.c_str(), m_validationFileName.c_str(), "UPDATE"));
+        }
+        catch (...) {}
+    }    
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -119,8 +131,7 @@ void MLPNeutrinoHierarchyAlgorithm::RemoveParentChildLinks()
 
 StatusCode MLPNeutrinoHierarchyAlgorithm::Run()
 {
-    this->RemoveParentChildLinks();
-    
+
     // Get neutrino pfo
     const ParticleFlowObject *pNeutrinoPfo(nullptr);
     if (!this->GetNeutrinoPfo(pNeutrinoPfo))
@@ -133,6 +144,11 @@ StatusCode MLPNeutrinoHierarchyAlgorithm::Run()
     // Fill the track/shower vectors
     HierarchyPfoMap trackPfos, showerPfos;
     this->FillTrackShowerVectors(pNeutrinoPfo, trackPfos, showerPfos);
+    
+    if (m_validationMode)
+        this->Validate(pNeutrinoPfo, trackPfos, showerPfos, true);    
+
+    this->RemoveParentChildLinks();
 
     #ifdef MONITORING
     
@@ -200,6 +216,13 @@ StatusCode MLPNeutrinoHierarchyAlgorithm::Run()
 
     this->BuildPandoraHierarchy(pNeutrinoPfo, trackPfos, showerPfos);
 
+    #ifdef MONITORING
+    
+    if (m_validationMode)
+        this->Validate(pNeutrinoPfo, trackPfos, showerPfos, false);
+
+    #endif
+    
     return STATUS_CODE_SUCCESS;
 }
 
@@ -698,28 +721,37 @@ void MLPNeutrinoHierarchyAlgorithm::BuildPandoraHierarchy(const ParticleFlowObje
 
 bool MLPNeutrinoHierarchyAlgorithm::ShouldTrainOnEvent(const ParticleFlowObject *const pNeutrinoPfo) const
 {
-    const MCParticleList *pMCParticleList(nullptr);
-    if (PandoraContentApi::GetList(*this, m_mcParticleListName, pMCParticleList) != STATUS_CODE_SUCCESS)
+    const float nuVertexAccuracy(this->GetNuVertexAccuracy(pNeutrinoPfo));
+
+    if (nuVertexAccuracy > (m_trainingVertexAccuracy * m_trainingVertexAccuracy))
         return false;
 
+    return true;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+float MLPNeutrinoHierarchyAlgorithm::GetNuVertexAccuracy(const ParticleFlowObject *const pNeutrinoPfo) const
+{
+    const MCParticleList *pMCParticleList(nullptr);
+    if (PandoraContentApi::GetList(*this, m_mcParticleListName, pMCParticleList) != STATUS_CODE_SUCCESS)
+        return std::numeric_limits<float>::max();
+
     if (!pMCParticleList || pMCParticleList->empty())
-        return false;
+        return std::numeric_limits<float>::max();        
 
     // Apply nu vertex accuracy requirement
     MCParticleVector mcNeutrinoVector;
     LArMCParticleHelper::GetTrueNeutrinos(pMCParticleList, mcNeutrinoVector);
 
     if (mcNeutrinoVector.size() != 1)
-        return false;
+        return std::numeric_limits<float>::max();                
 
     const CartesianVector &trueNuVertex(mcNeutrinoVector.front()->GetVertex());
     const Vertex *const pNeutrinoVertex(LArPfoHelper::GetVertex(pNeutrinoPfo));
-    const CartesianVector recoNuVertex(pNeutrinoVertex->GetPosition().GetX(), pNeutrinoVertex->GetPosition().GetY(), pNeutrinoVertex->GetPosition().GetZ());
+    const CartesianVector recoNuVertex(pNeutrinoVertex->GetPosition().GetX(), pNeutrinoVertex->GetPosition().GetY(), pNeutrinoVertex->GetPosition().GetZ());    
 
-    if ((trueNuVertex - recoNuVertex).GetMagnitudeSquared() > (m_trainingVertexAccuracy * m_trainingVertexAccuracy))
-        return false;
-
-    return true;
+    return (trueNuVertex - recoNuVertex).GetMagnitudeSquared();
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -789,7 +821,7 @@ void MLPNeutrinoHierarchyAlgorithm::FillPrimaryTrees(const PfoToMCParticleMap &m
             if (m_cheatHierarchyTool->Run(matchingMap, childToParentPfoMap, pNeutrinoPfo, hierarchyPfo, 
                 isTrueLink, trueChildOrientation) != STATUS_CODE_SUCCESS)
             {
-		continue;
+                continue;
             }
 
             // Get true hierarchy info
@@ -1022,6 +1054,64 @@ void MLPNeutrinoHierarchyAlgorithm::FillLaterTierTree(const std::string &treeNam
     PANDORA_MONITORING_API(FillTree(this->GetPandora(), treeName.c_str()));
 }
 
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void MLPNeutrinoHierarchyAlgorithm::Validate(const ParticleFlowObject *const pNeutrinoPfo, const HierarchyPfoMap &trackPfos,
+    const HierarchyPfoMap &showerPfos, const bool isPandoraOG) const
+{
+    // Get truth
+    PfoToMCParticleMap matchingMap; ChildToParentPfoMap childToParentPfoMap;
+    m_cheatHierarchyTool->FillHierarchyMap(this, matchingMap, childToParentPfoMap);
+
+    const float nuVertexAccuracy(this->GetNuVertexAccuracy(pNeutrinoPfo));
+    
+    // Get All pfos
+    for (const std::string &pfoListName : m_pfoListNames)
+    {
+        const PfoList *pPfoList(nullptr);
+
+        if (PandoraContentApi::GetList(*this, pfoListName, pPfoList) != STATUS_CODE_SUCCESS)
+            continue;
+
+        for (const ParticleFlowObject *const pPfo : *pPfoList)
+        {
+            int isTrack(pfoListName == "TrackParticles3D" ? 1 : 0);
+            
+            // Do we know the MCParticle?
+            if (matchingMap.find(pPfo) == matchingMap.end())
+                continue;
+            
+            // Is in matching list?
+            if (childToParentPfoMap.find(pPfo) == childToParentPfoMap.end())
+                continue;
+
+            // Get true info
+            const MCParticle *const pMCParticle(matchingMap.at(pPfo));
+            const int matchedPDG(pMCParticle->GetParticleId());
+            const ParticleFlowObject *const pTrueParentPfo(childToParentPfoMap.at(pPfo).first);
+            const int trueVisibleGen(childToParentPfoMap.at(pPfo).second);            
+            
+            PfoList parentList(pPfo->GetParentPfoList());
+
+            if (parentList.size() != 1)
+                continue;
+
+            const ParticleFlowObject *const pRecoParent(*parentList.begin());
+            const int recoGen(LArPfoHelper::GetHierarchyTier(pPfo) + 1);
+            const int hasCorrectParent(pRecoParent == pTrueParentPfo ? 1 : 0);
+
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_validationTreeName.c_str(), "IsPandoraOG", (isPandoraOG ? 1 : 0)));            
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_validationTreeName.c_str(), "IsTrack", isTrack));            
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_validationTreeName.c_str(), "TruePDG", matchedPDG));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_validationTreeName.c_str(), "TrueVisibleGen", trueVisibleGen));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_validationTreeName.c_str(), "HasCorrectParent", hasCorrectParent));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_validationTreeName.c_str(), "RecoGen", recoGen));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_validationTreeName.c_str(), "NuVertexAccuracy", nuVertexAccuracy));                        
+            PANDORA_MONITORING_API(FillTree(this->GetPandora(), m_validationTreeName.c_str()));
+        }
+    }
+}
+
 #endif
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -1029,6 +1119,11 @@ void MLPNeutrinoHierarchyAlgorithm::FillLaterTierTree(const std::string &treeNam
 StatusCode MLPNeutrinoHierarchyAlgorithm::ReadSettings(const TiXmlHandle xmlHandle)
 {
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "EventID", m_eventID));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "ValidationMode", m_validationMode));
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "ValidationFileName", m_validationFileName));
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "ValidationTreeName", m_validationTreeName));
+    
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "TrainingMode", m_trainingMode));
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "MCParticleListName", m_mcParticleListName));
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "TrainingVertexAccuracy", m_trainingVertexAccuracy));
@@ -1071,7 +1166,7 @@ StatusCode MLPNeutrinoHierarchyAlgorithm::ReadSettings(const TiXmlHandle xmlHand
     if (!m_laterTierHierarchyTool)
         return STATUS_CODE_INVALID_PARAMETER;
 
-    if (m_trainingMode)
+    if (m_trainingMode || m_validationMode)
     {
         pAlgorithmTool = nullptr;
         PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ProcessAlgorithmTool(*this, xmlHandle, "MLPCheatHierarchyTool", pAlgorithmTool));

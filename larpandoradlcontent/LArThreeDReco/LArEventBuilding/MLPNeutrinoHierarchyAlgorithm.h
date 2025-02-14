@@ -132,6 +132,8 @@ private:
 
     bool ShouldTrainOnEvent(const pandora::ParticleFlowObject *const pNeutrinoPfo) const;
 
+    float GetNuVertexAccuracy(const pandora::ParticleFlowObject *const pNeutrinoPfo) const;
+    
     void GetParticleIDMap(const HierarchyPfoMap &trackPfos, const HierarchyPfoMap &showerPfos, 
         std::map<const pandora::ParticleFlowObject *, int> &particleIDMap);
 
@@ -157,10 +159,16 @@ private:
         const int childTrueGen, const std::pair<float, float> &trainingCuts, const int parentID, const int childID,
         const MLPLaterTierHierarchyTool::MLPLaterTierNetworkParams &networkParams) const;
 
+    void Validate(const pandora::ParticleFlowObject *const pNeutrinoPfo, const HierarchyPfoMap &trackPfos,
+        const HierarchyPfoMap &showerPfos, const bool isPandoraOG) const;
+    
     pandora::StatusCode ReadSettings(const pandora::TiXmlHandle xmlHandle);
 
     int m_eventID;
-
+    
+    bool m_validationMode;
+    std::string m_validationFileName;
+    std::string m_validationTreeName;    
     bool m_trainingMode;
     std::string m_trainingFileName;
     std::string m_eventTreeName;
