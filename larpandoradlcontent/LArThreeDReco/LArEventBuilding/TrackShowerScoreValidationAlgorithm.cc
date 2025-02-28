@@ -76,7 +76,7 @@ StatusCode TrackShowerScoreValidationAlgorithm::Run()
             if (pfoMeta.find("TrackScore") != pfoMeta.end())
                 trackShowerScore = pfoMeta.at("TrackScore");
 
-            const int nSpacepoints(this->GetNSpacepoints(pPfo))
+            const int nSpacepoints(this->GetNSpacepoints(pPfo));
             
             // Fill trees
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_validationTreeName.c_str(), "EventID", m_eventID));            
