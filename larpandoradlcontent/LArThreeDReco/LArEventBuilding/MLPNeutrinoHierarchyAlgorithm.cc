@@ -611,13 +611,49 @@ void MLPNeutrinoHierarchyAlgorithm::SetPrimaryScores(const ParticleFlowObject *c
 float MLPNeutrinoHierarchyAlgorithm::GetPrimaryScore(const ParticleFlowObject *const pNeutrinoPfo, const HierarchyPfoMap &trackPfos, 
     const HierarchyPfo &hierarchyPfo) const
 {
+    //////////////////////////////////////////////
+    // Fill the track/shower vectors
+    HierarchyPfoMap trackPfos2, showerPfos2;
+    this->FillTrackShowerVectors(pNeutrinoPfo, trackPfos2, showerPfos2);
+
+    std::map<const pandora::ParticleFlowObject *, int> particleIDMap;
+    this->GetParticleIDMap(trackPfos2, showerPfos2, particleIDMap);
+    //////////////////////////////////////////////
+
     std::vector<MLPPrimaryHierarchyTool::MLPPrimaryNetworkParams> networkParamVector;
-    float primaryScore(m_bogusFloat);
+    float primaryScore(std::numeric_limits<float>::lowest());
 
     if (m_primaryHierarchyTool->Run(this, pNeutrinoPfo, trackPfos, hierarchyPfo, networkParamVector, primaryScore) != STATUS_CODE_SUCCESS)
-        return m_bogusFloat;
+        return std::numeric_limits<float>::lowest();
+
+    const int id(particleIDMap.at(hierarchyPfo.GetPfo()));
+
+    if (id == 8)
+    {
+        for (MLPPrimaryHierarchyTool::MLPPrimaryNetworkParams params : networkParamVector)
+        {
+            std::cout << params.m_nSpacepoints << std::endl;
+            std::cout << params.m_nuSeparation << std::endl;
+            std::cout << params.m_vertexRegionNHits << std::endl;
+            std::cout << params.m_vertexRegionNParticles << std::endl;
+            std::cout << params.m_dca << std::endl;
+            std::cout << params.m_connectionExtrapDistance << std::endl;
+            std::cout << params.m_isPOIClosestToNu << std::endl;
+            std::cout << params.m_parentConnectionDistance << std::endl;
+            std::cout << params.m_childConnectionDistance << std::endl;
+        }
+    }
+
 
     return primaryScore;
+
+    // std::vector<MLPPrimaryHierarchyTool::MLPPrimaryNetworkParams> networkParamVector;
+    // float primaryScore(m_bogusFloat);
+
+    // if (m_primaryHierarchyTool->Run(this, pNeutrinoPfo, trackPfos, hierarchyPfo, networkParamVector, primaryScore) != STATUS_CODE_SUCCESS)
+    //     return m_bogusFloat;
+
+    // return primaryScore;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
