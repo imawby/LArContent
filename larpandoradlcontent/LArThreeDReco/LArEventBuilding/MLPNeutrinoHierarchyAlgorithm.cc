@@ -146,6 +146,11 @@ StatusCode MLPNeutrinoHierarchyAlgorithm::Run()
     // Fill the track/shower vectors
     HierarchyPfoMap trackPfos, showerPfos;
     this->FillTrackShowerVectors(pNeutrinoPfo, trackPfos, showerPfos);
+
+    //////////////////////////////////////////////
+    std::map<const pandora::ParticleFlowObject *, int> particleIDMap;
+    this->GetParticleIDMap(trackPfos, showerPfos, particleIDMap);
+    //////////////////////////////////////////////
     
     if (m_validationMode)
         this->Validate(pNeutrinoPfo, trackPfos, showerPfos, true);    
@@ -187,25 +192,143 @@ StatusCode MLPNeutrinoHierarchyAlgorithm::Run()
     // Calculate primary scores
     this->SetPrimaryScores(pNeutrinoPfo, trackPfos, showerPfos);
     
+    //////////////////////////////////////////////
+    for (auto& [pPfo, hierarchyPfo] : trackPfos)
+    {
+        const int id(particleIDMap.at(pPfo));
+        std::cout << "primary score (id = " << id << "): " << hierarchyPfo.GetPrimaryScore() << std::endl;
+    }
+
+    for (auto& [pPfo, hierarchyPfo] : showerPfos)
+    {
+        const int id(particleIDMap.at(pPfo));
+        std::cout << "primary score (id = " << id << "): " << hierarchyPfo.GetPrimaryScore() << std::endl;
+    }
+    //////////////////////////////////////////////
+
     // // Build initial primary tier
     Hierarchy hierarchy({PfoVector()});
     this->UpdateHierarchy(pNeutrinoPfo, true, true, m_primaryThresholdTrackPass1, m_primaryThresholdShowerPass1, 
         true, trackPfos, showerPfos, hierarchy);
 
+    //////////////////////////////////////////////
+    std::cout << "----------------------" << std::endl;
+    std::cout << "After primary pass 1" << std::endl;
+    std::cout << "----------------------" << std::endl;
+    int count = 2;
+    for (const PfoVector &tier : hierarchy)
+    {
+        std::cout << "Tier " << count << ": ";
+
+        for (const ParticleFlowObject *const pJam : tier)
+        {
+            const int id(particleIDMap.at(pJam));
+            std::cout << id << " ";
+        }
+
+        ++count;
+        std::cout << std::endl;
+    }
+    //////////////////////////////////////////////
+
     // Set later tier scores
     this->SetLaterTierScores(pNeutrinoPfo, trackPfos, showerPfos);
+
+    //////////////////////////////////////////////
+    for (auto& [pPfo, hierarchyPfo] : trackPfos)
+    {
+        if (!hierarchyPfo.GetPredictedParentPfo())
+            continue;
+
+        const int childId(particleIDMap.at(pPfo));
+        const int parentId(particleIDMap.at(hierarchyPfo.GetPredictedParentPfo()));
+
+        std::cout << "later tier score (parent id = " << parentId << ", child id = " << childId << "): " << hierarchyPfo.GetLaterTierScore() << std::endl;
+    }
+
+    for (auto& [pPfo, hierarchyPfo] : showerPfos)
+    {
+        if (!hierarchyPfo.GetPredictedParentPfo())
+            continue;
+
+        const int childId(particleIDMap.at(pPfo));
+        const int parentId(particleIDMap.at(hierarchyPfo.GetPredictedParentPfo()));
+
+        std::cout << "later tier score (parent id = " << parentId << ", child id = " << childId << "): " << hierarchyPfo.GetLaterTierScore() << std::endl;
+    }
+    //////////////////////////////////////////////
 
     // Build the later tier
     this->UpdateHierarchy(pNeutrinoPfo, false, false, m_laterTierThresholdTrackPass1, m_laterTierThresholdShowerPass1, 
         true, trackPfos, showerPfos, hierarchy);
 
+    //////////////////////////////////////////////
+    std::cout << "----------------------" << std::endl;
+    std::cout << "After later pass 1" << std::endl;
+    std::cout << "----------------------" << std::endl;
+    count = 2;
+    for (const PfoVector &tier : hierarchy)
+    {
+        std::cout << "Tier " << count << ": ";
+
+        for (const ParticleFlowObject *const pJam : tier)
+        {
+            const int id(particleIDMap.at(pJam));
+            std::cout << id << " ";
+        }
+
+        ++count;
+        std::cout << std::endl;
+    }
+    //////////////////////////////////////////////
+
     // Try to recover primaries using laterTierScore
     this->UpdateHierarchy(pNeutrinoPfo, true, false, m_primaryThresholdTrackPass2, m_primaryThresholdShowerPass2, 
         false, trackPfos, showerPfos, hierarchy);
 
+    //////////////////////////////////////////////
+    std::cout << "----------------------" << std::endl;
+    std::cout << "After primary pass 2" << std::endl;
+    std::cout << "----------------------" << std::endl;
+    count = 2;
+    for (const PfoVector &tier : hierarchy)
+    {
+        std::cout << "Tier " << count << ": ";
+
+        for (const ParticleFlowObject *const pJam : tier)
+        {
+            const int id(particleIDMap.at(pJam));
+            std::cout << id << " ";
+        }
+
+        ++count;
+        std::cout << std::endl;
+    }
+    //////////////////////////////////////////////
+
     // Try to recover any children using laterTierScore
     this->UpdateHierarchy(pNeutrinoPfo, false, false, m_laterTierThresholdTrackPass2, m_laterTierThresholdShowerPass2, 
         true, trackPfos, showerPfos, hierarchy);
+
+    //////////////////////////////////////////////
+    std::cout << "----------------------" << std::endl;
+    std::cout << "After later pass 2" << std::endl;
+    std::cout << "----------------------" << std::endl;
+    count = 2;
+    for (const PfoVector &tier : hierarchy)
+    {
+        std::cout << "Tier " << count << ": ";
+
+        for (const ParticleFlowObject *const pJam : tier)
+        {
+            const int id(particleIDMap.at(pJam));
+            std::cout << id << " ";
+        }
+
+        ++count;
+        std::cout << std::endl;
+    }
+    //////////////////////////////////////////////
 
     this->BuildPandoraHierarchy(pNeutrinoPfo, trackPfos, showerPfos);
 
