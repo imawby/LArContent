@@ -23,6 +23,7 @@
 #include "larpandoradlcontent/LArTrackShowerId/DlHitTrackShowerIdAlgorithm.h"
 #include "larpandoradlcontent/LArTrackShowerId/DlPfoCharacterisationAlgorithm.h"
 #include "larpandoradlcontent/LArTwoDReco/DlTrackShowerStreamSelectionAlgorithm.h"
+#include "larpandoradlcontent/LArTwoDReco/DLSecondaryVertexSplittingAlgorithm.h"
 #include "larpandoradlcontent/LArVertex/DlSecondaryVertexingAlgorithm.h"
 #include "larpandoradlcontent/LArVertex/DlVertexingAlgorithm.h"
 
@@ -33,11 +34,12 @@
     d("LArDLMaster",                            DLMasterAlgorithm)                                                                         \
     d("LArDLHitValidation",                     DlHitValidationAlgorithm)                                                                  \
     d("LArDLSNSignal",                          DlSNSignalAlgorithm)                                                                       \
-    d("LArDLNeutrinoHierarchy",                 DLNeutrinoHierarchyAlgorithm)                                                             \
+    d("LArDLNeutrinoHierarchy",                 DLNeutrinoHierarchyAlgorithm)                                                              \
     d("LArDLClusterCharacterisation",           DlClusterCharacterisationAlgorithm)                                                        \
     d("LArDLHitTrackShowerId",                  DlHitTrackShowerIdAlgorithm)                                                               \
     d("LArDLPfoCharacterisation",               DlPfoCharacterisationAlgorithm)                                                            \
     d("LArDLSecondaryVertexing",                DlSecondaryVertexingAlgorithm)                                                             \
+    d("LArDLSecondaryVertexSplitting",          DLSecondaryVertexSplittingAlgorithm)                                                       \
     d("LArDLTrackShowerStreamSelection",        DlTrackShowerStreamSelectionAlgorithm)                                                     \
     d("LArDLVertexing",                         DlVertexingAlgorithm)
 
