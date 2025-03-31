@@ -37,6 +37,7 @@
     d("LArDLNeutrinoHierarchy",          DLNeutrinoHierarchyAlgorithm)                                \
     d("LArDLPfoCharacterisation",        DlPfoCharacterisationAlgorithm)                              \
     d("LArDLSecondaryVertexing",         DlSecondaryVertexingAlgorithm)                               \
+    d("LArDLSecondaryVertexSplitting",   DLSecondaryVertexSplittingAlgorithm)                         \
     d("LArDLSNSignal",                   DlSNSignalAlgorithm)                                         \
     d("LArDLTrackShowerStreamSelection", DlTrackShowerStreamSelectionAlgorithm)                       \
     d("LArDLVertexing",                  DlVertexingAlgorithm)
