@@ -28,7 +28,8 @@ SecondaryValidationAlgorithm::SecondaryValidationAlgorithm() :
     m_minRecoHitsPerView{10},
     m_minRecoGoodViews{2},
     m_removeRecoNeutrons{true},
-    m_selectRecoHits{false}
+    m_selectRecoHits{false},
+    m_maxTierToExamine(4)
 {
 }
 
@@ -46,7 +47,6 @@ SecondaryValidationAlgorithm::~SecondaryValidationAlgorithm()
 
 StatusCode SecondaryValidationAlgorithm::Run()
 {
-    //++m_event;
     const CaloHitList *pCaloHitList(nullptr);
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetList(*this, m_caloHitListName, pCaloHitList));
     const MCParticleList *pMCParticleList(nullptr);
@@ -72,122 +72,215 @@ StatusCode SecondaryValidationAlgorithm::Run()
     MCParticleList nuParticles;
     mcHierarchy.GetRootMCParticles(nuParticles);
 
-    // Loop through primaries
-    if (!nuParticles.empty())
+    // Try the fill tree function
+    const LArHierarchyHelper::MCMatchesVector mcMatches(matchInfo.GetMatches(nuParticles.front()));
+
+    for (const LArHierarchyHelper::MCMatches &mcMatch : mcMatches)
     {
-        const LArHierarchyHelper::MCHierarchy::NodeVector primaryNodes(mcHierarchy.GetInteractions(nuParticles.front()));
-        const LArHierarchyHelper::MCMatchesVector mcMatches(matchInfo.GetMatches(nuParticles.front()));
+        const LArHierarchyHelper::MCHierarchy::Node *const pPrimaryNode(mcMatch.GetMC());
+        
+        if (pPrimaryNode->GetHierarchyTier() != 1)
+            continue;
+        
+        // Should it have been reco'd, and has it been?
+        if ((!pPrimaryNode->IsReconstructable()) || (mcMatch.GetRecoMatches().empty()))
+            continue;
 
-        for (const LArHierarchyHelper::MCMatches &mcMatch : mcMatches)
-        {
-            // Has it been reco'd?
-            if (mcMatch.GetRecoMatches().empty())
-                continue;
-
-            // Define vectors to save into...
-            std::vector<int> parentPDG;
-            std::vector<int> childPDG;
-            std::vector<int> childGen;
-            std::vector<float> childHitsInHierarchyFrac;
-            std::vector<int> childNMatches;
-            std::vector<float> childCompleteness;
-            std::vector<float> childPurity;
-            std::vector<int> childTrueHitsU, childTrueHitsV, childTrueHitsW;
-            std::vector<int> childRecoHitsU, childRecoHitsV, childRecoHitsW;
-
-            const LArHierarchyHelper::MCHierarchy::Node *const pPrimaryNode(mcMatch.GetMC());
-            const LArHierarchyHelper::MCHierarchy::NodeVector &childNodes(pPrimaryNode->GetChildren());
-
-            std::cout << "PDG: " << pPrimaryNode->GetParticleId() << std::endl;
-
-            for (const LArHierarchyHelper::MCHierarchy::Node *const pChildTrueNode : childNodes)
-            {
-                if (!pChildTrueNode->IsReconstructable())
-                    continue;
-
-                int thisParentPDG(pPrimaryNode->GetParticleId());
-                int thisChildPDG(pChildTrueNode->GetParticleId());
-                int thisChildGen(3);
-                float thisChildHitsInHierarchyFrac(-1.f);
-                int thisChildNMatches(-1);
-                float thisChildCompleteness(-1.f);
-                float thisChildPurity(-1.f);
-                int thisChildTrueHitsU(-1), thisChildTrueHitsV(-1), thisChildTrueHitsW(-1);
-                int thisChildRecoHitsU(-1), thisChildRecoHitsV(-1), thisChildRecoHitsW(-1);
-
-                // Find child reco node (if it has one!)
-                for (const LArHierarchyHelper::MCMatches &mcMatchTemp : mcMatches)
-                {
-                    if (mcMatchTemp.GetMC() == pChildTrueNode)
-                    {
-                        thisChildNMatches = mcMatchTemp.GetRecoMatches().size();
-
-                        if (thisChildNMatches != 0)
-                        {
-                            // Get the best match
-                            const LArHierarchyHelper::RecoHierarchy::Node *const pChildRecoNode(mcMatchTemp.GetRecoMatches().front());
-                            thisChildCompleteness = mcMatchTemp.GetCompleteness(pChildRecoNode);
-                            thisChildPurity = mcMatchTemp.GetPurity(pChildRecoNode);
-                            thisChildTrueHitsU = LArMonitoringHelper::CountHitsByType(TPC_VIEW_U, pChildTrueNode->GetCaloHits());
-                            thisChildTrueHitsV = LArMonitoringHelper::CountHitsByType(TPC_VIEW_V, pChildTrueNode->GetCaloHits());
-                            thisChildTrueHitsW = LArMonitoringHelper::CountHitsByType(TPC_VIEW_W, pChildTrueNode->GetCaloHits());
-                            thisChildRecoHitsU = LArMonitoringHelper::CountHitsByType(TPC_VIEW_U, pChildRecoNode->GetCaloHits());
-                            thisChildRecoHitsV = LArMonitoringHelper::CountHitsByType(TPC_VIEW_V, pChildRecoNode->GetCaloHits());
-                            thisChildRecoHitsW = LArMonitoringHelper::CountHitsByType(TPC_VIEW_W, pChildRecoNode->GetCaloHits());
-                        }
-
-                        break;
-                    }
-                }
-
-                // Get hits in hierarchy?
-                int thisChildHitsInHierarchy(0);
-                for (const LArHierarchyHelper::RecoHierarchy::Node *const pParentRecoNode : mcMatch.GetRecoMatches())
-                {
-                    CaloHitVector intersection;
-                    std::set_intersection(pParentRecoNode->GetCaloHits().begin(), pParentRecoNode->GetCaloHits().end(), 
-                                          pChildTrueNode->GetCaloHits().begin(), pChildTrueNode->GetCaloHits().end(), std::back_inserter(intersection));
-
-                    thisChildHitsInHierarchy += intersection.size();
-                }
-
-                if (!pChildTrueNode->GetCaloHits().empty())
-                    thisChildHitsInHierarchyFrac = static_cast<float>(thisChildHitsInHierarchy) / pChildTrueNode->GetCaloHits().size(); 
-
-                std::cout << " ----- PDG: " << pChildTrueNode->GetParticleId() << std::endl;
-
-                parentPDG.push_back(thisParentPDG);
-                childPDG.push_back(thisChildPDG);
-                childGen.push_back(thisChildGen);
-                childHitsInHierarchyFrac.push_back(thisChildHitsInHierarchyFrac);
-                childNMatches.push_back(thisChildNMatches);
-                childCompleteness.push_back(thisChildCompleteness);
-                childPurity.push_back(thisChildPurity);
-                childTrueHitsU.push_back(thisChildTrueHitsU);
-                childTrueHitsV.push_back(thisChildTrueHitsV);
-                childTrueHitsW.push_back(thisChildTrueHitsW);
-                childRecoHitsU.push_back(thisChildRecoHitsU);
-                childRecoHitsV.push_back(thisChildRecoHitsV);
-                childRecoHitsW.push_back(thisChildRecoHitsW);
-            }
-
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "PrimaryPDG", &parentPDG));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "SecondaryPDG", &childPDG));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "SecondaryNHitsInParent", &childHitsInHierarchyFrac));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "SecondaryCompleteness", &childCompleteness));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "SecondaryPurity", &childPurity));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "SecondaryNMatches", &childNMatches));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "SecondaryTrueHitsU", &childTrueHitsU));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "SecondaryTrueHitsV", &childTrueHitsV));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "SecondaryTrueHitsW", &childTrueHitsW));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "SecondaryRecoHitsU", &childRecoHitsU));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "SecondaryRecoHitsV", &childRecoHitsV));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "SecondaryRecoHitsW", &childRecoHitsW));
-            PANDORA_MONITORING_API(FillTree(this->GetPandora(), m_treeName.c_str()));
-        }
+        // Fill tree        
+        LArHierarchyHelper::MCHierarchy::NodeVector hierarchyNodes;
+        this->FoldMCNodes(pPrimaryNode, hierarchyNodes);  
+        
+        this->FillTree(pPrimaryNode, pPrimaryNode->GetMCParticles().front(), mcMatch.GetRecoMatches().front(), hierarchyNodes, mcMatches, 3);
     }
 
     return STATUS_CODE_SUCCESS;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void SecondaryValidationAlgorithm::FoldMCNodes(const LArHierarchyHelper::MCHierarchy::Node *const pRootMCNode, LArHierarchyHelper::MCHierarchy::NodeVector &nodeVector)  
+{
+    nodeVector.push_back(pRootMCNode);
+
+    for (const LArHierarchyHelper::MCHierarchy::Node *const pChildNode : pRootMCNode->GetChildren())
+        this->FoldMCNodes(pChildNode, nodeVector);
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void SecondaryValidationAlgorithm::FillTree(const LArHierarchyHelper::MCHierarchy::Node *const pParentMCNode,
+    const MCParticle *const pMCParent, const LArHierarchyHelper::RecoHierarchy::Node *const pParentRecoNode,
+    const LArHierarchyHelper::MCHierarchy::NodeVector &hierarchyNodes,
+    const LArHierarchyHelper::MCMatchesVector mcMatches, const int tierToExamine)
+{
+    if (pMCParent->GetDaughterList().empty() || (tierToExamine > m_maxTierToExamine))
+        return;
+
+    for (const MCParticle *const pMCChild : pMCParent->GetDaughterList())
+    {        
+        // Find MC node
+        const LArHierarchyHelper::MCHierarchy::Node *pChildMCNode(nullptr);
+        this->FindMCNode(pMCChild, hierarchyNodes, pChildMCNode);
+        
+        // If we can't find a node or if it isn't reco'able just skip it
+        if ((pChildMCNode == nullptr) || (!pChildMCNode->IsReconstructable()))
+        {   
+            this->FillTree(pParentMCNode, pMCChild, pParentRecoNode, hierarchyNodes, mcMatches, tierToExamine);
+            continue;
+        }
+
+        // If failed to reco an upstream parent
+        if ((pParentMCNode == nullptr) || (pParentRecoNode == nullptr))
+        {
+            this->FillNullEntry(pMCParent, pMCChild, tierToExamine);
+            this->FillTree(nullptr, pMCChild, nullptr, hierarchyNodes, mcMatches, (tierToExamine + 1));
+            continue;
+        }        
+        else
+        {        
+            std::cout << "YES RECO: " << pChildMCNode->GetParticleId() << " GEN: " << tierToExamine << std::endl;
+
+            const LArHierarchyHelper::MCMatches *pChildMatch(nullptr);
+            this->FindMatch(pChildMCNode->GetMCParticles().front(), mcMatches, pChildMatch);
+            this->FillEntry(pParentMCNode, pChildMCNode,  pChildMatch, mcMatches, tierToExamine);            
+            this->FillTree(pChildMCNode, pMCChild, pChildMatch->GetRecoMatches().empty() ? nullptr : pChildMatch->GetRecoMatches().front(), hierarchyNodes, mcMatches, (tierToExamine + 1));
+        }
+    }
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void SecondaryValidationAlgorithm::FillNullEntry(const MCParticle *const pMCParent, const MCParticle *const pMCChild, const int hierarchyTier)
+{
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ParentPDG", pMCParent->GetParticleId()));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildPDG", pMCChild->GetParticleId()));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "IsParentReco", 0));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildGeneration", hierarchyTier));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildNHitsInHierarchyFrac", -999));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildCompleteness", -1.f));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildPurity", -1.f));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildNMatches", -999));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildTrueHitsU", -999));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildTrueHitsV", -999));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildTrueHitsW", -999));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildRecoHitsU", -999));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildRecoHitsV", -999));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildRecoHitsW", -999));
+    PANDORA_MONITORING_API(FillTree(this->GetPandora(), m_treeName.c_str()));
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void SecondaryValidationAlgorithm::FillEntry(const LArHierarchyHelper::MCHierarchy::Node *const pParentMCNode,
+    const LArHierarchyHelper::MCHierarchy::Node *const pChildMCNode, const LArHierarchyHelper::MCMatches *const pChildMatch, 
+    const LArHierarchyHelper::MCMatchesVector &matchesVector, const int hierarchyTier)
+{
+    // Define variables to fill
+    const int childNMatches(pChildMatch->GetRecoMatches().size());
+    float childCompleteness(-1.f), childPurity(-1.f);
+    int childTrueHitsU(-1), childTrueHitsV(-1), childTrueHitsW(-1);
+    int childRecoHitsU(-1), childRecoHitsV(-1), childRecoHitsW(-1);
+
+    // Fill reco node vars
+    if (childNMatches != 0)
+    {
+        const LArHierarchyHelper::RecoHierarchy::Node *const pChildRecoNode(pChildMatch->GetRecoMatches().front());
+
+        childCompleteness = pChildMatch->GetCompleteness(pChildRecoNode);
+        childPurity = pChildMatch->GetPurity(pChildRecoNode);
+        childTrueHitsU = LArMonitoringHelper::CountHitsByType(TPC_VIEW_U, pChildMCNode->GetCaloHits());
+        childTrueHitsV = LArMonitoringHelper::CountHitsByType(TPC_VIEW_V, pChildMCNode->GetCaloHits());
+        childTrueHitsW = LArMonitoringHelper::CountHitsByType(TPC_VIEW_W, pChildMCNode->GetCaloHits());
+        childRecoHitsU = LArMonitoringHelper::CountHitsByType(TPC_VIEW_U, pChildRecoNode->GetCaloHits());
+        childRecoHitsV = LArMonitoringHelper::CountHitsByType(TPC_VIEW_V, pChildRecoNode->GetCaloHits());
+        childRecoHitsW = LArMonitoringHelper::CountHitsByType(TPC_VIEW_W, pChildRecoNode->GetCaloHits());
+    }
+
+    const int nHitsInHierarchy(this->GetHitsInUpstreamHierarchy(pChildMCNode, matchesVector));
+    const float hitsInHierarchyFrac(static_cast<float>(nHitsInHierarchy) / pChildMCNode->GetCaloHits().size());
+
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ParentPDG", pParentMCNode->GetParticleId()));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildPDG", pChildMCNode->GetParticleId()));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "IsParentReco", 1));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildGeneration", hierarchyTier));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildNHitsInHierarchyFrac", hitsInHierarchyFrac));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildCompleteness", childCompleteness));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildPurity", childPurity));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildNMatches", childNMatches));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildTrueHitsU", childTrueHitsU));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildTrueHitsV", childTrueHitsV));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildTrueHitsW", childTrueHitsW));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildRecoHitsU", childRecoHitsU));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildRecoHitsV", childRecoHitsV));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildRecoHitsW", childRecoHitsW));
+    PANDORA_MONITORING_API(FillTree(this->GetPandora(), m_treeName.c_str()));
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+int SecondaryValidationAlgorithm::GetHitsInUpstreamHierarchy(const LArHierarchyHelper::MCHierarchy::Node *const pRootMCNode, 
+    const LArHierarchyHelper::MCMatchesVector &matchesVector)
+{
+    int hitsInHierarchy(0); 
+
+    MCParticleList ancestorMCParticles;
+    LArMCParticleHelper::GetAllAncestorMCParticles(pRootMCNode->GetMCParticles().front(), ancestorMCParticles);
+
+    for (const MCParticle *const pMCAncestor : ancestorMCParticles)
+    {
+        const LArHierarchyHelper::MCMatches *pRecoMatch(nullptr);
+
+        if (!this->FindMatch(pMCAncestor, matchesVector, pRecoMatch))
+            continue;
+
+        for (const LArHierarchyHelper::RecoHierarchy::Node *const pRecoNode : pRecoMatch->GetRecoMatches())
+        {
+            CaloHitVector intersection;
+            std::set_intersection(pRecoNode->GetCaloHits().begin(), pRecoNode->GetCaloHits().end(), 
+                                  pRootMCNode->GetCaloHits().begin(), pRootMCNode->GetCaloHits().end(), std::back_inserter(intersection));
+
+            hitsInHierarchy += intersection.size();
+        }
+    }
+
+    return hitsInHierarchy;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Find functions
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+bool SecondaryValidationAlgorithm::FindMCNode(const MCParticle *const pMCParticle, const LArHierarchyHelper::MCHierarchy::NodeVector &hierarchyMCNodes, 
+    const LArHierarchyHelper::MCHierarchy::Node *&pMCNode)
+{
+    for (const LArHierarchyHelper::MCHierarchy::Node *const pNode : hierarchyMCNodes)
+    {
+        if (pNode->GetMCParticles().front() == pMCParticle)
+        {
+            pMCNode = pNode;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+bool SecondaryValidationAlgorithm::FindMatch(const MCParticle *const pMCParticle, const LArHierarchyHelper::MCMatchesVector &matchesVector, 
+    const LArHierarchyHelper::MCMatches *&pRecoMatch)  
+{
+    // Find reco node
+    for (const LArHierarchyHelper::MCMatches &mcMatch : matchesVector)
+    {
+        if (mcMatch.GetMC()->GetMCParticles().front() == pMCParticle)
+        {
+            pRecoMatch = &mcMatch;
+            return true;
+        }
+    }
+
+    return false;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -213,6 +306,8 @@ StatusCode SecondaryValidationAlgorithm::ReadSettings(const TiXmlHandle xmlHandl
         STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "MinRecoGoodViews", m_minRecoGoodViews));
     PANDORA_RETURN_RESULT_IF_AND_IF(
         STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "RemoveRecoNeutrons", m_removeRecoNeutrons));
+    PANDORA_RETURN_RESULT_IF_AND_IF(
+        STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "MaxTierToExamine", m_maxTierToExamine));    
 
     return STATUS_CODE_SUCCESS;
 }

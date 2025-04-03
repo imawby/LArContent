@@ -30,6 +30,29 @@ private:
     pandora::StatusCode Run();
     pandora::StatusCode ReadSettings(const pandora::TiXmlHandle xmlHandle);
 
+    void FoldMCNodes(const LArHierarchyHelper::MCHierarchy::Node *const pRootMCNode, LArHierarchyHelper::MCHierarchy::NodeVector &nodeVector);
+
+    void FillTree(const LArHierarchyHelper::MCHierarchy::Node *const pParentMCNode, const pandora::MCParticle *const pMCParent,
+                  const LArHierarchyHelper::RecoHierarchy::Node *const pParentRecoNode,
+                  const LArHierarchyHelper::MCHierarchy::NodeVector &hierarchyNodes, const LArHierarchyHelper::MCMatchesVector mcMatches,
+                  const int tierToExamine);
+    
+    void FillNullEntry(const pandora::MCParticle *const pMCParent, const pandora::MCParticle *const pMCChild, const int hierarchyTier);
+
+    void FillEntry(const LArHierarchyHelper::MCHierarchy::Node *const pParentMCNode, const LArHierarchyHelper::MCHierarchy::Node *const pChildMCNode, 
+                   const LArHierarchyHelper::MCMatches *const pChildMatch, const LArHierarchyHelper::MCMatchesVector &matchesVector, const int hierarchyTier);
+
+    int GetHitsInUpstreamHierarchy(const LArHierarchyHelper::MCHierarchy::Node *const pRootMCNode, 
+                                   const LArHierarchyHelper::MCMatchesVector &matchesVector);
+
+    bool FindMCNode(const pandora::MCParticle *const pMCParticle, const LArHierarchyHelper::MCHierarchy::NodeVector &hierarchyMCNodes, 
+                    const LArHierarchyHelper::MCHierarchy::Node *&pMCNode);
+
+    bool FindMatch(const pandora::MCParticle *const pMCParticle, const LArHierarchyHelper::MCMatchesVector &matchesVector, 
+                   const LArHierarchyHelper::MCMatches *&pRecoMatch);
+
+//void FillTree(const pandora::MCParticle *const pMCParticle, const LArHierarchyHelper::MCHierarchy::NodeVector &mcNodes, const int tierToExamine);
+    
     std::string m_caloHitListName;     ///< Name of input calo hit list
     std::string m_pfoListName;         ///< Name of input PFO list
     bool m_writeFile;
@@ -42,6 +65,7 @@ private:
     unsigned int m_minRecoGoodViews;   ///< Minimum number of reconstructed primary good views
     bool m_removeRecoNeutrons;         ///< Whether to remove reconstructed neutrons and their downstream particles
     bool m_selectRecoHits;             ///< Whether to select reco hits that overlap with the MC particle hits
+    int m_maxTierToExamine;
 };
 
 } // namespace lar_content
