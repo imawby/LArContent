@@ -44,35 +44,44 @@ StatusCode DLSecondaryVertexSplittingAlgorithm::Run()
     if (PandoraContentApi::GetList(*this, m_secondaryVertexListName, pSecVtxList) != STATUS_CODE_SUCCESS)
         return STATUS_CODE_SUCCESS;
 
-    // Get clusters
-    const ClusterList *pClusterList(nullptr);
-
-    if (PandoraContentApi::GetList(*this, m_clusterListNameU, pClusterList) != STATUS_CODE_SUCCESS)
-        return STATUS_CODE_SUCCESS;
-
-    // Loop over clusters, searching for 'kink points'
-    for (const Cluster *const pCluster : *pClusterList)
+    for (const HitType hitType : {TPC_VIEW_U, TPC_VIEW_V, TPC_VIEW_W})
     {
-        if (pCluster->GetNCaloHits() < 5)
+        std::string clusterListName(hitType == TPC_VIEW_U ? m_clusterListNameU : hitType == TPC_VIEW_V ? m_clusterListNameV : m_clusterListNameW);
+        std::string reclusterListName(hitType == TPC_VIEW_U ? "ReclusterU" : hitType == TPC_VIEW_V ? "ReclusterV" : "ReclusterW");
+
+        // Get clusters
+        const ClusterList *pClusterList(nullptr);
+
+        if (PandoraContentApi::GetList(*this, clusterListName, pClusterList) != STATUS_CODE_SUCCESS)
             continue;
 
-        try
+        // Create reclustering list
+        ClusterList toRecluster;
+
+        // Loop over clusters, searching for 'kink points'
+        for (const Cluster *const pCluster : *pClusterList)
         {
-            const float slidingFitPitch(LArGeometryHelper::GetWirePitch(this->GetPandora(), LArClusterHelper::GetClusterHitType(pCluster)));
-            const TwoDSlidingFitResult slidingFitResult(pCluster, 20, slidingFitPitch);
+            if (pCluster->GetNCaloHits() < 5)
+                continue;
 
-            // Get number of kink points along track
-            const int nKinkPoints(this->GetNKinkPoints(slidingFitResult, pSecVtxList));
-
-            if (m_visualise && (nKinkPoints >= 1))
+            try
             {
-                ClusterList clusterToVisualise({pCluster});
-                PANDORA_MONITORING_API(VisualizeClusters(this->GetPandora(), &clusterToVisualise, "Cluster", BLUE));
-                PANDORA_MONITORING_API(ViewEvent(this->GetPandora()));
+                const float slidingFitPitch(LArGeometryHelper::GetWirePitch(this->GetPandora(), LArClusterHelper::GetClusterHitType(pCluster)));
+                const TwoDSlidingFitResult slidingFitResult(pCluster, 20, slidingFitPitch);
+
+                // Get number of kink points along track
+                const int nKinkPoints(this->GetNKinkPoints(slidingFitResult, pSecVtxList));
+
+                if (nKinkPoints >= 1)
+                    toRecluster.emplace_back(pCluster);
             }
+            catch (...) { continue; }
         }
-        catch (...) { continue; }
+
+        if (!toRecluster.empty())
+            PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::SaveList(*this, clusterListName, reclusterListName, toRecluster));
     }
+
 
     return STATUS_CODE_SUCCESS;
 }
@@ -103,7 +112,7 @@ int DLSecondaryVertexSplittingAlgorithm::GetNKinkPoints(const TwoDSlidingFitResu
         if (sep < m_proximityForMatch)
             ++nKinkPoints;
 
-        std::cout << "sep: " << sep << std::endl;
+        //std::cout << "sep: " << sep << std::endl;
     }
 
     return nKinkPoints;
@@ -119,6 +128,8 @@ StatusCode DLSecondaryVertexSplittingAlgorithm::ReadSettings(const TiXmlHandle x
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "ClusterListNameW", m_clusterListNameW));
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "SecondaryVertexListName", m_secondaryVertexListName));
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "ProximityForMatch", m_proximityForMatch));
+
+    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ProcessAlgorithm(*this, xmlHandle, "ClusterRebuilding", m_reclusteringAlgorithmName));
 
     return STATUS_CODE_SUCCESS;
 }

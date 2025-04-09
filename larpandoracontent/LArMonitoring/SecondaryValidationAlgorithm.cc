@@ -67,7 +67,7 @@ StatusCode SecondaryValidationAlgorithm::Run()
     const LArHierarchyHelper::QualityCuts quality(m_minPurity, m_minCompleteness, m_selectRecoHits);
     LArHierarchyHelper::MatchInfo matchInfo(mcHierarchy, recoHierarchy, quality);
     LArHierarchyHelper::MatchHierarchies(matchInfo);
-    matchInfo.Print(mcHierarchy);
+    //matchInfo.Print(mcHierarchy);
 
     MCParticleList nuParticles;
     mcHierarchy.GetRootMCParticles(nuParticles);
@@ -156,7 +156,7 @@ void SecondaryValidationAlgorithm::FillNullEntry(const MCParticle *const pMCPare
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildPDG", pMCChild->GetParticleId()));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "IsParentReco", 0));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildGeneration", hierarchyTier));
-    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildNHitsInHierarchyFrac", -999));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildNHitsInHierarchyFrac", -999.f));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildCompleteness", -1.f));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildPurity", -1.f));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildNMatches", -999));

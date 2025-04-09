@@ -42,7 +42,9 @@ private:
     std::string m_clusterListNameV;
     std::string m_clusterListNameW;
     std::string m_secondaryVertexListName;
+    std::string m_reclusteringAlgorithmName; ///< Name of daughter algorithm to use for cluster re-building
     float m_proximityForMatch;
+
 
 };
 
