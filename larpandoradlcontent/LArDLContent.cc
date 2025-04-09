@@ -18,6 +18,7 @@
 #include "larpandoradlcontent/LArSignalId/DlSNSignalAlgorithm.h"
 #include "larpandoradlcontent/LArThreeDReco/LArEventBuilding/DLLaterTierHierarchyTool.h"
 #include "larpandoradlcontent/LArThreeDReco/LArEventBuilding/DLNeutrinoHierarchyAlgorithm.h"
+#include "larpandoradlcontent/LArThreeDReco/LArEventBuilding/DLNeutrinoHierarchyValidationAlgorithm.h"
 #include "larpandoradlcontent/LArThreeDReco/LArEventBuilding/DLPrimaryHierarchyTool.h"
 #include "larpandoradlcontent/LArTrackShowerId/DlClusterCharacterisationAlgorithm.h"
 #include "larpandoradlcontent/LArTrackShowerId/DlHitTrackShowerIdAlgorithm.h"
@@ -36,6 +37,7 @@
     d("LArDLHitTrackShowerId",           DlHitTrackShowerIdAlgorithm)                                 \
     d("LArDLHitValidation",              DlHitValidationAlgorithm)                                    \
     d("LArDLNeutrinoHierarchy",          DLNeutrinoHierarchyAlgorithm)                                \
+    d("LArDLNeutrinoHierarchyValidation",DLNeutrinoHierarchyValidationAlgorithm)                      \
     d("LArDLPfoCharacterisation",        DlPfoCharacterisationAlgorithm)                              \
     d("LArDLSecondaryVertexing",         DlSecondaryVertexingAlgorithm)                               \
     d("LArDLSecondaryVertexSplitting",   DLSecondaryVertexSplittingAlgorithm)                         \
