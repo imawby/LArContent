@@ -16,6 +16,7 @@
 
 #include "larpandoracontent/LArUtility/KalmanFilter.h"
 
+#include "larpandoracontent/LArTwoDReco/LArClusterSplitting/KalmanFit.h"
 #include "larpandoracontent/LArTwoDReco/LArClusterSplitting/KalmanSplittingAlgorithm.h"
 
 using namespace pandora;
@@ -23,38 +24,6 @@ using namespace pandora;
 namespace lar_content
 {
 
-//------------------------------------------------------------------------------------------------------------------------------------------
-
-KalmanSplittingAlgorithm::KalmanFit::KalmanFit(const KalmanFilter2D &kalmanFilter, const int currentWireID) :
-    m_kalmanFilter(kalmanFilter),
-    m_positions(CartesianPointVector()),
-    m_directions(CartesianPointVector()),
-    m_currentWireID(currentWireID)
-{
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-
-void KalmanSplittingAlgorithm::KalmanFit::SaveStep(const int currentWireID)
-{
-    const CartesianVector kalmanPos(m_kalmanFilter.GetPosition()(0), 0.f, m_kalmanFilter.GetPosition()(1));
-    const CartesianVector kalmanDir(m_kalmanFilter.GetDirection()(0), 0.f, m_kalmanFilter.GetDirection()(1));
-
-    m_positions.push_back(kalmanPos);
-    m_directions.push_back(kalmanDir);
-    m_currentWireID = currentWireID;
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-
-void KalmanSplittingAlgorithm::KalmanFit::AddPositionAndUpdate(const CartesianVector &position)
-{
-    Eigen::VectorXd eigenXd(2);
-    eigenXd << position.GetX(), position.GetZ();
-    m_kalmanFilter.Update(eigenXd);
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------------
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 KalmanSplittingAlgorithm::KalmanSplittingAlgorithm() :
@@ -86,7 +55,7 @@ StatusCode KalmanSplittingAlgorithm::DivideCaloHits(const Cluster *const pCluste
     {
         //////////////////////////////////
         // ClusterList visualiseClusters({pCluster});
-        // PANDORA_MONITORING_API(VisualizeClusters(this->GetPandora(), &visualiseClusters, "Cluster", BLACK));
+        // PANDORA_MONITORING_API(VisualizeClusters(this->GetPandora(), &visualiseClusters, "Cluster", (pCluster->GetParticleId() == MU_MINUS ? BLUE : RED)));
         // PANDORA_MONITORING_API(ViewEvent(this->GetPandora()));
         //////////////////////////////////
 
@@ -144,7 +113,7 @@ bool KalmanSplittingAlgorithm::IsTargetCluster(const Cluster *const pCluster) co
 
 //------------------------------------------------------------------------------------------------------------------------------------------
     
-KalmanSplittingAlgorithm::KalmanFit KalmanSplittingAlgorithm::PerformKalmanFit(const Cluster *const pCluster) const
+KalmanFit KalmanSplittingAlgorithm::PerformKalmanFit(const Cluster *const pCluster) const
 {
     // Get CaloHits
     CaloHitList caloHitList;
@@ -227,8 +196,9 @@ KalmanSplittingAlgorithm::KalmanFit KalmanSplittingAlgorithm::PerformKalmanFit(c
             int highestNHits(0);
             float straightest(std::numeric_limits<float>::max());
 
-            for (const KalmanFit &pathwayFit : pathways)
+            for (unsigned int i = 0; i < pathways.size(); ++i)
             {
+                const KalmanFit &pathwayFit(pathways.at(i));
                 const int nHits(pathwayFit.m_positions.size());
                 const float sigma(this->GetSTD(pathwayFit.m_directions));
 
@@ -303,6 +273,9 @@ StatusCode KalmanSplittingAlgorithm::FindMatchedClusterPosition(const CaloHitLis
 
     for (const CaloHit * const pCaloHit : caloHitList)
     {
+        // if (pCaloHit->GetCellSize1() > 0.75f)
+        //     continue;
+
         const CartesianVector hitPosition((pCaloHit->GetCellSize1() > 0.5f) ?
             LArHitWidthHelper::GetClosestPointToLine2D(kalmanPos, kalmanDir, pCaloHit) : pCaloHit->GetPositionVector()); 
 
@@ -335,29 +308,29 @@ void KalmanSplittingAlgorithm::FollowRoute(const std::map<int, CaloHitList> &cal
     {
         if (entry.first <= kalmanFit.m_currentWireID)
             continue;
-                  
-        bool thisAmbiguous(entry.second.size() != 1);
-
-        // If we've hit another ambiguity
-        if (thisAmbiguous && !prevAmbiguous)
-            return;
-
+                 
         // Make next kalman step
         kalmanFit.m_kalmanFilter.Predict();
        
         // Find matched cluster position
         CartesianPointVector matchedPositions;
-        if (this->FindMatchedClusterPosition(entry.second, kalmanFit, matchedPositions) == STATUS_CODE_SUCCESS)
-        {
-            kalmanFit.SaveStep(entry.first);
-            kalmanFit.AddPositionAndUpdate(matchedPositions.front());
+        if (this->FindMatchedClusterPosition(entry.second, kalmanFit, matchedPositions) != STATUS_CODE_SUCCESS)
+            continue;
 
-            ////////////////////////////
-            // CartesianVector bestPos(matchedPositions.front());
-            // PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &bestPos, "kalmanPos", VIOLET, 2));
-            ////////////////////////////
-        }           
+        bool thisAmbiguous(matchedPositions.size() != 1);
 
+        // If we've hit another ambiguity
+        if (thisAmbiguous && !prevAmbiguous)
+            return;
+
+        kalmanFit.SaveStep(entry.first);
+        kalmanFit.AddPositionAndUpdate(matchedPositions.front());
+
+        ////////////////////////////
+        // CartesianVector bestPos(matchedPositions.front());
+        // PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &bestPos, "kalmanPos", VIOLET, 2));
+        ////////////////////////////
+                  
         prevAmbiguous = thisAmbiguous;
     }
 }
@@ -389,11 +362,13 @@ StatusCode KalmanSplittingAlgorithm::FindBestSplitPosition(const Cluster *const 
         const CartesianVector afterMedian(this->GetMedian(afterSeg));
 
         // Get splitting metrucs
+        const float direct((kalmanFit.m_directions.at(i-1).GetOpeningAngle(kalmanFit.m_directions.at(i+1))) / 3.14 * 180.f);
         const float eitherSide(beforeMedian.GetOpeningAngle(afterMedian) / 3.14 * 180.f);
+        const float afterSigma(this->GetSTD(afterSeg)); // make sure that after segment looks track-like...
         const float beforeSigma(this->GetSTD(beforeSeg)); // make sure that before segment looks track-like...
 
         // Measure angular deviation
-        if ((eitherSide > m_minDeviation) && (beforeSigma < m_maxSpread))
+        if ((eitherSide > m_minDeviation) && (beforeSigma < m_maxSpread) && (afterSigma < m_maxSpread) && (direct > m_minDeviation))
         { 
             if (eitherSide > maxDeviation)
             {
@@ -404,11 +379,11 @@ StatusCode KalmanSplittingAlgorithm::FindBestSplitPosition(const Cluster *const 
         }
    } 
 
-    if (splitFound)
-    {
-        PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &splitPosition, "splitPosition", BLUE, 2));
-        // PANDORA_MONITORING_API(ViewEvent(this->GetPandora()));
-    }
+    // if (splitFound)
+    // {
+    //     PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &splitPosition, "splitPosition", BLUE, 2));
+    //     PANDORA_MONITORING_API(ViewEvent(this->GetPandora()));
+    // }
 
     return splitFound ? STATUS_CODE_SUCCESS : STATUS_CODE_NOT_FOUND;
 }

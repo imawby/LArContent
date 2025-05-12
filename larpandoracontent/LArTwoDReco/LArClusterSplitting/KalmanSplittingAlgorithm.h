@@ -10,6 +10,7 @@
 
 #include "larpandoracontent/LArTwoDReco/LArClusterSplitting/ClusterSplittingAlgorithm.h"
 
+#include "larpandoracontent/LArTwoDReco/LArClusterSplitting/KalmanFit.h"
 #include "larpandoracontent/LArUtility/KalmanFilter.h"
 
 namespace lar_content
@@ -20,22 +21,6 @@ namespace lar_content
  */
 class KalmanSplittingAlgorithm : public ClusterSplittingAlgorithm
 {
-
-  class KalmanFit
-  {
-
-  public:
-      KalmanFit(const KalmanFilter2D &kalmanFilter, const int currentWireID);
-      void SaveStep(const int currentWireID);
-      void AddPositionAndUpdate(const pandora::CartesianVector &position);
-
-      KalmanFilter2D m_kalmanFilter;
-      pandora::CartesianPointVector m_positions;
-      pandora::CartesianPointVector m_directions;
-      int m_currentWireID; // last wireID assessed
-  };
-
-  typedef std::vector<KalmanFit> KalmanFitVector;
 
 public:
     /**
