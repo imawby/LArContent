@@ -52,7 +52,8 @@ private:
                    const LArHierarchyHelper::MCMatches *&pRecoMatch);
 
 //void FillTree(const pandora::MCParticle *const pMCParticle, const LArHierarchyHelper::MCHierarchy::NodeVector &mcNodes, const int tierToExamine);
-    
+
+    int m_eventNumber;
     std::string m_caloHitListName;     ///< Name of input calo hit list
     std::string m_pfoListName;         ///< Name of input PFO list
     bool m_writeFile;

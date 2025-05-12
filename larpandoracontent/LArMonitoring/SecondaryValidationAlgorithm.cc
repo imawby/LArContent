@@ -19,6 +19,7 @@ namespace lar_content
 {
 
 SecondaryValidationAlgorithm::SecondaryValidationAlgorithm() :
+    m_eventNumber(-1),
     m_writeFile(true),
     m_fileName("HierarchyRecoPerformance.root"),
     m_treeName("tree"),
@@ -47,6 +48,8 @@ SecondaryValidationAlgorithm::~SecondaryValidationAlgorithm()
 
 StatusCode SecondaryValidationAlgorithm::Run()
 {
+    ++m_eventNumber;
+
     const CaloHitList *pCaloHitList(nullptr);
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetList(*this, m_caloHitListName, pCaloHitList));
     const MCParticleList *pMCParticleList(nullptr);
@@ -152,6 +155,7 @@ void SecondaryValidationAlgorithm::FillTree(const LArHierarchyHelper::MCHierarch
 
 void SecondaryValidationAlgorithm::FillNullEntry(const MCParticle *const pMCParent, const MCParticle *const pMCChild, const int hierarchyTier)
 {
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "EventNumber", m_eventNumber));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ParentPDG", pMCParent->GetParticleId()));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildPDG", pMCChild->GetParticleId()));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "IsParentReco", 0));
@@ -199,6 +203,7 @@ void SecondaryValidationAlgorithm::FillEntry(const LArHierarchyHelper::MCHierarc
     const int nHitsInHierarchy(this->GetHitsInUpstreamHierarchy(pChildMCNode, matchesVector));
     const float hitsInHierarchyFrac(static_cast<float>(nHitsInHierarchy) / pChildMCNode->GetCaloHits().size());
 
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "EventNumber", m_eventNumber));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ParentPDG", pParentMCNode->GetParticleId()));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildPDG", pChildMCNode->GetParticleId()));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "IsParentReco", 1));
