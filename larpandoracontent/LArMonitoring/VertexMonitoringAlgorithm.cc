@@ -294,10 +294,10 @@ StatusCode VertexMonitoringAlgorithm::AssessSecondaryVertices() const
             PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &ur, "Ur", RED, 1));
             PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &vr, "Vr", RED, 1));
             PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &wr, "Wr", RED, 1));
-            PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &ut, "Ut", BLUE, 1));
-            PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &vt, "Vt", BLUE, 1));
-            PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &wt, "Wt", BLUE, 1));
-            PANDORA_MONITORING_API(ViewEvent(this->GetPandora()));
+            //PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &ut, "Ut", BLUE, 1));
+            //PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &vt, "Vt", BLUE, 1));
+            //PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &wt, "Wt", BLUE, 1));
+            //PANDORA_MONITORING_API(ViewEvent(this->GetPandora()));
         }
     }
 #endif
