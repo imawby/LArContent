@@ -35,21 +35,10 @@ private:
 
     bool IsTargetCluster(const pandora::Cluster *const pCluster) const;
 
-    pandora::StatusCode GetFitSeed(const std::map<int, pandora::CaloHitList> &caloHitWireMap, Eigen::VectorXd &init, int &startWireID) const;
-
-    KalmanFit PerformKalmanFit(const pandora::Cluster *const pCluster) const;
-
-    pandora::StatusCode FindMatchedClusterPosition(const pandora::CaloHitList &caloHitList, const KalmanFit &kalmanFit,
-        pandora::CartesianPointVector &matchedPositions) const ;
-
     pandora::StatusCode FindBestSplitPosition(const pandora::Cluster *const pCluster, const KalmanFit &kalmanFit, 
         pandora::CartesianVector &splitPosition) const;
 
-    void FollowRoute(const std::map<int, pandora::CaloHitList> &caloHitWireMap, KalmanFit &kalmanFit) const;
-
     pandora::CartesianVector GetMedian(pandora::CartesianPointVector &cartesianPointVector) const;
-
-    float GetSTD(const pandora::CartesianPointVector &kalmanFit_dir) const;
 
     pandora::StatusCode DivideCaloHits(const TwoDSlidingFitResult &slidingFitResult, const pandora::CartesianVector &splitPosition, 
         pandora::CaloHitList &firstCaloHitList, pandora::CaloHitList &secondCaloHitList) const;
