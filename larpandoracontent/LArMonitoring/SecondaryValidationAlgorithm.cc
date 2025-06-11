@@ -53,9 +53,21 @@ StatusCode SecondaryValidationAlgorithm::Run()
     const CaloHitList *pCaloHitList(nullptr);
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetList(*this, m_caloHitListName, pCaloHitList));
     const MCParticleList *pMCParticleList(nullptr);
-    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetCurrentList(*this, pMCParticleList));
-    const PfoList *pPfoList(nullptr);
-    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetList(*this, m_pfoListName, pPfoList));
+    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetList(*this, "Input", pMCParticleList));
+    PfoList pfoList;
+
+    for (const std::string listName : {"TrackParticles3D", "ShowerParticles3D", "NeutrinoParticles3D"})
+    {
+        const PfoList *pPfoList(nullptr);
+
+        if (STATUS_CODE_SUCCESS != PandoraContentApi::GetList(*this, listName, pPfoList))
+            continue;
+
+        pfoList.insert(pfoList.begin(), pPfoList->begin(), pPfoList->end());
+    }
+
+    if (pfoList.empty())
+        return STATUS_CODE_SUCCESS;
 
     LArHierarchyHelper::FoldingParameters foldParameters;
     foldParameters.m_foldToLeadingShowers = true;
@@ -66,7 +78,7 @@ StatusCode SecondaryValidationAlgorithm::Run()
     LArHierarchyHelper::MCHierarchy mcHierarchy(recoCriteria);
     LArHierarchyHelper::FillMCHierarchy(*pMCParticleList, *pCaloHitList, foldParameters, mcHierarchy);
     LArHierarchyHelper::RecoHierarchy recoHierarchy;
-    LArHierarchyHelper::FillRecoHierarchy(*pPfoList, foldParameters, recoHierarchy);
+    LArHierarchyHelper::FillRecoHierarchy(pfoList, foldParameters, recoHierarchy);
     const LArHierarchyHelper::QualityCuts quality(m_minPurity, m_minCompleteness, m_selectRecoHits);
     LArHierarchyHelper::MatchInfo matchInfo(mcHierarchy, recoHierarchy, quality);
     LArHierarchyHelper::MatchHierarchies(matchInfo);
@@ -182,8 +194,9 @@ void SecondaryValidationAlgorithm::FillNullEntry(const MCParticle *const pMCPare
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildRecoHitsU", -999));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildRecoHitsV", -999));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildRecoHitsW", -999));
-    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "OpeningAngle", -999));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "OpeningAngle", -999.f));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "NRecoParticles", nRecoParticles));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "DistanceToSecVtx", 99999.f));
     PANDORA_MONITORING_API(FillTree(this->GetPandora(), m_treeName.c_str()));
 }
 
@@ -207,6 +220,9 @@ void SecondaryValidationAlgorithm::FillEntry(const LArHierarchyHelper::MCHierarc
     const CartesianVector parentDir(pParentMCNode->GetMCParticles().front()->GetMomentum().GetUnitVector());
     const CartesianVector childDir(pChildMCNode->GetMCParticles().front()->GetMomentum().GetUnitVector());
     const float openingAngle(parentDir.GetOpeningAngle(childDir) * 180.f / 3.14);
+
+    // Get distance to sec vtx
+    const float distanceToSecVtx(this->GetDistanceToSecVtx(pChildMCNode));
 
     // Fill reco node vars
     if (childNMatches != 0)
@@ -240,7 +256,36 @@ void SecondaryValidationAlgorithm::FillEntry(const LArHierarchyHelper::MCHierarc
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildRecoHitsW", childRecoHitsW));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "OpeningAngle", openingAngle));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "NRecoParticles", nRecoParticles));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "DistanceToSecVtx", distanceToSecVtx));
+
     PANDORA_MONITORING_API(FillTree(this->GetPandora(), m_treeName.c_str()));
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+float SecondaryValidationAlgorithm::GetDistanceToSecVtx(const LArHierarchyHelper::MCHierarchy::Node *const pMCNode)
+{
+    // Get secondary vertex list
+    const VertexList *pSecVtxList(nullptr);
+    if (PandoraContentApi::GetList(*this, "SecondaryVertices3D", pSecVtxList) != STATUS_CODE_SUCCESS)
+        return 99999.f;
+
+    if ((!pSecVtxList) || pSecVtxList->empty())
+        return 99999.f;
+
+    const CartesianVector trueMCVertex(pMCNode->GetMCParticles().front()->GetVertex());
+
+    float closestDistanceSq(std::numeric_limits<float>::max());
+
+    for (const Vertex *const pSecVtx : *pSecVtxList)
+    {
+        const float thisSepSq((pSecVtx->GetPosition() - trueMCVertex).GetMagnitudeSquared());
+
+        if (thisSepSq < closestDistanceSq)
+            closestDistanceSq = thisSepSq;
+    }
+
+    return std::sqrt(closestDistanceSq);
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------

@@ -44,6 +44,8 @@ private:
                    const LArHierarchyHelper::MCMatches *const pChildMatch, const LArHierarchyHelper::MCMatchesVector &matchesVector, const int hierarchyTier, 
                    const int nRecoParticles);
 
+    float GetDistanceToSecVtx(const LArHierarchyHelper::MCHierarchy::Node *const pMCNode);
+
     int GetHitsInUpstreamHierarchy(const LArHierarchyHelper::MCHierarchy::Node *const pRootMCNode, 
                                    const LArHierarchyHelper::MCMatchesVector &matchesVector);
 
