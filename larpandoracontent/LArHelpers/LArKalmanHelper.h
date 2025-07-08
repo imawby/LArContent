@@ -26,7 +26,7 @@ public:
     static pandora::StatusCode GetFitSeed(const std::map<int, pandora::CaloHitList> &caloHitWireMap, Eigen::VectorXd &init, int &startWireID);
 
     static pandora::StatusCode FindMatchedClusterPosition(const pandora::CaloHitList &caloHitList, const KalmanFit &kalmanFit,
-        const float minTransSep, pandora::CartesianPointVector &matchedPositions);
+        const float minTransSep, std::vector<std::pair<const pandora::CaloHit *, pandora::CartesianVector>> &matchedPositions);
 
     static void FollowRoute(const std::map<int, pandora::CaloHitList> &caloHitWireMap, const float minTransSep, KalmanFit &kalmanFit);
 

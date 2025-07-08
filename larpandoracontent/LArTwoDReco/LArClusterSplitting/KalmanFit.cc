@@ -25,7 +25,7 @@ KalmanFit::KalmanFit(const KalmanFilter2D &kalmanFilter, const int currentWireID
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void KalmanFit::SaveStep(const int currentWireID)
+void KalmanFit::SaveStep(const int currentWireID, const CaloHit *const pCaloHit)
 {
     const CartesianVector kalmanPos(m_kalmanFilter.GetPosition()(0), 0.f, m_kalmanFilter.GetPosition()(1));
     const CartesianVector kalmanDir(m_kalmanFilter.GetDirection()(0), 0.f, m_kalmanFilter.GetDirection()(1));
@@ -33,6 +33,7 @@ void KalmanFit::SaveStep(const int currentWireID)
     m_positions.push_back(kalmanPos);
     m_directions.push_back(kalmanDir);
     m_currentWireID = currentWireID;
+    m_caloHitList.push_back(pCaloHit);
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------

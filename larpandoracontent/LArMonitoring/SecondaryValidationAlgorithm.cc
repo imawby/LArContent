@@ -158,7 +158,7 @@ void SecondaryValidationAlgorithm::FillTree(const LArHierarchyHelper::MCHierarch
         // If failed to reco an upstream parent
         if ((pParentMCNode == nullptr) || (pParentRecoNode == nullptr))
         {
-            this->FillNullEntry(pMCParent, pMCChild, tierToExamine, nRecoParticles);
+            this->FillNullEntry(pMCParent, pChildMCNode, tierToExamine, nRecoParticles);
             this->FillTree(nullptr, pMCChild, nullptr, hierarchyNodes, mcMatches, (tierToExamine + 1), nRecoParticles);
             continue;
         }        
@@ -176,9 +176,16 @@ void SecondaryValidationAlgorithm::FillTree(const LArHierarchyHelper::MCHierarch
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void SecondaryValidationAlgorithm::FillNullEntry(const MCParticle *const pMCParent, const MCParticle *const pMCChild, const int hierarchyTier, 
-    const int nRecoParticles)
+void SecondaryValidationAlgorithm::FillNullEntry(const MCParticle *const pMCParent, const LArHierarchyHelper::MCHierarchy::Node *const pChildMCNode, 
+    const int hierarchyTier, const int nRecoParticles)
 {
+    const MCParticle *const pMCChild(pChildMCNode->GetMCParticles().front());
+
+    int childTrueHitsU(-1), childTrueHitsV(-1), childTrueHitsW(-1);
+    childTrueHitsU = LArMonitoringHelper::CountHitsByType(TPC_VIEW_U, pChildMCNode->GetCaloHits());
+    childTrueHitsV = LArMonitoringHelper::CountHitsByType(TPC_VIEW_V, pChildMCNode->GetCaloHits());
+    childTrueHitsW = LArMonitoringHelper::CountHitsByType(TPC_VIEW_W, pChildMCNode->GetCaloHits());
+
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "EventNumber", m_eventNumber));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ParentPDG", pMCParent->GetParticleId()));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildPDG", pMCChild->GetParticleId()));
@@ -188,9 +195,9 @@ void SecondaryValidationAlgorithm::FillNullEntry(const MCParticle *const pMCPare
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildCompleteness", -1.f));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildPurity", -1.f));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildNMatches", -999));
-    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildTrueHitsU", -999));
-    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildTrueHitsV", -999));
-    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildTrueHitsW", -999));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildTrueHitsU", childTrueHitsU));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildTrueHitsV", childTrueHitsV));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildTrueHitsW", childTrueHitsW));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildRecoHitsU", -999));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildRecoHitsV", -999));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ChildRecoHitsW", -999));

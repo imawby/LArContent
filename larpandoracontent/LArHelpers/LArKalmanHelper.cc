@@ -65,14 +65,14 @@ KalmanFit LArKalmanHelper::PerformKalmanFit(const Pandora &pandora, const Cluste
         kalmanFit.m_kalmanFilter.Predict();
        
         // Find matched cluster position
-        CartesianPointVector matchedPositions;
+        std::vector<std::pair<const CaloHit *, CartesianVector>> matchedPositions;
         if (LArKalmanHelper::FindMatchedClusterPosition(entry.second, kalmanFit, minTransSep, matchedPositions) != STATUS_CODE_SUCCESS)
             continue;
 
         if (matchedPositions.size() == 1) // If unambiguous, just add in hit
         {
-            kalmanFit.SaveStep(entry.first);
-            kalmanFit.AddPositionAndUpdate(matchedPositions.front());
+            kalmanFit.SaveStep(entry.first, matchedPositions.front().first);
+            kalmanFit.AddPositionAndUpdate(matchedPositions.front().second);
 
             ///////////////////////////////////
             // const CartesianVector bestPos(matchedPositions.front());
@@ -93,11 +93,11 @@ KalmanFit LArKalmanHelper::PerformKalmanFit(const Pandora &pandora, const Cluste
 
             KalmanFitVector pathways;
 
-            for (const CartesianVector &seed : matchedPositions)
+            for (const std::pair<const CaloHit *, CartesianVector> &seed : matchedPositions)
             {
                 pathways.push_back(kalmanFit);
-                pathways.back().SaveStep(entry.first);
-                pathways.back().AddPositionAndUpdate(seed);
+                pathways.back().SaveStep(entry.first, seed.first);
+                pathways.back().AddPositionAndUpdate(seed.second);
 
                 // PANDORA_MONITORING_API(AddMarkerToVisualization(pandora, &seed, "kalmanPos", RED, 2));
 
@@ -180,12 +180,12 @@ StatusCode LArKalmanHelper::GetFitSeed(const std::map<int, CaloHitList> &caloHit
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 StatusCode LArKalmanHelper::FindMatchedClusterPosition(const CaloHitList &caloHitList, const KalmanFit &kalmanFit, 
-    const float minTransSep, CartesianPointVector &matchedPositions)
+    const float minTransSep, std::vector<std::pair<const CaloHit *, CartesianVector>> &matchedPositions)
 {
     const CartesianVector kalmanPos(kalmanFit.m_kalmanFilter.GetPosition()(0), 0.f, kalmanFit.m_kalmanFilter.GetPosition()(1));
     const CartesianVector kalmanDir(kalmanFit.m_kalmanFilter.GetDirection()(0), 0.f, kalmanFit.m_kalmanFilter.GetDirection()(1));
 
-    std::vector<std::pair<CartesianVector, float>> matchedMap;
+    std::vector<std::pair<std::pair<const CaloHit *, CartesianVector>, float>> matchedMap;
 
     for (const CaloHit * const pCaloHit : caloHitList)
     {
@@ -198,10 +198,11 @@ StatusCode LArKalmanHelper::FindMatchedClusterPosition(const CaloHitList &caloHi
         const float t(kalmanDir.GetCrossProduct(kalmanPos - hitPosition).GetMagnitude());
 
         if (t < minTransSep)
-            matchedMap.push_back(std::make_pair(pCaloHit->GetPositionVector(), t));
+            matchedMap.push_back(std::make_pair(std::make_pair(pCaloHit, pCaloHit->GetPositionVector()), t));
     }
 
-    std::sort(matchedMap.begin(), matchedMap.end(), [](const std::pair<CartesianVector, float> &lhs, const std::pair<CartesianVector, float> &rhs) 
+    std::sort(matchedMap.begin(), matchedMap.end(), [](const std::pair<std::pair<const CaloHit*, CartesianVector>, float> &lhs, 
+                                                       const std::pair<std::pair<const CaloHit*, CartesianVector>, float> &rhs) 
         {
             return lhs.second < rhs.second;
         }
@@ -229,7 +230,7 @@ void LArKalmanHelper::FollowRoute(const std::map<int, CaloHitList> &caloHitWireM
         kalmanFit.m_kalmanFilter.Predict();
        
         // Find matched cluster position
-        CartesianPointVector matchedPositions;
+        std::vector<std::pair<const CaloHit *, CartesianVector>> matchedPositions;
         if (LArKalmanHelper::FindMatchedClusterPosition(entry.second, kalmanFit, minTransSep, matchedPositions) != STATUS_CODE_SUCCESS)
             continue;
 
@@ -239,8 +240,8 @@ void LArKalmanHelper::FollowRoute(const std::map<int, CaloHitList> &caloHitWireM
         if (thisAmbiguous && !prevAmbiguous)
             return;
 
-        kalmanFit.SaveStep(entry.first);
-        kalmanFit.AddPositionAndUpdate(matchedPositions.front());
+        kalmanFit.SaveStep(entry.first, matchedPositions.front().first);
+        kalmanFit.AddPositionAndUpdate(matchedPositions.front().second);
 
         ////////////////////////////
         // CartesianVector bestPos(matchedPositions.front());

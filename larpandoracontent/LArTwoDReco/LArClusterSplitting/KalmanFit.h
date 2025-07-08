@@ -18,12 +18,13 @@ namespace lar_content
 
   public:
       KalmanFit(const KalmanFilter2D &kalmanFilter, const int currentWireID);
-      void SaveStep(const int currentWireID);
+      void SaveStep(const int currentWireID, const pandora::CaloHit *const pCaloHit);
       void AddPositionAndUpdate(const pandora::CartesianVector &position);
 
       KalmanFilter2D m_kalmanFilter;
       pandora::CartesianPointVector m_positions;
       pandora::CartesianPointVector m_directions;
+      pandora::CaloHitVector m_caloHitList;
       int m_currentWireID; // last wireID assessed
   };
 

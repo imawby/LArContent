@@ -37,8 +37,8 @@ private:
                   const LArHierarchyHelper::MCHierarchy::NodeVector &hierarchyNodes, const LArHierarchyHelper::MCMatchesVector mcMatches,
                   const int tierToExamine, const int nRecoParticles);
     
-    void FillNullEntry(const pandora::MCParticle *const pMCParent, const pandora::MCParticle *const pMCChild, const int hierarchyTier, 
-                       const int nRecoParticles);
+    void FillNullEntry(const pandora::MCParticle *const pMCParent, const LArHierarchyHelper::MCHierarchy::Node *const pChildMCNode, 
+                       const int hierarchyTier, const int nRecoParticles);
 
     void FillEntry(const LArHierarchyHelper::MCHierarchy::Node *const pParentMCNode, const LArHierarchyHelper::MCHierarchy::Node *const pChildMCNode, 
                    const LArHierarchyHelper::MCMatches *const pChildMatch, const LArHierarchyHelper::MCMatchesVector &matchesVector, const int hierarchyTier, 
