@@ -47,9 +47,21 @@ private:
                          MCParticleToHitListMap &mcParticleToHitListMap, HitToMCParticleMap &hitToMCParticleMap, ClusterToMCParticleMap &clusterToMCParticleMap,
                          ClusterToMCParticleListMap &clusterToMCParticleListMap, MCParticleSecVertexMap &mcParticleSecVertexMap);
 
-    void ProbeContaminants(const pandora::ClusterList *const pClusterList, const pandora::VertexList *const pSecVertexList, 
-                           ClusterToMCParticleMap &clusterToMCParticleMap, ClusterToMCParticleListMap &clusterToMCParticleListMap,
-                           MCParticleToHitListMap &mcParticleToHitListMap);
+    void ProbeContaminants(const pandora::ClusterList *const pClusterList, const pandora::CaloHitList *const pCaloHitList, 
+                           const pandora::VertexList *const pSecVertexList, ClusterToMCParticleMap &clusterToMCParticleMap, 
+                           ClusterToMCParticleListMap &clusterToMCParticleListMap, MCParticleToHitListMap &mcParticleToHitListMap);
+
+    void FindPath(const pandora::Cluster *const pCluster, const TwoDSlidingFitResult &clusterFit, 
+                  std::map<int, std::pair<const pandora::CaloHit*, float>> &clusterPath);
+
+    void PerformKalmanFit(const std::map<int, std::pair<const pandora::CaloHit*, float>> &clusterPath, 
+                          std::vector<float> &posDiffDist, std::vector<float> &energyDiffDist, std::vector<float> &widthDiffDist, 
+                          std::vector<float> &scatterDist, std::vector<float> &mahalanobisDist);
+
+    float GetDistanceToGap(const pandora::CartesianVector &position2D) const;
+
+    float GetDistanceToEventHit(const pandora::CaloHit *const pCaloHit, const pandora::CaloHitList &clusterHits, 
+                                const pandora::CaloHitList *const pEventHits);
 
     std::string m_caloHitListName;
     std::string m_clusterListName;

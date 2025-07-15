@@ -85,6 +85,17 @@ public:
      */
     const StateVector &GetTemporaryState() const;
 
+    /**
+     * @brief  Get the Mahalanobis distance between the predicted state and a measurement
+     *
+     * @param  z The measurement vector
+     * @param  useTemp Whether to use the temporary state matrix
+     *
+     * @return The Mahalanobis distance
+     */
+    double GetMahalanobisDistance(const MeasurementVector &z, const bool useTemp = true) const;
+
+
 private:
     double m_dt;            ///< Time step
     int m_stateSize;        ///< Size of the state vector
@@ -184,8 +195,22 @@ const typename KalmanFilter<DIM>::StateVector &KalmanFilter<DIM>::GetTemporarySt
     return m_xTemp;
 }
 
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+template <int DIM>
+double KalmanFilter<DIM>::GetMahalanobisDistance(const KalmanFilter<DIM>::MeasurementVector &z, const bool useTemp) const
+{
+    const StateVector &x = useTemp ? m_xTemp : m_x;
+    const StateMatrix &P = useTemp ? m_PTemp : m_P;
+    MeasurementVector y = z - m_H * x;
+    auto Ht = m_H.transpose();
+    auto S = m_H * P * Ht + m_R;
+    return std::sqrt(y.transpose() * S.inverse() * y);
+}
+
 using KalmanFilter2D = KalmanFilter<2>;
 using KalmanFilter3D = KalmanFilter<3>;
+using KalmanFilter4D = KalmanFilter<4>;
 
 } // namespace lar_content
 
