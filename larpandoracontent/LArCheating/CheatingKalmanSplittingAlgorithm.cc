@@ -27,9 +27,14 @@ namespace lar_content
 CheatingKalmanSplittingAlgorithm::CheatingKalmanSplittingAlgorithm() :
     m_mcParticleListName("Input"), 
     m_secVertexListName("SecondaryVertices3D"),
-    m_minFractionMerged(0.5),
-    m_minSecVertexAccuracy(5.f),
-    m_writeFile(true),
+    m_minClusterHits(50),
+    m_minTargetMCHits(5),
+    m_minFractionMerged(0.5f),
+    m_slidingWindow(20),
+    m_lBinSize(0.5f),
+    m_endpointBuffer(3.f),
+    m_searchRegion1D(20.f),
+    m_writeVisInfo(false),
     m_treeName("tree"),
     m_fileName("CheatingKalmanSplitting.root")
 {
@@ -39,20 +44,13 @@ CheatingKalmanSplittingAlgorithm::CheatingKalmanSplittingAlgorithm() :
 
 CheatingKalmanSplittingAlgorithm::~CheatingKalmanSplittingAlgorithm()
 {
-    if (m_writeFile)
-    {
-        PANDORA_MONITORING_API(SaveTree(this->GetPandora(), m_treeName.c_str(), m_fileName.c_str(), "UPDATE"));
-    }
+    PANDORA_MONITORING_API(SaveTree(this->GetPandora(), m_treeName.c_str(), m_fileName.c_str(), "UPDATE"));
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 StatusCode CheatingKalmanSplittingAlgorithm::Run()
 {
-    //////////////////////////////////
-    //PANDORA_MONITORING_API(SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_XZ, -1.f, 1.f, 1.f));
-    //////////////////////////////////
-
     // Get view hits
     const CaloHitList *pCaloHitList(nullptr);
     if (PandoraContentApi::GetList(*this, m_caloHitListName, pCaloHitList) != STATUS_CODE_SUCCESS)
@@ -90,10 +88,9 @@ StatusCode CheatingKalmanSplittingAlgorithm::Run()
     HitToMCParticleMap hitToMCParticleMap;
     ClusterToMCParticleMap clusterToMCParticleMap;
     ClusterToMCParticleListMap clusterToMCParticleListMap;
-    MCParticleSecVertexMap mcParticleSecVertexMap;
 
     this->FillPandoraMaps(pClusterList, pCaloHitList, pMCParticleList, pSecVertexList, mcParticleToHitListMap, hitToMCParticleMap, 
-                          clusterToMCParticleMap, clusterToMCParticleListMap, mcParticleSecVertexMap);
+                          clusterToMCParticleMap, clusterToMCParticleListMap);
 
     this->ProbeContaminants(pClusterList, pCaloHitList, pSecVertexList, clusterToMCParticleMap, clusterToMCParticleListMap, mcParticleToHitListMap);
 
@@ -103,30 +100,9 @@ StatusCode CheatingKalmanSplittingAlgorithm::Run()
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void CheatingKalmanSplittingAlgorithm::FillPandoraMaps(const ClusterList *const pClusterList, const CaloHitList *const pCaloHitList, const MCParticleList *const pMCParticleList, const VertexList *const pSecVertexList, MCParticleToHitListMap &mcParticleToHitListMap, HitToMCParticleMap &hitToMCParticleMap, ClusterToMCParticleMap &clusterToMCParticleMap, ClusterToMCParticleListMap &clusterToMCParticleListMap, MCParticleSecVertexMap &mcParticleSecVertexMap)
+void CheatingKalmanSplittingAlgorithm::FillPandoraMaps(const ClusterList *const pClusterList, const CaloHitList *const pCaloHitList, const MCParticleList *const pMCParticleList, const VertexList *const pSecVertexList, MCParticleToHitListMap &mcParticleToHitListMap, HitToMCParticleMap &hitToMCParticleMap, ClusterToMCParticleMap &clusterToMCParticleMap, ClusterToMCParticleListMap &clusterToMCParticleListMap)
 {
-    // Fill sec vertex map
-    for (const MCParticle *const pMCParticle : *pMCParticleList)
-    {
-        const Vertex *pBestVertex(nullptr);
-        float separationSq(std::numeric_limits<float>::max());
-
-        for (const Vertex *const pSecVertex : *pSecVertexList)
-        {
-            const float thisSepSq((pSecVertex->GetPosition() - pMCParticle->GetVertex()).GetMagnitudeSquared());
-
-            if (thisSepSq < separationSq)
-            {
-                separationSq = thisSepSq;
-                pBestVertex = pSecVertex;
-            }
-        }
-
-        if ((pBestVertex) && (std::sqrt(separationSq) < m_minSecVertexAccuracy))
-            mcParticleSecVertexMap.insert(std::make_pair(pMCParticle, pBestVertex->GetPosition()));
-    }
-
-    // Fill our hit maps
+    // Fill our hit map
     for (const CaloHit *const pCaloHit : *pCaloHitList)
     {
         try
@@ -142,7 +118,7 @@ void CheatingKalmanSplittingAlgorithm::FillPandoraMaps(const ClusterList *const 
     // Now understand each cluster composition
     for (const Cluster *const pCluster : *pClusterList)
     {
-        std::unordered_map<const pandora::MCParticle *, FloatVector> clusterMCParticleToHitListMap;
+        std::unordered_map<const pandora::MCParticle *, CaloHitList> clusterMCParticleToHitListMap;
 
         CaloHitList clusterHits;
         LArClusterHelper::GetAllHits(pCluster, clusterHits);
@@ -152,10 +128,10 @@ void CheatingKalmanSplittingAlgorithm::FillPandoraMaps(const ClusterList *const 
             if (hitToMCParticleMap.find(pCaloHit) == hitToMCParticleMap.end())
                 continue;
 
-            clusterMCParticleToHitListMap[hitToMCParticleMap.at(pCaloHit)].push_back(pCaloHit->GetElectromagneticEnergy());
+            clusterMCParticleToHitListMap[hitToMCParticleMap.at(pCaloHit)].push_back(pCaloHit);
         }
 
-        // Find best match, and any match where more than 50% of the hits are in another particle
+        // Find best match, and any MCParticle that have > 5 hits and 50% of them are in this cluster
         int highestNHits(0);
         float highestEnergy(-1.f);
         const MCParticle *pBestMCParticle(nullptr);
@@ -163,7 +139,9 @@ void CheatingKalmanSplittingAlgorithm::FillPandoraMaps(const ClusterList *const 
         for (const auto &entry : clusterMCParticleToHitListMap)
         {
             const int nHits(entry.second.size());
-            const float energySum(std::accumulate(entry.second.begin(), entry.second.end(), 0.f));
+            float energySum(0.f);
+            for (const CaloHit *const pCaloHit : entry.second)
+                energySum += pCaloHit->GetElectromagneticEnergy();
 
             if (nHits == highestNHits)
             {
@@ -181,19 +159,21 @@ void CheatingKalmanSplittingAlgorithm::FillPandoraMaps(const ClusterList *const 
                 pBestMCParticle = entry.first;
             }
 
-            // is it more than 50%?
-            // is it target reco? i.e. reconstructable?
-            const int totalMCHits(mcParticleToHitListMap.find(entry.first) == mcParticleToHitListMap.end() ? 
-                0 : mcParticleToHitListMap.at(entry.first).size());
-
-            if (totalMCHits < 5)
+            // Is there a significant contamination?
+            if (nHits < m_minTargetMCHits)
                 continue;
 
-            const float particleCompleteness(totalMCHits == 0 ? 
-                0.f : static_cast<float>(entry.second.size()) / static_cast<float>(totalMCHits));
+            // Is a lot of the MC hits missing?
+            // const int totalMCHits(mcParticleToHitListMap.find(entry.first) == mcParticleToHitListMap.end() ? 
+            //     0 : mcParticleToHitListMap.at(entry.first).size());
 
-            if (particleCompleteness > m_minFractionMerged)
-                clusterToMCParticleListMap[pCluster].push_back(entry.first);
+            // const float particleCompleteness(totalMCHits == 0 ? 
+            //     0.f : static_cast<float>(entry.second.size()) / static_cast<float>(totalMCHits));
+
+            // if (particleCompleteness < m_minFractionMerged)
+            //     continue;
+
+            clusterToMCParticleListMap[pCluster].push_back(entry);
         }
 
         clusterToMCParticleMap[pCluster] = pBestMCParticle;
@@ -204,21 +184,20 @@ void CheatingKalmanSplittingAlgorithm::FillPandoraMaps(const ClusterList *const 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 void CheatingKalmanSplittingAlgorithm::FindPath(const Cluster *const pCluster, const TwoDSlidingFitResult &clusterFit, 
-    std::map<int, std::pair<const CaloHit*, float>> &clusterPath)
+    ClusterPath &clusterPath)
 {
     // Get cluster hits
     CaloHitList clusterHits;
     LArClusterHelper::GetAllHits(pCluster, clusterHits);
 
     // Fit l decomposition
-    const float binSize(0.5f);
     std::map<int, std::vector<std::pair<const CaloHit*, float>>> lDecomposition;
 
     for (const CaloHit *const pCaloHit : clusterHits)
     {
         float thisHitL(0.f), thisHitT(0.f);
         clusterFit.GetLocalPosition(pCaloHit->GetPositionVector(), thisHitL, thisHitT);
-        lDecomposition[std::floor(thisHitL / binSize)].push_back(std::make_pair(pCaloHit, thisHitT));
+        lDecomposition[std::floor(thisHitL / m_lBinSize)].push_back(std::make_pair(pCaloHit, thisHitT));
     }
 
     // Find path
@@ -250,15 +229,218 @@ void CheatingKalmanSplittingAlgorithm::FindPath(const Cluster *const pCluster, c
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void CheatingKalmanSplittingAlgorithm::PerformKalmanFit(const std::map<int, std::pair<const CaloHit*, float>> &clusterPath, 
-    std::vector<float> &posDiffDist, std::vector<float> &energyDiffDist, std::vector<float> &widthDiffDist, std::vector<float> &scatterDist, 
+void CheatingKalmanSplittingAlgorithm::ProbeContaminants(const ClusterList *const pClusterList, const CaloHitList *const pCaloHitList, 
+    const VertexList *const pSecVertexList, ClusterToMCParticleMap &clusterToMCParticleMap, ClusterToMCParticleListMap &clusterToMCParticleListMap, 
+    MCParticleToHitListMap &mcParticleToHitListMap)
+{
+    ClusterList clusterList(*pClusterList);
+
+    for (const Cluster *const pCluster : clusterList)
+    {
+        // Enough hits?
+        CaloHitList clusterHits;
+        LArClusterHelper::GetAllHits(pCluster, clusterHits);
+
+        if (clusterHits.size() < m_minClusterHits)
+            continue;
+
+        const HitType hitType(LArClusterHelper::GetClusterHitType(pCluster));
+
+        if (clusterToMCParticleMap.find(pCluster) == clusterToMCParticleMap.end())
+            continue;
+
+        if (clusterToMCParticleListMap.find(pCluster) == clusterToMCParticleListMap.end())
+            continue;
+
+        // Does it have any contamination?
+        const MCParticle *const pBestMatch(clusterToMCParticleMap.at(pCluster));
+
+        // if ((clusterToMCParticleListMap.at(pCluster).size() == 1) && (clusterToMCParticleListMap.at(pCluster).front() == pBestMatch))
+        //     continue;
+
+        bool isContaminated(!((clusterToMCParticleListMap.at(pCluster).size() == 1) && (clusterToMCParticleListMap.at(pCluster).front().first == pBestMatch)));
+
+        try
+        {
+            // Make a fit for the cluster
+            const TwoDSlidingFitResult clusterFit(pCluster, m_slidingWindow, LArGeometryHelper::GetWirePitch(this->GetPandora(), hitType));
+            const CartesianVector clusterMin(clusterFit.GetGlobalMinLayerPosition());
+            const CartesianVector clusterMax(clusterFit.GetGlobalMaxLayerPosition());
+
+            // Find pathway through the cluster
+            ClusterPath clusterPath;
+            this->FindPath(pCluster, clusterFit, clusterPath);
+                      
+            if (clusterPath.empty())
+                continue;
+
+            // Get total energy of path
+            float totalEnergy(0.f);
+            for (const auto &entry : clusterPath)
+                totalEnergy += entry.second.first->GetElectromagneticEnergy();
+
+            //////////////////////////////////
+            // Variables to fill
+            //////////////////////////////////
+            std::vector<float> longitudinal, transverse, energy, secvertex, width, gapSep, eventHitSep, clusterHitSep;
+            std::vector<float> posDiffDist, energyDiffDist, scatterDist, mahalanobisDist;
+            std::vector<float> vertexDrift, vertexWire, vertexL;
+            std::vector<float> driftCoord, wireCoord, lCoord, tCoord;
+            std::vector<int> trackID, hitPDG, isInPath;
+
+            //////////////////////////////////
+            // Kalman fit variables
+            //////////////////////////////////
+            this->PerformKalmanFit(clusterPath, totalEnergy, posDiffDist, energyDiffDist, scatterDist, mahalanobisDist);
+
+            //////////////////////////////////
+            // Plotting variables
+            //////////////////////////////////
+            if (m_writeVisInfo)
+            {
+                for (const CaloHit *const pCaloHit : clusterHits)
+                {
+                    driftCoord.push_back(pCaloHit->GetPositionVector().GetX());
+                    wireCoord.push_back(pCaloHit->GetPositionVector().GetZ());
+                    float thisHitL(0.f), thisHitT(0.f);
+                    clusterFit.GetLocalPosition(pCaloHit->GetPositionVector(), thisHitL, thisHitT);
+                    lCoord.push_back(thisHitL);
+                    tCoord.push_back(thisHitT);
+
+                    try
+                    {
+                        const MCParticle *pMCParticle(MCParticleHelper::GetMainMCParticle(pCaloHit));
+                        hitPDG.push_back(pMCParticle->GetParticleId());
+                        trackID.push_back((size_t)(intptr_t *)pMCParticle->GetUid());
+                    }
+                    catch (...)
+                    {
+                        hitPDG.push_back(-1);
+                        trackID.push_back(-1);
+                    }
+                }
+            }
+
+            //////////////////////////////////
+            // Splitting positions
+            //////////////////////////////////
+            if (isContaminated)
+            {
+                for (const auto &entry : clusterToMCParticleListMap.at(pCluster))
+                {
+                    const MCParticle *const pMCContaminant(entry.first);
+                    CartesianVector trueVertex(LArGeometryHelper::ProjectPosition(this->GetPandora(), pMCContaminant->GetVertex(), hitType));
+                    const float minVertexSep((clusterMin - trueVertex).GetMagnitude());
+                    const float maxVertexSep((clusterMax - trueVertex).GetMagnitude());
+
+                    if ((minVertexSep < m_endpointBuffer) || (maxVertexSep < m_endpointBuffer))
+                        continue;
+
+                    // Find the closest hit to true position
+                    const CaloHitList &contaminantHits(entry.second);
+                    float smallestSep(std::numeric_limits<float>::max());
+                    const CaloHit *pClosestHit(nullptr);
+
+                    for (const CaloHit *const pContaminantHit : contaminantHits)
+                    {
+                        const float thisSepSq((pContaminantHit->GetPositionVector() - trueVertex).GetMagnitudeSquared());
+
+                        if (thisSepSq < smallestSep)
+                        {
+                            smallestSep = thisSepSq;
+                            pClosestHit = pContaminantHit;
+                        }
+                    }
+
+                    if (!pClosestHit)
+                        continue;
+
+                    const float minSep((clusterMin - pClosestHit->GetPositionVector()).GetMagnitude());
+                    const float maxSep((clusterMax - pClosestHit->GetPositionVector()).GetMagnitude());
+
+                    if ((minSep < m_endpointBuffer) || (maxSep < m_endpointBuffer))
+                        continue;
+
+                    float thisVertexL(0.f), thisVertexT(0.f);
+                    clusterFit.GetLocalPosition(pClosestHit->GetPositionVector(), thisVertexL, thisVertexT);
+
+                    vertexDrift.push_back(trueVertex.GetX());
+                    vertexWire.push_back(trueVertex.GetZ());
+                    vertexL.push_back(thisVertexL);
+                }
+            }
+
+            // Reset isContaminated i.e. do we have any split positions?
+            isContaminated = !vertexL.empty();
+
+            //////////////////////////////////
+            // Pathway variables
+            //////////////////////////////////
+            HitKDTree2D kdTree_event;
+            this->BuildKDTree(pCluster, pCaloHitList, kdTree_event);
+
+            float cumulativeEnergy(0.f);
+
+            for (ClusterPath::iterator iter = clusterPath.begin(); iter != clusterPath.end(); ++iter)
+            {
+                longitudinal.push_back(iter->first);
+                transverse.push_back(iter->second.second);
+
+                const CaloHit *const pPathCaloHit(iter->second.first);
+
+                cumulativeEnergy += (pPathCaloHit->GetElectromagneticEnergy() / totalEnergy);
+                energy.push_back(cumulativeEnergy);
+                width.push_back(pPathCaloHit->GetCellSize1());
+                eventHitSep.push_back(this->GetDistanceToEventHit(kdTree_event, pCluster, pPathCaloHit));
+                clusterHitSep.push_back(this->GetDistanceToClusterHit(iter, clusterPath.end()));
+                gapSep.push_back(this->GetDistanceToGap(pPathCaloHit->GetPositionVector()));
+                secvertex.push_back(this->GetDistanceToSecVertex(pPathCaloHit, pSecVertexList, hitType));
+            }
+
+            //////////////////////////////////
+            // Fill Tree
+            //////////////////////////////////
+            if (m_writeVisInfo)
+            {
+                PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "DriftCoord", &driftCoord));
+                PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "WireCoord", &wireCoord));
+                PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "LCoord", &lCoord));
+                PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "TCoord", &tCoord));
+                PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "TrackID", &trackID));
+                PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "HitPDG", &hitPDG));
+            }
+
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "IsContaminated", (isContaminated ? 1 : 0)));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "VertexDift", &vertexDrift));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "VertexWire", &vertexWire));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "VertexL", &vertexL));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "Energy", &energy));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "HitWidth", &width));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "GapSep", &gapSep));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "EventHitSep", &eventHitSep));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ClusterHitSep", &clusterHitSep));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "Longitudinal", &longitudinal));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "Transverse", &transverse));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "Angle", &scatterDist));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "SecVertex", &secvertex));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "PosDiffDist", &posDiffDist));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "EnergyDiffDist", &energyDiffDist));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "MahalanobisDist", &mahalanobisDist));
+            PANDORA_MONITORING_API(FillTree(this->GetPandora(), m_treeName.c_str()));
+        }
+        catch(...)
+        {
+            continue;
+        }
+    }
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void CheatingKalmanSplittingAlgorithm::PerformKalmanFit(const ClusterPath &clusterPath, 
+    const float totalEnergy, std::vector<float> &posDiffDist, std::vector<float> &energyDiffDist, std::vector<float> &scatterDist, 
     std::vector<float> &mahalanobisDist)
 {
-    // Get total energy
-    float totalEnergy(0.f);
-    for (const auto &entry : clusterPath)
-        totalEnergy += entry.second.first->GetElectromagneticEnergy();
-
     // Kalman Config
     const LArTPC *const pTPC(this->GetPandora().GetGeometry()->GetLArTPCMap().begin()->second);
     const HitType view(clusterPath.begin()->second.first->GetHitType());
@@ -276,7 +458,6 @@ void CheatingKalmanSplittingAlgorithm::PerformKalmanFit(const std::map<int, std:
     KalmanFilter3D kalmanFilter3D(m_kalmanDelta, processVariance, measurementVariance, init);
 
     bool skippedFirst(false);
-    CartesianVector previousDirection(0.f, 0.f, 0.f);
 
     for (const auto &entry : clusterPath)
     {
@@ -286,9 +467,9 @@ void CheatingKalmanSplittingAlgorithm::PerformKalmanFit(const std::map<int, std:
 
             posDiffDist.push_back(-1.f);
             energyDiffDist.push_back(-1.f);
-            widthDiffDist.push_back(-1.f);
             scatterDist.push_back(-4.f);
             mahalanobisDist.push_back(-1.f);
+
             continue;
         }
 
@@ -302,7 +483,6 @@ void CheatingKalmanSplittingAlgorithm::PerformKalmanFit(const std::map<int, std:
         const float separation((thisPosition - predPosition).GetMagnitude());
         const CaloHit *const pCaloHit(entry.second.first);
         const float energyDiff(std::fabs((pCaloHit->GetElectromagneticEnergy() / totalEnergy) - tempState(2))); 
-        const float hitWidthDiff(-1.f);//std::fabs(pCaloHit->GetCellSize1() - tempState(3)));
 
         // Update filter
         Eigen::VectorXd eigenXd(3);
@@ -325,230 +505,57 @@ void CheatingKalmanSplittingAlgorithm::PerformKalmanFit(const std::map<int, std:
         // Store info
         posDiffDist.push_back(separation);
         energyDiffDist.push_back(energyDiff);
-        widthDiffDist.push_back(hitWidthDiff);
         scatterDist.push_back(openingAngleL);
         mahalanobisDist.push_back(mahalanobisDistance);
-
-        // Catch direction 
-        previousDirection = newDirection;
     }
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void CheatingKalmanSplittingAlgorithm::ProbeContaminants(const ClusterList *const pClusterList, const CaloHitList *const pCaloHitList, 
-    const VertexList *const pSecVertexList, ClusterToMCParticleMap &clusterToMCParticleMap, ClusterToMCParticleListMap &clusterToMCParticleListMap, 
-    MCParticleToHitListMap &mcParticleToHitListMap)
+void CheatingKalmanSplittingAlgorithm::BuildKDTree(const Cluster *const pCluster, const CaloHitList *const pCaloHitList, 
+    HitKDTree2D &kdTree_event)
 {
-    ClusterList clusterList(*pClusterList);
+    // KD tree for cluster...
+    CaloHitList clusterHits;
+    LArClusterHelper::GetAllHits(pCluster, clusterHits);
 
-    // For tree
-    int clusterCount(0);
+    CaloHitList eventHits(*pCaloHitList);
 
-    for (const Cluster *const pCluster : clusterList)
-    {
-        const HitType hitType(LArClusterHelper::GetClusterHitType(pCluster));
+    for (const CaloHit *const pClusterHit : clusterHits)
+        eventHits.remove(pClusterHit);
 
-        if (clusterToMCParticleMap.find(pCluster) == clusterToMCParticleMap.end())
-            continue;
+    HitKDNode2DList kdNode2DList_event;
+    KDTreeBox kdTreeBox_event(fill_and_bound_2d_kd_tree(eventHits, kdNode2DList_event));
 
-        if (clusterToMCParticleListMap.find(pCluster) == clusterToMCParticleListMap.end())
-            continue;
+    kdTree_event.build(kdNode2DList_event, kdTreeBox_event);
+}
 
-        // Does it have any contamination?
-        const MCParticle *const pBestMatch(clusterToMCParticleMap.at(pCluster));
+//------------------------------------------------------------------------------------------------------------------------------------------
 
-        if ((clusterToMCParticleListMap.at(pCluster).size() == 1) && (clusterToMCParticleListMap.at(pCluster).front() == pBestMatch))
-            continue;
+float CheatingKalmanSplittingAlgorithm::GetDistanceToEventHit(HitKDTree2D &kdTree_event, const Cluster *const pCluster, 
+    const CaloHit *const pCaloHit)
+{
+    HitKDNode2DList found;
+    KDTreeBox searchRegionHits(build_2d_kd_search_region(pCaloHit, m_searchRegion1D, m_searchRegion1D));
+    kdTree_event.search(searchRegionHits, found);
 
-        try
-        {
-            // Make a fit for the cluster
-            const TwoDSlidingFitResult clusterFit(pCluster, 20, LArGeometryHelper::GetWirePitch(this->GetPandora(), hitType));
-            const CartesianVector clusterMin(clusterFit.GetGlobalMinLayerPosition());
-            const CartesianVector clusterMax(clusterFit.GetGlobalMaxLayerPosition());
+    float minDistSq(std::numeric_limits<float>::max());
+    for (const auto &hit : found)
+        minDistSq = std::min(minDistSq, (pCaloHit->GetPositionVector() - hit.data->GetPositionVector()).GetMagnitudeSquared());
 
-            // Find pathway through the cluster
-            std::map<int, std::pair<const CaloHit*, float>> clusterPath;
-            this->FindPath(pCluster, clusterFit, clusterPath);
-                      
-            if (clusterPath.empty())
-                continue;
+    return (found.empty() ? -1.f : std::sqrt(minDistSq));
+}
 
-            // Get total energy
-            float totalEnergy(0.f);
-            for (const auto &entry : clusterPath)
-                totalEnergy += entry.second.first->GetElectromagneticEnergy();
+//------------------------------------------------------------------------------------------------------------------------------------------
 
-            // Now do Kalman fit
-            std::vector<float> posDiffDist, energyDiffDist, widthDiffDist, scatterDist, mahalanobisDist;
-            this->PerformKalmanFit(clusterPath, posDiffDist, energyDiffDist, widthDiffDist, scatterDist, mahalanobisDist);
+float CheatingKalmanSplittingAlgorithm::GetDistanceToClusterHit(const ClusterPath::iterator &currentHit, const ClusterPath::iterator &endIter)
+{
+    const ClusterPath::iterator nextHit(std::next(currentHit));
 
-            ////////////////////////////////////////////////////////
-            // Fill out other tree stuff
-            std::vector<float> vertexDrift, vertexWire, vertexL;
-            //std::vector<float> driftCoord, wireCoord, lCoord, tCoord;
-            //std::vector<int> trackID, hitPDG, isInPath;
-            std::vector<float> longitudinal, transverse, energy, secvertex, width, gapSep, eventHitSep, clusterHitSep;
+    if (nextHit == endIter)
+        return -1.f;
 
-            // First plotting stuff
-            // CaloHitList clusterHits;
-            // LArClusterHelper::GetAllHits(pCluster, clusterHits);
-
-            // for (const CaloHit *const pCaloHit : clusterHits)
-            // {
-            //     driftCoord.push_back(pCaloHit->GetPositionVector().GetX());
-            //     wireCoord.push_back(pCaloHit->GetPositionVector().GetZ());
-            //     float thisHitL(0.f), thisHitT(0.f);
-            //     clusterFit.GetLocalPosition(pCaloHit->GetPositionVector(), thisHitL, thisHitT);
-            //     lCoord.push_back(thisHitL);
-            //     tCoord.push_back(thisHitT);
-
-            //     try
-            //     {
-            //         const MCParticle *pMCParticle(MCParticleHelper::GetMainMCParticle(pCaloHit));
-            //         hitPDG.push_back(pMCParticle->GetParticleId());
-            //         trackID.push_back((size_t)(intptr_t *)pMCParticle->GetUid());
-            //     }
-            //     catch (...)
-            //     {
-            //         hitPDG.push_back(-1);
-            //         trackID.push_back(-1);
-            //     }
-            // }
-
-            //////////////////////////////////
-            // // Visualise contaminant
-            // ClusterList visualiseClusters({pCluster});
-            // PANDORA_MONITORING_API(VisualizeClusters(this->GetPandora(), &visualiseClusters, "Cluster", RED));
-            // PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &clusterMin, "Fit", RED, 2));
-            // PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &clusterMax, "Fit", RED, 2));
-            //////////////////////////////////
-
-            // Then contaminant vertices
-            for (const MCParticle *const pMCContaminant : clusterToMCParticleListMap.at(pCluster))
-            {
-                // if (pMCContaminant == pBestMatch)
-                //     continue;
-
-                if (mcParticleToHitListMap.find(pMCContaminant) == mcParticleToHitListMap.end())
-                    throw;
-
-                CartesianVector trueVertex(LArGeometryHelper::ProjectPosition(this->GetPandora(), pMCContaminant->GetVertex(), hitType));
-                float thisVertexL(0.f), thisVertexT(0.f);
-                clusterFit.GetLocalPosition(trueVertex, thisVertexL, thisVertexT);
-                vertexDrift.push_back(trueVertex.GetX());
-                vertexWire.push_back(trueVertex.GetZ());
-                vertexL.push_back(thisVertexL);
-
-                //////////////////////////////////
-                // CartesianVector trueJam(LArGeometryHelper::ProjectPosition(this->GetPandora(), pMCContaminant->GetVertex(), hitType));
-                // PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &trueJam, "True Vertex", BLACK, 2));
-                // PANDORA_MONITORING_API(ViewEvent(this->GetPandora()));
-                //////////////////////////////////
-            }
-
-            ++clusterCount;
-
-            //////////////////////////////////
-            //PANDORA_MONITORING_API(ViewEvent(this->GetPandora()));
-            //////////////////////////////////
-
-            // Then pathway stuff
-            //std::map<int, std::pair<const CaloHit*, float>> clusterPath;
-
-            float cumEnergy(0.f);
-
-            for (const auto &entry : clusterPath)
-            {
-                cumEnergy += (entry.second.first->GetElectromagneticEnergy() / totalEnergy);
-                longitudinal.push_back(entry.first);
-                transverse.push_back(entry.second.second);
-                energy.push_back(cumEnergy);
-                width.push_back(entry.second.first->GetCellSize1());
-                gapSep.push_back(this->GetDistanceToGap(entry.second.first->GetPositionVector()));
-
-                // Get separation within cluster
-                float minClusterSepSq(std::numeric_limits<float>::max());
-                bool skip(true);
-                bool isClusterSepSet(false);
-                for (const auto &entry2 : clusterPath)
-                {
-                    if (entry.second.first == entry2.second.first)
-                    {
-                        skip = false;
-                        continue;
-                    }
-
-                    if (skip)
-                        continue;
-
-                    isClusterSepSet = true;
-                    const float thisClusterSepSq((entry.second.first->GetPositionVector() - entry2.second.first->GetPositionVector()).GetMagnitudeSquared());
-                    minClusterSepSq = std::min(thisClusterSepSq, minClusterSepSq);
-                }
-
-                clusterHitSep.push_back(isClusterSepSet ? std::sqrt(minClusterSepSq) : -1.f);
-
-                // Get cluster hits
-                CaloHitList clusterHits;
-                LArClusterHelper::GetAllHits(pCluster, clusterHits);
-                eventHitSep.push_back(this->GetDistanceToEventHit(entry.second.first, clusterHits, pCaloHitList));
-
-                float bestSep(-1.f);
-
-                for (const Vertex *const pSecVertex : *pSecVertexList)
-                {
-                    const CartesianVector secVtxPos(LArGeometryHelper::ProjectPosition(this->GetPandora(), pSecVertex->GetPosition(), hitType));
-                    const float thisSep((secVtxPos - entry.second.first->GetPositionVector()).GetMagnitude());
-
-                    if (bestSep < 0.f)
-                    {
-                        bestSep = thisSep;
-                    }
-                    else
-                    {
-                        bestSep = std::min(bestSep, thisSep);
-                    }
-                }
-
-                secvertex.push_back(bestSep);
-            }
-
-
-            //////////////////////////////////
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ClusterCount", clusterCount));
-            // PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "DriftCoord", &driftCoord));
-            // PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "WireCoord", &wireCoord));
-            // PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "LCoord", &lCoord));
-            // PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "TCoord", &tCoord));
-            // PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "TrackID", &trackID));
-            // PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "HitPDG", &hitPDG));
-
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "VertexDift", &vertexDrift));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "VertexWire", &vertexWire));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "VertexL", &vertexL));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "Energy", &energy));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "HitWidth", &width));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "GapSep", &gapSep));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "EventHitSep", &eventHitSep));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ClusterHitSep", &clusterHitSep));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "Longitudinal", &longitudinal));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "Transverse", &transverse));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "Angle", &scatterDist));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "SecVertex", &secvertex));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "PosDiffDist", &posDiffDist));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "EnergyDiffDist", &energyDiffDist));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "WidthDiffDist", &widthDiffDist));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "MahalanobisDist", &mahalanobisDist));
-            PANDORA_MONITORING_API(FillTree(this->GetPandora(), m_treeName.c_str()));
-            //////////////////////////////////
-        }
-        catch(...)
-        {
-            continue;
-        }
-    }
+    return (currentHit->second.first->GetPositionVector() - nextHit->second.first->GetPositionVector()).GetMagnitude();
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -589,20 +596,18 @@ float CheatingKalmanSplittingAlgorithm::GetDistanceToGap(const CartesianVector &
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-float CheatingKalmanSplittingAlgorithm::GetDistanceToEventHit(const CaloHit *const pCaloHit, const CaloHitList &clusterHits, 
-    const CaloHitList *const pEventHits)
+float CheatingKalmanSplittingAlgorithm::GetDistanceToSecVertex(const CaloHit *const pCaloHit, const VertexList *const pSecVertexList, 
+    const HitType hitType)
 {
-    float minDistSq(std::numeric_limits<float>::max());
+    float bestSepSq(std::numeric_limits<float>::max());
 
-    for (const CaloHit *const pEventHit : *pEventHits)
+    for (const Vertex *const pSecVertex : *pSecVertexList)
     {
-        if (std::find(clusterHits.begin(), clusterHits.end(), pEventHit) != clusterHits.end())
-            continue;
-
-        minDistSq = std::min(minDistSq, (pCaloHit->GetPositionVector() - pEventHit->GetPositionVector()).GetMagnitudeSquared());
+        const CartesianVector secVtxPos(LArGeometryHelper::ProjectPosition(this->GetPandora(), pSecVertex->GetPosition(), hitType));
+        bestSepSq = std::min(bestSepSq, (secVtxPos - pCaloHit->GetPositionVector()).GetMagnitudeSquared());
     }
 
-    return (pEventHits->empty() ? -1.f : std::sqrt(minDistSq));
+    return (pSecVertexList->empty() ? -1.f : std::sqrt(bestSepSq));
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -617,13 +622,28 @@ StatusCode CheatingKalmanSplittingAlgorithm::ReadSettings(const TiXmlHandle xmlH
         XmlHelper::ReadValue(xmlHandle, "SecVertexListName", m_secVertexListName));
 
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, 
+        XmlHelper::ReadValue(xmlHandle, "MinClusterHits", m_minClusterHits));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, 
+        XmlHelper::ReadValue(xmlHandle, "MinTargetMCHits", m_minTargetMCHits));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, 
         XmlHelper::ReadValue(xmlHandle, "MinFractionMerged", m_minFractionMerged));
 
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, 
-        XmlHelper::ReadValue(xmlHandle, "MinSecVertexAccuracy", m_minSecVertexAccuracy));
+        XmlHelper::ReadValue(xmlHandle, "SlidingWindow", m_slidingWindow));
 
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, 
-        XmlHelper::ReadValue(xmlHandle, "WriteFile", m_writeFile));
+        XmlHelper::ReadValue(xmlHandle, "LBinSize", m_lBinSize));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, 
+        XmlHelper::ReadValue(xmlHandle, "EndpointBuffer", m_endpointBuffer));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, 
+        XmlHelper::ReadValue(xmlHandle, "SearchRegion1D", m_searchRegion1D));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, 
+        XmlHelper::ReadValue(xmlHandle, "WriteVisualisationInfo", m_writeVisInfo));
 
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, 
         XmlHelper::ReadValue(xmlHandle, "TreeName", m_treeName));
