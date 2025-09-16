@@ -131,10 +131,11 @@ void CheatingKalmanSplittingAlgorithm::FillPandoraMaps(const ClusterList *const 
             clusterMCParticleToHitListMap[hitToMCParticleMap.at(pCaloHit)].push_back(pCaloHit);
         }
 
-        // Find best match, and any MCParticle that have > 5 hits and 50% of them are in this cluster
+        // Find best match, and any MCParticle that has enough hits
         int highestNHits(0);
         float highestEnergy(-1.f);
         const MCParticle *pBestMCParticle(nullptr);
+        MCParticleVector contaminantVector;
 
         for (const auto &entry : clusterMCParticleToHitListMap)
         {
@@ -160,23 +161,86 @@ void CheatingKalmanSplittingAlgorithm::FillPandoraMaps(const ClusterList *const 
             }
 
             // Is there a significant contamination?
-            if (nHits < m_minTargetMCHits)
+            if (nHits >= m_minTargetMCHits)
+                contaminantVector.push_back(entry.first);
+        }
+        //clusterToMCParticleListMap[pCluster].push_back(entry); 
+        clusterToMCParticleMap[pCluster] = pBestMCParticle;
+
+        // Loop through contaminants, find vertex and endpoint
+        CartesianPointVector startPositions, endPositions;
+        for (const MCParticle *const pMCContaminant : contaminantVector)
+        {
+            const CartesianVector trueStart(pMCContaminant->GetVertex());
+            const CartesianVector trueEnd(pMCContaminant->GetEndpoint()); // If photon then do furthest point from vertex?
+
+            float startSepSq(std::numeric_limits<float>::max());
+            float endSepSq(std::numeric_limits<float>::max());
+         
+            CartesianVector hitStart(0.f,0.f,0.f);
+            CartesianVector hitEnd(0.f,0.f,0.f);
+
+            if (clusterMCParticleToHitListMap.find(pMCContaminant) == clusterMCParticleToHitListMap.end())
                 continue;
 
-            // Is a lot of the MC hits missing?
-            // const int totalMCHits(mcParticleToHitListMap.find(entry.first) == mcParticleToHitListMap.end() ? 
-            //     0 : mcParticleToHitListMap.at(entry.first).size());
+            const CaloHitList &contaminantHits(clusterMCParticleToHitListMap.at(pMCContaminant));
 
-            // const float particleCompleteness(totalMCHits == 0 ? 
-            //     0.f : static_cast<float>(entry.second.size()) / static_cast<float>(totalMCHits));
+            for (const CaloHit *const pContaminantHit : contaminantHits)
+            {
+                float this_startSepSq((pContaminantHit->GetPositionVector() - trueStart).GetMagnitudeSquared());
+                float this_endSepSq((pContaminantHit->GetPositionVector() - trueEnd).GetMagnitudeSquared());
 
-            // if (particleCompleteness < m_minFractionMerged)
-            //     continue;
+                if (this_startSepSq < startSepSq)
+                {
+                    startSepSq = this_startSepSq;
+                    hitStart = pContaminantHit->GetPositionVector();
+                }
 
-            clusterToMCParticleListMap[pCluster].push_back(entry);
+                if (this_endSepSq < endSepSq)
+                {
+                    endSepSq = this_endSepSq;
+                    hitEnd = pContaminantHit->GetPositionVector();
+                }
+            }
+
+            startPositions.push_back(hitStart);
+            endPositions.push_back(hitEnd);
         }
 
-        clusterToMCParticleMap[pCluster] = pBestMCParticle;
+        // Now add in any particle that does not live inside another
+        for (unsigned int iCurrent = 0; iCurrent < contaminantVector.size(); ++iCurrent)
+        {
+            bool toAdd(true);
+
+            const MCParticle *const pCurrentMC(contaminantVector.at(iCurrent));
+            const CartesianVector &currentStart(startPositions.at(iCurrent));
+            const CartesianVector &currentEnd(endPositions.at(iCurrent));
+            const float currentMinX(std::min(currentStart.GetX(), currentEnd.GetX()));
+            const float currentMaxX(std::max(currentStart.GetX(), currentEnd.GetX()));
+            const float currentMinZ(std::min(currentStart.GetZ(), currentEnd.GetZ()));
+            const float currentMaxZ(std::max(currentStart.GetZ(), currentEnd.GetZ()));
+                                    
+            for (unsigned int iTest = 0; iTest < contaminantVector.size(); ++iTest)
+            {
+                if (iCurrent == iTest)
+                    continue;
+
+                const CartesianVector &testStart(startPositions.at(iTest));
+                const CartesianVector &testEnd(endPositions.at(iTest));
+
+                const bool startInside((testStart.GetX() > currentMinX) && (testStart.GetX() < currentMaxX) &&
+                                       (testStart.GetZ() > currentMinZ) && (testStart.GetZ() < currentMaxZ));
+
+                const bool endInside((testEnd.GetX() > currentMinX) && (testEnd.GetX() < currentMaxX) &&
+                                     (testEnd.GetZ() > currentMinZ) && (testEnd.GetZ() < currentMaxZ));
+
+                if (startInside && endInside)
+                    toAdd = false;
+            }
+        
+            if (toAdd)
+                clusterToMCParticleListMap[pCluster].push_back(std::make_pair(pCurrentMC, clusterMCParticleToHitListMap.at(pCurrentMC)));
+        }
     }
 }
 
@@ -254,10 +318,6 @@ void CheatingKalmanSplittingAlgorithm::ProbeContaminants(const ClusterList *cons
 
         // Does it have any contamination?
         const MCParticle *const pBestMatch(clusterToMCParticleMap.at(pCluster));
-
-        // if ((clusterToMCParticleListMap.at(pCluster).size() == 1) && (clusterToMCParticleListMap.at(pCluster).front() == pBestMatch))
-        //     continue;
-
         bool isContaminated(!((clusterToMCParticleListMap.at(pCluster).size() == 1) && (clusterToMCParticleListMap.at(pCluster).front().first == pBestMatch)));
 
         try
