@@ -24,6 +24,18 @@ using namespace pandora;
 namespace lar_content
 {
 
+CheatingKalmanSplittingAlgorithm::MCContaminant::MCContaminant(const pandora::CartesianVector &startPosition, const pandora::CartesianVector &endPosition, 
+    const pandora::CartesianVector &startDirection, const pandora::CartesianVector &endDirection) :
+    m_startPosition(startPosition),
+    m_endPosition(endPosition),
+    m_startDirection(startDirection),
+    m_endDirection(endDirection)
+{
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+//------------------------------------------------------------------------------------------------------------------------------------------
+
 CheatingKalmanSplittingAlgorithm::CheatingKalmanSplittingAlgorithm() :
     m_mcParticleListName("Input"), 
     m_secVertexListName("SecondaryVertices3D"),
@@ -31,8 +43,9 @@ CheatingKalmanSplittingAlgorithm::CheatingKalmanSplittingAlgorithm() :
     m_minTargetMCHits(5),
     m_minFractionMerged(0.5f),
     m_slidingWindow(20),
+
     m_lBinSize(0.5f),
-    m_endpointBuffer(3.f),
+    m_endpointBuffer(2.f),
     m_searchRegion1D(20.f),
     m_writeVisInfo(false),
     m_treeName("tree"),
@@ -84,15 +97,11 @@ StatusCode CheatingKalmanSplittingAlgorithm::Run()
         return STATUS_CODE_SUCCESS;
 
     // Fill Pandora maps
-    MCParticleToHitListMap mcParticleToHitListMap;
-    HitToMCParticleMap hitToMCParticleMap;
-    ClusterToMCParticleMap clusterToMCParticleMap;
-    ClusterToMCParticleListMap clusterToMCParticleListMap;
+    std::map<const Cluster *, int> contaminantCounts;
+    ClusterToSplitPositionsMap clusterToSplitPositionsMap;
+    this->FillPandoraMaps(pClusterList, pCaloHitList, clusterToSplitPositionsMap, contaminantCounts);
 
-    this->FillPandoraMaps(pClusterList, pCaloHitList, pMCParticleList, pSecVertexList, mcParticleToHitListMap, hitToMCParticleMap, 
-                          clusterToMCParticleMap, clusterToMCParticleListMap);
-
-    this->ProbeContaminants(pClusterList, pCaloHitList, pSecVertexList, clusterToMCParticleMap, clusterToMCParticleListMap, mcParticleToHitListMap);
+    this->ProbeContaminants(pClusterList, pCaloHitList, pSecVertexList, clusterToSplitPositionsMap, contaminantCounts);
 
 
     return STATUS_CODE_SUCCESS;
@@ -100,16 +109,17 @@ StatusCode CheatingKalmanSplittingAlgorithm::Run()
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void CheatingKalmanSplittingAlgorithm::FillPandoraMaps(const ClusterList *const pClusterList, const CaloHitList *const pCaloHitList, const MCParticleList *const pMCParticleList, const VertexList *const pSecVertexList, MCParticleToHitListMap &mcParticleToHitListMap, HitToMCParticleMap &hitToMCParticleMap, ClusterToMCParticleMap &clusterToMCParticleMap, ClusterToMCParticleListMap &clusterToMCParticleListMap)
+void CheatingKalmanSplittingAlgorithm::FillPandoraMaps(const ClusterList *const pClusterList, const CaloHitList *const pCaloHitList, 
+    ClusterToSplitPositionsMap &clusterToSplitPositionsMap, std::map<const Cluster *, int> &contaminantCounts)
 {
+    HitToMCParticleMap hitToMCParticleMap;
+
     // Fill our hit map
     for (const CaloHit *const pCaloHit : *pCaloHitList)
     {
         try
         {
             const MCParticle *const pMainMCParticle(MCParticleHelper::GetMainMCParticle(pCaloHit));
-
-            mcParticleToHitListMap[pMainMCParticle].push_back(pCaloHit);
             hitToMCParticleMap[pCaloHit] = pMainMCParticle;
         }
         catch (...) { continue; }
@@ -118,7 +128,7 @@ void CheatingKalmanSplittingAlgorithm::FillPandoraMaps(const ClusterList *const 
     // Now understand each cluster composition
     for (const Cluster *const pCluster : *pClusterList)
     {
-        std::unordered_map<const pandora::MCParticle *, CaloHitList> clusterMCParticleToHitListMap;
+        MCParticleToHitListMap contaminantHitListMap;
 
         CaloHitList clusterHits;
         LArClusterHelper::GetAllHits(pCluster, clusterHits);
@@ -128,174 +138,256 @@ void CheatingKalmanSplittingAlgorithm::FillPandoraMaps(const ClusterList *const 
             if (hitToMCParticleMap.find(pCaloHit) == hitToMCParticleMap.end())
                 continue;
 
-            clusterMCParticleToHitListMap[hitToMCParticleMap.at(pCaloHit)].push_back(pCaloHit);
+            contaminantHitListMap[hitToMCParticleMap.at(pCaloHit)].push_back(pCaloHit);
         }
 
-        // Find best match, and any MCParticle that has enough hits
-        int highestNHits(0);
-        float highestEnergy(-1.f);
-        const MCParticle *pBestMCParticle(nullptr);
-        MCParticleVector contaminantVector;
-
-        for (const auto &entry : clusterMCParticleToHitListMap)
+        int nContaminants(0);
+        for (auto &entry : contaminantHitListMap)
         {
-            const int nHits(entry.second.size());
-            float energySum(0.f);
-            for (const CaloHit *const pCaloHit : entry.second)
-                energySum += pCaloHit->GetElectromagneticEnergy();
-
-            if (nHits == highestNHits)
-            {
-                if (energySum > highestEnergy)
-                {
-                    highestNHits = entry.second.size();
-                    highestEnergy = energySum;
-                    pBestMCParticle = entry.first;
-                }
-            }
-            else if (nHits > highestNHits)
-            {
-                highestNHits = entry.second.size();
-                highestEnergy = energySum;
-                pBestMCParticle = entry.first;
-            }
-
-            // Is there a significant contamination?
-            if (nHits >= m_minTargetMCHits)
-                contaminantVector.push_back(entry.first);
+            if (entry.second.size() >= 3)
+                ++nContaminants;
         }
-        //clusterToMCParticleListMap[pCluster].push_back(entry); 
-        clusterToMCParticleMap[pCluster] = pBestMCParticle;
 
-        // Loop through contaminants, find vertex and endpoint
-        CartesianPointVector startPositions, endPositions;
-        for (const MCParticle *const pMCContaminant : contaminantVector)
+        contaminantCounts.insert(std::make_pair(pCluster, nContaminants));
+
+        // Find contaminants
+        ContaminantMap contaminantMap;
+        this->FindContaminants(contaminantHitListMap, contaminantMap);
+
+        // Now find split positions
+        CartesianPointVector splitPositions;
+        this->FindSplitPositions(pCluster, contaminantMap, splitPositions);
+
+        // Add to map
+        clusterToSplitPositionsMap.insert(std::make_pair(pCluster, splitPositions));
+    }
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void CheatingKalmanSplittingAlgorithm::FindContaminants(const MCParticleToHitListMap &contaminantHitListMap, ContaminantMap &contaminantMap)
+{
+    // Find contaminants
+    for (const auto &entry : contaminantHitListMap)
+    {
+        const MCParticle *const pMCContaminant(entry.first);
+        const CaloHitList &contaminantHits(entry.second);
+        const HitType hitType(contaminantHits.front()->GetHitType());
+        const unsigned int nHits(contaminantHits.size());
+
+        // Is there a significant contamination?
+        if (nHits < m_minTargetMCHits)
+            continue;
+
+        // Now build contaminant object
+        const CartesianVector trueStart(LArGeometryHelper::ProjectPosition(this->GetPandora(), pMCContaminant->GetVertex(), hitType));
+        // If photon then do furthest point from vertex?
+        const CartesianVector trueEnd(LArGeometryHelper::ProjectPosition(this->GetPandora(), pMCContaminant->GetEndpoint(), hitType));
+
+        CartesianVector startPosition(0.f,0.f,0.f), endPosition(0.f,0.f,0.f);
+        CartesianVector startDirection(0.f,0.f,0.f), endDirection(0.f,0.f,0.f);
+        CartesianPointVector fitPositions;
+
+        float startSepSq(std::numeric_limits<float>::max());
+        float endSepSq(std::numeric_limits<float>::max());
+        
+        for (const CaloHit *const pContaminantHit : contaminantHits)
         {
-            const CartesianVector trueStart(pMCContaminant->GetVertex());
-            const CartesianVector trueEnd(pMCContaminant->GetEndpoint()); // If photon then do furthest point from vertex?
+            float this_startSepSq((pContaminantHit->GetPositionVector() - trueStart).GetMagnitudeSquared());
+            float this_endSepSq((pContaminantHit->GetPositionVector() - trueEnd).GetMagnitudeSquared());
 
-            float startSepSq(std::numeric_limits<float>::max());
-            float endSepSq(std::numeric_limits<float>::max());
-         
-            CartesianVector hitStart(0.f,0.f,0.f);
-            CartesianVector hitEnd(0.f,0.f,0.f);
+            if (this_startSepSq < startSepSq)
+            {
+                startSepSq = this_startSepSq;
+                startPosition = pContaminantHit->GetPositionVector();
+            }
 
-            if (clusterMCParticleToHitListMap.find(pMCContaminant) == clusterMCParticleToHitListMap.end())
+            if (this_endSepSq < endSepSq)
+            { 
+                endSepSq = this_endSepSq;
+                endPosition = pContaminantHit->GetPositionVector();
+            }
+
+            fitPositions.push_back(pContaminantHit->GetPositionVector());
+        }
+
+        try
+        {
+            // Now direction.
+            const TwoDSlidingFitResult clusterFit(&fitPositions, m_slidingWindow, LArGeometryHelper::GetWirePitch(this->GetPandora(), hitType));
+            float startL(-1.f), startT(-1.f), endL(-1.f), endT(-1.f);
+            clusterFit.GetLocalPosition(startPosition, startL, startT);
+            clusterFit.GetLocalPosition(endPosition, endL, endT);
+            clusterFit.GetGlobalFitDirection(startL, startDirection);
+            clusterFit.GetGlobalFitDirection(endL, endDirection);
+
+            // Now form and add to map
+            contaminantMap.insert(std::make_pair(pMCContaminant, MCContaminant(startPosition, endPosition, startDirection, endDirection)));
+        }
+        catch (...)
+        {
+            if (pMCContaminant->GetMomentum().GetMagnitude() < std::numeric_limits<float>::epsilon())
                 continue;
 
-            const CaloHitList &contaminantHits(clusterMCParticleToHitListMap.at(pMCContaminant));
+            startDirection = LArGeometryHelper::ProjectDirection(this->GetPandora(), pMCContaminant->GetMomentum().GetUnitVector(), hitType);
+            endDirection = startDirection;
 
-            for (const CaloHit *const pContaminantHit : contaminantHits)
-            {
-                float this_startSepSq((pContaminantHit->GetPositionVector() - trueStart).GetMagnitudeSquared());
-                float this_endSepSq((pContaminantHit->GetPositionVector() - trueEnd).GetMagnitudeSquared());
-
-                if (this_startSepSq < startSepSq)
-                {
-                    startSepSq = this_startSepSq;
-                    hitStart = pContaminantHit->GetPositionVector();
-                }
-
-                if (this_endSepSq < endSepSq)
-                {
-                    endSepSq = this_endSepSq;
-                    hitEnd = pContaminantHit->GetPositionVector();
-                }
-            }
-
-            startPositions.push_back(hitStart);
-            endPositions.push_back(hitEnd);
-        }
-
-        // Now add in any particle that does not live inside another
-        for (unsigned int iCurrent = 0; iCurrent < contaminantVector.size(); ++iCurrent)
-        {
-            bool toAdd(true);
-
-            const MCParticle *const pCurrentMC(contaminantVector.at(iCurrent));
-            const CartesianVector &currentStart(startPositions.at(iCurrent));
-            const CartesianVector &currentEnd(endPositions.at(iCurrent));
-            const float currentMinX(std::min(currentStart.GetX(), currentEnd.GetX()));
-            const float currentMaxX(std::max(currentStart.GetX(), currentEnd.GetX()));
-            const float currentMinZ(std::min(currentStart.GetZ(), currentEnd.GetZ()));
-            const float currentMaxZ(std::max(currentStart.GetZ(), currentEnd.GetZ()));
-                                    
-            for (unsigned int iTest = 0; iTest < contaminantVector.size(); ++iTest)
-            {
-                if (iCurrent == iTest)
-                    continue;
-
-                const CartesianVector &testStart(startPositions.at(iTest));
-                const CartesianVector &testEnd(endPositions.at(iTest));
-
-                const bool startInside((testStart.GetX() > currentMinX) && (testStart.GetX() < currentMaxX) &&
-                                       (testStart.GetZ() > currentMinZ) && (testStart.GetZ() < currentMaxZ));
-
-                const bool endInside((testEnd.GetX() > currentMinX) && (testEnd.GetX() < currentMaxX) &&
-                                     (testEnd.GetZ() > currentMinZ) && (testEnd.GetZ() < currentMaxZ));
-
-                if (startInside && endInside)
-                    toAdd = false;
-            }
-        
-            if (toAdd)
-                clusterToMCParticleListMap[pCluster].push_back(std::make_pair(pCurrentMC, clusterMCParticleToHitListMap.at(pCurrentMC)));
+            // Now form and add to map
+            contaminantMap.insert(std::make_pair(pMCContaminant, MCContaminant(startPosition, endPosition, startDirection, endDirection)));
         }
     }
 }
 
-
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void CheatingKalmanSplittingAlgorithm::FindPath(const Cluster *const pCluster, const TwoDSlidingFitResult &clusterFit, 
-    ClusterPath &clusterPath)
+void CheatingKalmanSplittingAlgorithm::FindSplitPositions(const Cluster *const pCluster, const ContaminantMap &contaminantMap, CartesianPointVector &splitPositions)
 {
-    // Get cluster hits
-    CaloHitList clusterHits;
-    LArClusterHelper::GetAllHits(pCluster, clusterHits);
+    // If there is only one MCParticle
+    if (contaminantMap.size() < 2)
+        return;
+ 
+    MCParticleList contaminantList;
+    for (auto &entry : contaminantMap)
+        contaminantList.push_back(entry.first);
 
-    // Fit l decomposition
-    std::map<int, std::vector<std::pair<const CaloHit*, float>>> lDecomposition;
-
-    for (const CaloHit *const pCaloHit : clusterHits)
+    try
     {
-        float thisHitL(0.f), thisHitT(0.f);
-        clusterFit.GetLocalPosition(pCaloHit->GetPositionVector(), thisHitL, thisHitT);
-        lDecomposition[std::floor(thisHitL / m_lBinSize)].push_back(std::make_pair(pCaloHit, thisHitT));
-    }
+        const HitType hitType(LArClusterHelper::GetClusterHitType(pCluster));
+        const TwoDSlidingFitResult clusterFit(pCluster, m_slidingWindow, LArGeometryHelper::GetWirePitch(this->GetPandora(), hitType));
+        const CartesianVector clusterMin(clusterFit.GetGlobalMinLayerPosition());
+        const CartesianVector clusterMax(clusterFit.GetGlobalMaxLayerPosition());
 
-    // Find path
-    for (std::pair<int, std::vector<std::pair<const CaloHit*, float>>> entry : lDecomposition)
-    {
-        if (entry.second.size() == 1)
+        for (const MCParticle *const pThisContaminant : contaminantList)
         {
-            clusterPath.insert(std::make_pair(entry.first, entry.second.front()));
-        }
-        else
-        {
-            // pick pair with smallest t
-            std::pair<const CaloHit*, float> pBestHit(entry.second.front());
-            float smallestT(std::numeric_limits<float>::max());
+            if (contaminantMap.find(pThisContaminant) == contaminantMap.end())
+                continue;
 
-            for (std::pair<const CaloHit*, float> ambiguousHit : entry.second)
+            const MCContaminant thisContaminant(contaminantMap.at(pThisContaminant));
+
+            CartesianPointVector positions({thisContaminant.m_startPosition, thisContaminant.m_endPosition});
+            float l1(-1.f), t1(-1.f), l2(-1.f), t2(-1.f);
+            clusterFit.GetLocalPosition(positions.at(0), l1, t1);
+            clusterFit.GetLocalPosition(positions.at(1), l2, t2);
+            CartesianPointVector directions({thisContaminant.m_startDirection, thisContaminant.m_endDirection});
+            IntVector rejected;
+
+            // Too close to cluster min/max?
+            for (int i = 0; i < 2; ++i)
             {
-                if (ambiguousHit.second < smallestT)
+                const float minSep((clusterMin - positions.at(i)).GetMagnitude());
+                const float maxSep((clusterMax - positions.at(i)).GetMagnitude());
+
+                if ((minSep < m_endpointBuffer) || (maxSep < m_endpointBuffer))
+                    rejected.push_back(i);
+            }
+
+            if (rejected.size() == 2)
+                continue;
+
+        //////////////////////////////////////////
+        // Draw contaminant
+            //PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &positions.at(0), "START", BLUE, 2);
+            //PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &positions.at(1), "END", BLUE, 2);
+            //PandoraMonitoringApi::ViewEvent(this->GetPandora());
+        //////////////////////////////////////////
+
+            // Does particle live inside another?
+            bool contained(false);
+
+            // const float currentMinL(std::min(l1, l2));
+            // const float currentMaxL(std::max(l1, l2));
+            for (const MCParticle *const pTestContaminant : contaminantList)
+            {
+                if (pTestContaminant == pThisContaminant)
+                    continue;
+
+                if (contaminantMap.find(pTestContaminant) == contaminantMap.end())
+                    continue;
+
+                const MCContaminant testContaminant(contaminantMap.at(pTestContaminant));
+                const CartesianVector &testStart(testContaminant.m_startPosition);
+                const CartesianVector &testEnd(testContaminant.m_endPosition);
+
+        //////////////////////////////////////////
+        // Draw contaminant
+                //PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &testStart, "START", RED, 2);
+            //PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &testEnd, "END", RED, 2);
+            //PandoraMonitoringApi::ViewEvent(this->GetPandora());
+        //////////////////////////////////////////
+                float test_l1(-1.f), test_t1(-1.f), test_l2(-1.f), test_t2(-1.f);
+                clusterFit.GetLocalPosition(testStart, test_l1, test_t1);
+                clusterFit.GetLocalPosition(testEnd, test_l2, test_t2);
+                const float testMinL(std::min(test_l1, test_l2));
+                const float testMaxL(std::max(test_l1, test_l2));
+
+                const bool startInside((l1 > testMinL) && (l1 < testMaxL));
+                const bool endInside((l2 > testMinL) && (l2 < testMaxL));
+
+                contained = (startInside && endInside);
+
+                if (contained)
+                    break;
+            }
+
+            if (contained)
+                continue;
+
+            // Reject collinear
+            bool collinear(false);
+            for (const MCParticle *const pTestContaminant : contaminantList)
+            {
+                if (pTestContaminant == pThisContaminant)
+                    continue;
+
+                if (contaminantMap.find(pTestContaminant) == contaminantMap.end())
+                    continue;
+
+                const MCContaminant testContaminant(contaminantMap.at(pTestContaminant));
+                CartesianPointVector testPositions({testContaminant.m_startPosition, testContaminant.m_endPosition});
+                CartesianPointVector testDirections({testContaminant.m_startDirection, testContaminant.m_endDirection});
+
+                for (int iCurrent = 0; iCurrent < 2; ++iCurrent)
                 {
-                    smallestT = ambiguousHit.second;
-                    pBestHit = ambiguousHit;
+                    if (std::find(rejected.begin(), rejected.end(), iCurrent) != rejected.end())
+                        continue;
+
+                    for (int iTest = 0; iTest < 2; ++iTest)
+                    {
+                        const float endpointSep((positions.at(iCurrent) - testPositions.at(iTest)).GetMagnitude());
+                        float openingAngle(directions.at(iCurrent).GetOpeningAngle(testDirections.at(iTest)));
+                        openingAngle *= (180.f / 3.14);
+
+                        if ((endpointSep < 3.f) && ((openingAngle < 5.f) || (openingAngle > 175.f)))
+                            collinear = true;
+
+                        if (collinear)
+                            break;
+                    }
+
+                    if (collinear)
+                        rejected.push_back(iCurrent);
                 }
             }
 
-            clusterPath.insert(std::make_pair(entry.first, pBestHit));
+            // Finally, add in split positions
+            for (int i = 0; i < 2; ++i)
+            {
+                if (std::find(rejected.begin(), rejected.end(), i) == rejected.end())
+                    splitPositions.push_back(positions.at(i));
+            }
         }
+    }
+    catch (...)
+    {
+        return;
     }
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 void CheatingKalmanSplittingAlgorithm::ProbeContaminants(const ClusterList *const pClusterList, const CaloHitList *const pCaloHitList, 
-    const VertexList *const pSecVertexList, ClusterToMCParticleMap &clusterToMCParticleMap, ClusterToMCParticleListMap &clusterToMCParticleListMap, 
-    MCParticleToHitListMap &mcParticleToHitListMap)
+    const VertexList *const pSecVertexList, const ClusterToSplitPositionsMap &clusterToSplitPositionsMap, 
+    const std::map<const Cluster *, int> &contaminantCounts)
 {
     ClusterList clusterList(*pClusterList);
 
@@ -308,20 +400,38 @@ void CheatingKalmanSplittingAlgorithm::ProbeContaminants(const ClusterList *cons
         if (clusterHits.size() < m_minClusterHits)
             continue;
 
+        std::cout << "clusterHits.size():" << clusterHits.size() << std::endl;
+
         const HitType hitType(LArClusterHelper::GetClusterHitType(pCluster));
 
-        if (clusterToMCParticleMap.find(pCluster) == clusterToMCParticleMap.end())
-            continue;
-
-        if (clusterToMCParticleListMap.find(pCluster) == clusterToMCParticleListMap.end())
-            continue;
-
         // Does it have any contamination?
-        const MCParticle *const pBestMatch(clusterToMCParticleMap.at(pCluster));
-        bool isContaminated(!((clusterToMCParticleListMap.at(pCluster).size() == 1) && (clusterToMCParticleListMap.at(pCluster).front().first == pBestMatch)));
+        const bool isContaminated((clusterToSplitPositionsMap.find(pCluster) != clusterToSplitPositionsMap.end()) && 
+                                  (!clusterToSplitPositionsMap.at(pCluster).empty()));
+
+        // Work out who truly owns this cluster
+        int highestNHits(-1), matchedPDG(-1);
+        std::map<const MCParticle*, CaloHitList> mcParticleHitListMap;
+
+        for (const CaloHit *const pCaloHit : clusterHits)
+        {
+            try
+            {
+                const MCParticle *const pMainMCParticle(MCParticleHelper::GetMainMCParticle(pCaloHit));
+                mcParticleHitListMap[pMainMCParticle].push_back(pCaloHit);
+
+                if (static_cast<int>(mcParticleHitListMap.at(pMainMCParticle).size()) > highestNHits)
+                {
+                    highestNHits = mcParticleHitListMap.at(pMainMCParticle).size();
+                    matchedPDG = pMainMCParticle->GetParticleId();
+                }
+            }
+            catch (...) { continue; }
+        }
 
         try
         {
+            std::cout << "hitType: " << hitType << std::endl;
+
             // Make a fit for the cluster
             const TwoDSlidingFitResult clusterFit(pCluster, m_slidingWindow, LArGeometryHelper::GetWirePitch(this->GetPandora(), hitType));
             const CartesianVector clusterMin(clusterFit.GetGlobalMinLayerPosition());
@@ -386,52 +496,16 @@ void CheatingKalmanSplittingAlgorithm::ProbeContaminants(const ClusterList *cons
             //////////////////////////////////
             if (isContaminated)
             {
-                for (const auto &entry : clusterToMCParticleListMap.at(pCluster))
+                for (const CartesianVector &splitPosition : clusterToSplitPositionsMap.at(pCluster))
                 {
-                    const MCParticle *const pMCContaminant(entry.first);
-                    CartesianVector trueVertex(LArGeometryHelper::ProjectPosition(this->GetPandora(), pMCContaminant->GetVertex(), hitType));
-                    const float minVertexSep((clusterMin - trueVertex).GetMagnitude());
-                    const float maxVertexSep((clusterMax - trueVertex).GetMagnitude());
+                    float thisL(0.f), thisT(0.f);
+                    clusterFit.GetLocalPosition(splitPosition, thisL, thisT);
 
-                    if ((minVertexSep < m_endpointBuffer) || (maxVertexSep < m_endpointBuffer))
-                        continue;
-
-                    // Find the closest hit to true position
-                    const CaloHitList &contaminantHits(entry.second);
-                    float smallestSep(std::numeric_limits<float>::max());
-                    const CaloHit *pClosestHit(nullptr);
-
-                    for (const CaloHit *const pContaminantHit : contaminantHits)
-                    {
-                        const float thisSepSq((pContaminantHit->GetPositionVector() - trueVertex).GetMagnitudeSquared());
-
-                        if (thisSepSq < smallestSep)
-                        {
-                            smallestSep = thisSepSq;
-                            pClosestHit = pContaminantHit;
-                        }
-                    }
-
-                    if (!pClosestHit)
-                        continue;
-
-                    const float minSep((clusterMin - pClosestHit->GetPositionVector()).GetMagnitude());
-                    const float maxSep((clusterMax - pClosestHit->GetPositionVector()).GetMagnitude());
-
-                    if ((minSep < m_endpointBuffer) || (maxSep < m_endpointBuffer))
-                        continue;
-
-                    float thisVertexL(0.f), thisVertexT(0.f);
-                    clusterFit.GetLocalPosition(pClosestHit->GetPositionVector(), thisVertexL, thisVertexT);
-
-                    vertexDrift.push_back(trueVertex.GetX());
-                    vertexWire.push_back(trueVertex.GetZ());
-                    vertexL.push_back(thisVertexL);
+                    vertexDrift.push_back(splitPosition.GetX());
+                    vertexWire.push_back(splitPosition.GetZ());
+                    vertexL.push_back(thisL);
                 }
             }
-
-            // Reset isContaminated i.e. do we have any split positions?
-            isContaminated = !vertexL.empty();
 
             //////////////////////////////////
             // Pathway variables
@@ -470,6 +544,9 @@ void CheatingKalmanSplittingAlgorithm::ProbeContaminants(const ClusterList *cons
                 PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "HitPDG", &hitPDG));
             }
 
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "NContaminants", contaminantCounts.at(pCluster)));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "ClusterPDG", std::abs(pCluster->GetParticleId())));
+            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "BacktrackedPDG", matchedPDG));
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "IsContaminated", (isContaminated ? 1 : 0)));
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "VertexDift", &vertexDrift));
             PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_treeName.c_str(), "VertexWire", &vertexWire));
@@ -491,6 +568,52 @@ void CheatingKalmanSplittingAlgorithm::ProbeContaminants(const ClusterList *cons
         catch(...)
         {
             continue;
+        }
+    }
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void CheatingKalmanSplittingAlgorithm::FindPath(const Cluster *const pCluster, const TwoDSlidingFitResult &clusterFit, 
+    ClusterPath &clusterPath)
+{
+    // Get cluster hits
+    CaloHitList clusterHits;
+    LArClusterHelper::GetAllHits(pCluster, clusterHits);
+
+    // Fit l decomposition
+    std::map<int, std::vector<std::pair<const CaloHit*, float>>> lDecomposition;
+
+    for (const CaloHit *const pCaloHit : clusterHits)
+    {
+        float thisHitL(0.f), thisHitT(0.f);
+        clusterFit.GetLocalPosition(pCaloHit->GetPositionVector(), thisHitL, thisHitT);
+        lDecomposition[std::floor(thisHitL / m_lBinSize)].push_back(std::make_pair(pCaloHit, thisHitT));
+    }
+
+    // Find path
+    for (std::pair<int, std::vector<std::pair<const CaloHit*, float>>> entry : lDecomposition)
+    {
+        if (entry.second.size() == 1)
+        {
+            clusterPath.insert(std::make_pair(entry.first, entry.second.front()));
+        }
+        else
+        {
+            // pick pair with smallest t
+            std::pair<const CaloHit*, float> pBestHit(entry.second.front());
+            float smallestT(std::numeric_limits<float>::max());
+
+            for (std::pair<const CaloHit*, float> ambiguousHit : entry.second)
+            {
+                if (ambiguousHit.second < smallestT)
+                {
+                    smallestT = ambiguousHit.second;
+                    pBestHit = ambiguousHit;
+                }
+            }
+
+            clusterPath.insert(std::make_pair(entry.first, pBestHit));
         }
     }
 }

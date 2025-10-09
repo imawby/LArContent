@@ -24,6 +24,19 @@ namespace lar_content
  */
 class CheatingKalmanSplittingAlgorithm : public pandora::Algorithm
 {
+
+class MCContaminant
+{
+public:
+    MCContaminant(const pandora::CartesianVector &startPosition, const pandora::CartesianVector &endPosition, 
+        const pandora::CartesianVector &startDirection, const pandora::CartesianVector &endDirection);
+
+    pandora::CartesianVector m_startPosition;
+    pandora::CartesianVector m_endPosition;
+    pandora::CartesianVector m_startDirection;
+    pandora::CartesianVector m_endDirection;
+};
+
 public:
     /**
      *  @brief  Default constructor
@@ -38,7 +51,8 @@ private:
 
     typedef std::unordered_map<const pandora::MCParticle *, pandora::CaloHitList> MCParticleToHitListMap;
     typedef std::unordered_map<const pandora::CaloHit *, const pandora::MCParticle *> HitToMCParticleMap;
-    typedef std::unordered_map<const pandora::Cluster *, const pandora::MCParticle *> ClusterToMCParticleMap;
+    typedef std::map<const pandora::MCParticle*, MCContaminant> ContaminantMap;
+    typedef std::map<const pandora::Cluster*, pandora::CartesianPointVector> ClusterToSplitPositionsMap; 
     typedef std::unordered_map<const pandora::Cluster *, std::vector<std::pair<const pandora::MCParticle*, pandora::CaloHitList>>> ClusterToMCParticleListMap;
     typedef std::map<int, std::pair<const pandora::CaloHit*, float>> ClusterPath;
     typedef KDTreeLinkerAlgo<const pandora::CaloHit *, 2> HitKDTree2D;
@@ -46,13 +60,16 @@ private:
     typedef std::vector<HitKDNode2D> HitKDNode2DList;
 
     void FillPandoraMaps(const pandora::ClusterList *const pClusterList, const pandora::CaloHitList *const pCaloHitList, 
-                         const pandora::MCParticleList *const pMCParticleList, const pandora::VertexList *const pSecVertexList,
-                         MCParticleToHitListMap &mcParticleToHitListMap, HitToMCParticleMap &hitToMCParticleMap, ClusterToMCParticleMap &clusterToMCParticleMap,
-                         ClusterToMCParticleListMap &clusterToMCParticleListMap);
+                         ClusterToSplitPositionsMap &clusterToSplitPositionsMap, std::map<const pandora::Cluster *, int> &contaminantCounts);
+
+    void FindContaminants(const MCParticleToHitListMap &clusterMCParticleToHitListMap, ContaminantMap &contaminantMap);
+
+    void FindSplitPositions(const pandora::Cluster *const pCluster, const ContaminantMap &contaminantMap, pandora::CartesianPointVector &splitPositions);
 
     void ProbeContaminants(const pandora::ClusterList *const pClusterList, const pandora::CaloHitList *const pCaloHitList, 
-                           const pandora::VertexList *const pSecVertexList, ClusterToMCParticleMap &clusterToMCParticleMap, 
-                           ClusterToMCParticleListMap &clusterToMCParticleListMap, MCParticleToHitListMap &mcParticleToHitListMap);
+                           const pandora::VertexList *const pSecVertexList, const ClusterToSplitPositionsMap &clusterToSplitPositionsMap, 
+                           const std::map<const pandora::Cluster *, int> &contaminantCounts);
+
 
     void FindPath(const pandora::Cluster *const pCluster, const TwoDSlidingFitResult &clusterFit, ClusterPath &clusterPath);
 
@@ -77,7 +94,7 @@ private:
     std::string m_mcParticleListName;
     std::string m_secVertexListName;
     unsigned int m_minClusterHits;
-    int m_minTargetMCHits;
+    unsigned int m_minTargetMCHits;
     float m_minFractionMerged;
     int m_slidingWindow;
     float m_lBinSize;

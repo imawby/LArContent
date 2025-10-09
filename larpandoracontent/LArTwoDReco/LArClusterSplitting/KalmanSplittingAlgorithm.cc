@@ -9,15 +9,11 @@
 #include "Pandora/AlgorithmHeaders.h"
 
 #include "larpandoracontent/LArHelpers/LArClusterHelper.h"
-#include "larpandoracontent/LArHelpers/LArHitWidthHelper.h"
-#include "larpandoracontent/LArHelpers/LArKalmanHelper.h"
-#include "larpandoracontent/LArHelpers/LArPcaHelper.h"
-
+#include "larpandoracontent/LArHelpers/LArGeometryHelper.h"
 #include "larpandoracontent/LArObjects/LArTwoDSlidingFitResult.h"
-
 #include "larpandoracontent/LArUtility/KalmanFilter.h"
+#include "larpandoracontent/LArUtility/KDTreeLinkerAlgoT.h"
 
-#include "larpandoracontent/LArTwoDReco/LArClusterSplitting/KalmanFit.h"
 #include "larpandoracontent/LArTwoDReco/LArClusterSplitting/KalmanSplittingAlgorithm.h"
 
 using namespace pandora;
@@ -28,233 +24,329 @@ namespace lar_content
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 KalmanSplittingAlgorithm::KalmanSplittingAlgorithm() :
-    m_minClusterLength(10.f),
-    m_kalmanDelta(1.f),
-    m_kalmanProcessVarCoeff(1.f),
-    m_kalmanMeasurementVarCoeff(1.f),
-    m_minTransSeparation(5.f),
-    m_segmentWindows(6),
-    m_minDeviation(10.f),
-    m_maxSpread(0.1f)
+    m_secVertexListName("SecondaryVertices3D"),
+    m_pSecVertexList(nullptr),
+    m_minClusterHits(50),
+    m_slidingWindow(20),
+    m_lBinSize(0.5f),
+    m_searchRegion1D(20.f)
 {
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-StatusCode KalmanSplittingAlgorithm::DivideCaloHits(const Cluster *const pCluster, CaloHitList &firstHitList, CaloHitList &secondHitList) const
+StatusCode KalmanSplittingAlgorithm::Run()
 {
-    // Do we want to work on this cluster?
-    if (!this->IsTargetCluster(pCluster))
-        return STATUS_CODE_NOT_FOUND;
+    // Get view hits
+    const CaloHitList *pCaloHitList(nullptr);
+    if (PandoraContentApi::GetList(*this, m_caloHitListName, pCaloHitList) != STATUS_CODE_SUCCESS)
+        return STATUS_CODE_SUCCESS;
 
-    //////////////////////////////////
-    // PANDORA_MONITORING_API(SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_XZ, -1.f, 1.f, 1.f));
-    //////////////////////////////////
+    if ((!pCaloHitList) || pCaloHitList->empty())
+        return STATUS_CODE_SUCCESS;
 
-    // Get KalmanFit
-    try
+    // Get secondary vertices (it's okay if the list is empty)
+    PandoraContentApi::GetList(*this, m_secVertexListName, m_pSecVertexList);
+
+    // Now we've setup, run base alg
+    StatusCode stat(ClusterSplittingAlgorithm::Run());
+
+    if (stat != STATUS_CODE_SUCCESS)
     {
-        //////////////////////////////////
-        // ClusterList visualiseClusters({pCluster});
-        // PANDORA_MONITORING_API(VisualizeClusters(this->GetPandora(), &visualiseClusters, "Cluster", (pCluster->GetParticleId() == MU_MINUS ? BLUE : RED)));
-        // PANDORA_MONITORING_API(ViewEvent(this->GetPandora()));
-        //////////////////////////////////
-
-        KalmanFit kalmanFit(LArKalmanHelper::PerformKalmanFit(this->GetPandora(), pCluster, m_minTransSeparation));
-
-        if (kalmanFit.m_positions.empty())
-            return STATUS_CODE_NOT_FOUND;
-
-        // Do sliding fit
-        const LArTPC *const pTPC(this->GetPandora().GetGeometry()->GetLArTPCMap().begin()->second);
-        const HitType view(LArClusterHelper::GetClusterHitType(pCluster));
-        const float pitch(view == TPC_VIEW_U ? pTPC->GetWirePitchU() : view == TPC_VIEW_V ? pTPC->GetWirePitchV() : pTPC->GetWirePitchW());
-        const TwoDSlidingFitResult twoDSlidingFitResult(pCluster, 20, pitch);
-
-        // Search for split position
-        CartesianVector splitPosition(0.f, 0.f, 0.f);
-
-        if (STATUS_CODE_SUCCESS == this->FindBestSplitPosition(pCluster, kalmanFit, splitPosition))
-        {
-            return this->DivideCaloHits(twoDSlidingFitResult, splitPosition, firstHitList, secondHitList);
-        }
-    }
-    catch (StatusCodeException &statusCodeException)
-    {
-        if (STATUS_CODE_FAILURE == statusCodeException.GetStatusCode())
-            throw statusCodeException;
+        m_pSecVertexList = nullptr;
+        return stat;
     }
 
-    return STATUS_CODE_NOT_FOUND;
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-
-bool KalmanSplittingAlgorithm::IsTargetCluster(const Cluster *const pCluster) const
-{
-    if (LArClusterHelper::GetLengthSquared(pCluster) < m_minClusterLength * m_minClusterLength)
-        return false;
-
-    const float m_maxConstituentHitWidth(0.5f), m_hitWidthScalingFactor(1.f), m_minClusterSparseness(0.5f);
-    const unsigned int numberOfProposedConstituentHits(LArHitWidthHelper::GetNProposedConstituentHits(
-        pCluster, m_maxConstituentHitWidth, m_hitWidthScalingFactor));
-
-    if (numberOfProposedConstituentHits == 0)
-        return false;
-
-    // Avoid wide hit width clusters
-    // clusterSparseness [0 -> 1] where a higher value indicates sparseness
-    const float clusterSparseness(1.f - (static_cast<float>(pCluster->GetNCaloHits()) / static_cast<float>(numberOfProposedConstituentHits)));
-
-    if (clusterSparseness > m_minClusterSparseness)
-        return false;
-
-    return true;
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-
-StatusCode KalmanSplittingAlgorithm::FindBestSplitPosition(const Cluster *const pCluster, const KalmanFit &kalmanFit, 
-    CartesianVector &splitPosition) const
-{
-    // Probe kalman fit
-    const int nFitPoints(kalmanFit.m_positions.size());
-    if (nFitPoints < ((2 * m_segmentWindows) + 1)) { return STATUS_CODE_NOT_FOUND; };
-
-    bool splitFound(false);
-    float maxDeviation(std::numeric_limits<float>::min());
-
-    for (unsigned int i = (m_segmentWindows + 1); i < static_cast<unsigned int>(nFitPoints - m_segmentWindows); ++i)
-    {
-        // Get before/after segments
-        CartesianPointVector beforeSeg, afterSeg;
-        for (int j = 1; j <= m_segmentWindows; j++)
-        {
-            beforeSeg.push_back(kalmanFit.m_directions.at(i - j)); 
-            afterSeg.push_back(kalmanFit.m_directions.at(i + j));
-        }
-
-        // Get median direction from before/after region
-        const CartesianVector beforeMedian(this->GetMedian(beforeSeg));
-        const CartesianVector afterMedian(this->GetMedian(afterSeg));
-
-        // Get splitting metrucs
-        const float direct((kalmanFit.m_directions.at(i-1).GetOpeningAngle(kalmanFit.m_directions.at(i+1))) / 3.14 * 180.f);
-        const float eitherSide(beforeMedian.GetOpeningAngle(afterMedian) / 3.14 * 180.f);
-        const float afterSigma(LArKalmanHelper::GetSTD(afterSeg)); // make sure that after segment looks track-like...
-        const float beforeSigma(LArKalmanHelper::GetSTD(beforeSeg)); // make sure that before segment looks track-like...
-
-        // Measure angular deviation
-        if ((eitherSide > m_minDeviation) && (beforeSigma < m_maxSpread) && (afterSigma < m_maxSpread) && (direct > m_minDeviation))
-        { 
-            if (eitherSide > maxDeviation)
-            {
-                splitFound = true;
-                maxDeviation = eitherSide;
-                splitPosition = kalmanFit.m_positions.at(i);
-            }
-        }
-   } 
-
-    // if (splitFound)
-    // {
-    //     PANDORA_MONITORING_API(AddMarkerToVisualization(this->GetPandora(), &splitPosition, "splitPosition", BLUE, 2));
-    //     PANDORA_MONITORING_API(ViewEvent(this->GetPandora()));
-    // }
-
-    return splitFound ? STATUS_CODE_SUCCESS : STATUS_CODE_NOT_FOUND;
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-
-CartesianVector KalmanSplittingAlgorithm::GetMedian(CartesianPointVector &cartesianPointVector) const
-{
-    // Sort wrt x-axis theta
-    std::sort(cartesianPointVector.begin(), cartesianPointVector.end(), [](const CartesianVector &lhs, const CartesianVector &rhs) 
-        { 
-            CartesianVector xAxis(1.f, 0.f, 0.f);
-            float lhsAngle(xAxis.GetOpeningAngle(lhs));
-            float rhsAngle(xAxis.GetOpeningAngle(rhs));
-
-            if (lhs.GetY() < 0.f)
-                lhsAngle += M_PI;
-
-            if (rhs.GetY() < 0.f)
-                rhsAngle += M_PI;
-
-            return lhsAngle > rhsAngle;
-        }
-    );
-
-    const int medianIndex = std::floor(cartesianPointVector.size() / 2);
-
-    return cartesianPointVector.at(medianIndex);
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-
-StatusCode KalmanSplittingAlgorithm::DivideCaloHits(const TwoDSlidingFitResult &slidingFitResult,
-    const CartesianVector &splitPosition, CaloHitList &firstCaloHitList, CaloHitList &secondCaloHitList) const
-{
-    float rL(0.f), rT(0.f);
-    slidingFitResult.GetLocalPosition(splitPosition, rL, rT);
-
-    const Cluster *const pCluster(slidingFitResult.GetCluster());
-    const OrderedCaloHitList &orderedCaloHitList(pCluster->GetOrderedCaloHitList());
-
-    for (OrderedCaloHitList::const_iterator iter = orderedCaloHitList.begin(); iter != orderedCaloHitList.end(); ++iter)
-    {
-        for (CaloHitList::const_iterator hitIter = iter->second->begin(), hitIterEnd = iter->second->end(); hitIter != hitIterEnd; ++hitIter)
-        {
-            const CaloHit *const pCaloHit = *hitIter;
-
-            float thisL(0.f), thisT(0.f);
-            slidingFitResult.GetLocalPosition(pCaloHit->GetPositionVector(), thisL, thisT);
-
-            if (thisL < rL)
-            {
-                firstCaloHitList.push_back(pCaloHit);
-            }
-            else
-            {
-                secondCaloHitList.push_back(pCaloHit);
-            }
-        }
-    }
-
-    if (firstCaloHitList.empty() || secondCaloHitList.empty())
-        return STATUS_CODE_NOT_FOUND;
+    m_pSecVertexList = nullptr;
 
     return STATUS_CODE_SUCCESS;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
+StatusCode KalmanSplittingAlgorithm::DivideCaloHits(const Cluster *const pCluster, CaloHitList &/*firstHitList*/, 
+    CaloHitList &/*secondHitList*/) const
+{
+    // Enough hits?
+    CaloHitList clusterHits;
+    LArClusterHelper::GetAllHits(pCluster, clusterHits);
+
+    if (clusterHits.size() < m_minClusterHits)
+        return STATUS_CODE_NOT_FOUND;
+
+    // Can we make fit?
+    try
+    {
+        const HitType hitType(LArClusterHelper::GetClusterHitType(pCluster));
+        const TwoDSlidingFitResult clusterFit(pCluster, m_slidingWindow, LArGeometryHelper::GetWirePitch(this->GetPandora(), hitType));
+
+        // Find pathway through the cluster
+        ClusterPath clusterPath;
+        this->FindPath(pCluster, clusterFit, clusterPath);
+                      
+        if (clusterPath.empty())
+            return STATUS_CODE_NOT_FOUND;
+
+        // Get features
+        Features features;
+        this->FillFeatures(clusterPath, clusterFit, features);
+    }
+    catch (...)
+    {
+        return STATUS_CODE_NOT_FOUND;
+    }
+
+    // Do not want to run twice?
+    return STATUS_CODE_NOT_FOUND;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void KalmanSplittingAlgorithm::FindPath(const Cluster *const pCluster, const TwoDSlidingFitResult &clusterFit, ClusterPath &clusterPath) const
+{
+    // Get cluster hits
+    CaloHitList clusterHits;
+    LArClusterHelper::GetAllHits(pCluster, clusterHits);
+
+    // Fit l decomposition
+    for (const CaloHit *const pCaloHit : clusterHits)
+    {
+        float thisHitL(0.f), thisHitT(0.f);
+        clusterFit.GetLocalPosition(pCaloHit->GetPositionVector(), thisHitL, thisHitT);
+        const int lBinIndex(std::floor(thisHitL / m_lBinSize));
+
+        if (clusterPath.find(lBinIndex) != clusterPath.end())
+            if (thisHitT > clusterPath.at(lBinIndex).second)
+                continue;
+
+        clusterPath[lBinIndex] = std::make_pair(pCaloHit, thisHitT);
+    }
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void KalmanSplittingAlgorithm::FillFeatures(const ClusterPath &clusterPath, const TwoDSlidingFitResult &clusterFit, Features &features) const
+{
+    // Get path hits, and their total energy
+    float totalEnergy(0.f);
+    CaloHitList clusterPathHits;
+    for (const auto &entry : clusterPath)
+    {
+        const CaloHit *const pPathCaloHit(entry.second.first);
+        totalEnergy += pPathCaloHit->GetElectromagneticEnergy();
+        clusterPathHits.push_back(pPathCaloHit);
+    }
+
+    // Get KDTree
+    const CaloHitList *pCaloHitList(nullptr);
+    if (PandoraContentApi::GetList(*this, m_caloHitListName, pCaloHitList) != STATUS_CODE_SUCCESS)
+        return;
+
+    if ((!pCaloHitList) || pCaloHitList->empty())
+        return;
+
+    HitKDTree2D kdTree;
+    HitKDNode2DList kdNode2DList;
+    KDTreeBox kdTreeBox(fill_and_bound_2d_kd_tree(*pCaloHitList, kdNode2DList));
+    kdTree.build(kdNode2DList, kdTreeBox);
+
+    // Kalman Config
+    const LArTPC *const pTPC(this->GetPandora().GetGeometry()->GetLArTPCMap().begin()->second);
+    const HitType view(clusterPath.begin()->second.first->GetHitType());
+    const float pitch(view == TPC_VIEW_U ? pTPC->GetWirePitchU() : view == TPC_VIEW_V ? pTPC->GetWirePitchV() : pTPC->GetWirePitchW());
+    const float m_kalmanDelta(1.f), m_kalmanProcessVarCoeff(1.f), m_kalmanMeasurementVarCoeff(1.f);
+    const float processVariance{m_kalmanProcessVarCoeff * pitch * pitch};
+    const float measurementVariance{m_kalmanMeasurementVarCoeff * pitch * pitch};
+
+    // Initialise Kalman fit
+    Eigen::VectorXd init(2);
+    const float seedL(clusterPath.begin()->first), seedT(clusterPath.begin()->second.second);
+    init << seedL, seedT;
+    KalmanFilter2D kalmanFilter2D(m_kalmanDelta, processVariance, measurementVariance, init);
+
+    bool processedFirst(false);
+
+    // Fill features
+    for (ClusterPath::const_iterator iter = clusterPath.begin(); iter != clusterPath.end(); ++iter)
+    {
+        if (!processedFirst)
+        {
+            features.m_theta.push_back(features.NormaliseTheta(-4.f));
+            processedFirst = true;
+        }
+        else
+        {
+            // Make next step
+            kalmanFilter2D.Predict();
+            // Update feature
+            Eigen::VectorXd eigenXd(2);
+            const CartesianVector thisPosition(iter->first, 0.f, iter->second.second);
+            eigenXd << thisPosition.GetX(), thisPosition.GetZ();
+            kalmanFilter2D.Update(eigenXd);
+            // Get scatter angle
+            const CartesianVector newDirection(kalmanFilter2D.GetState()(2), 0.f, kalmanFilter2D.GetState()(3));
+            float openingAngleL(-4.f);
+            try
+            {
+                const float openingAngleT = CartesianVector(0.f, 0.f, 1.f).GetOpeningAngle(newDirection);
+                openingAngleL = CartesianVector(1.f, 0.f, 0.f).GetOpeningAngle(newDirection);
+                openingAngleL *= (openingAngleT > (M_PI * 0.5f)) ? (-1.f) : 1.f;
+            }
+            catch (...) {};
+            features.m_theta.push_back(features.NormaliseTheta(openingAngleL));
+        }
+
+        const CaloHit *const pPathCaloHit(iter->second.first);
+        const float energyFrac(pPathCaloHit->GetElectromagneticEnergy() / totalEnergy);
+
+        features.m_transverse.push_back(
+            features.NormaliseTransverse(iter->second.second));
+        features.m_energy.push_back(
+            features.NormaliseEnergy(features.m_energy.empty() ? energyFrac : (energyFrac + features.m_energy.back())));
+        features.m_hitWidth.push_back(
+            features.NormaliseHitWidth(pPathCaloHit->GetCellSize1()));
+        features.m_secVertex.push_back(
+            features.NormaliseSecVertex(this->GetDistanceToSecVertex(pPathCaloHit, pPathCaloHit->GetHitType())));
+        features.m_eventHitSep.push_back(
+            features.NormaliseEventHitSep(this->GetDistanceToEventHit(kdTree, pPathCaloHit, clusterPathHits)));
+        features.m_clusterHitSep.push_back(
+            features.NormaliseClusterHitSep(this->GetDistanceToClusterHit(iter, clusterPath.end())));
+        features.m_gapSep.push_back(
+            features.NormaliseGapSep(this->GetDistanceToGap(pPathCaloHit->GetPositionVector(), pPathCaloHit->GetHitType())));
+    }
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+float KalmanSplittingAlgorithm::GetAngle(const CartesianVector &position2D, const TwoDSlidingFitResult &clusterFit) const
+{
+    float thisL(0.f), thisT(0.f);
+    clusterFit.GetLocalPosition(position2D, thisL, thisT);
+
+    CartesianVector thisDirection(0.f, 0.f, 0.f);
+    if (clusterFit.GetGlobalFitDirection(thisL, thisDirection) != STATUS_CODE_SUCCESS)
+        return -4.f;
+
+    const float openingAngleZ = CartesianVector(0.f, 0.f, 1.f).GetOpeningAngle(thisDirection);
+    float openingAngleX = CartesianVector(1.f, 0.f, 0.f).GetOpeningAngle(thisDirection);
+    openingAngleX *= (openingAngleZ > (M_PI * 0.5f)) ? (-1.f) : 1.f;
+
+    return openingAngleX;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+float KalmanSplittingAlgorithm::GetDistanceToGap(const CartesianVector &position2D, const HitType hitType) const
+{
+    const DetectorGapList detectorGapList(this->GetPandora().GetGeometry()->GetDetectorGapList());
+
+    if (detectorGapList.empty())
+        return -1.f;
+
+    float minDist(std::numeric_limits<float>::max());
+    for (const DetectorGap *const pDetectorGap : detectorGapList)
+    {
+        const LineGap *const pLineGap(dynamic_cast<const LineGap *>(pDetectorGap));
+
+        if (!pLineGap)
+            continue;
+        
+        const LineGapType lineGapType(pLineGap->GetLineGapType());
+            
+        if (lineGapType == TPC_DRIFT_GAP)
+        {
+            minDist = std::min(std::fabs(pLineGap->GetLineStartX() - position2D.GetX()), minDist);
+            minDist = std::min(std::fabs(pLineGap->GetLineEndX() - position2D.GetX()), minDist);
+        }
+
+        if (((hitType == TPC_VIEW_U) && (lineGapType == TPC_WIRE_GAP_VIEW_U)) ||
+            ((hitType == TPC_VIEW_V) && (lineGapType == TPC_WIRE_GAP_VIEW_V)) ||
+            ((hitType == TPC_VIEW_W) && (lineGapType == TPC_WIRE_GAP_VIEW_W)))
+        {
+            minDist = std::min(std::fabs(pLineGap->GetLineStartZ() - position2D.GetZ()), minDist);
+            minDist = std::min(std::fabs(pLineGap->GetLineEndZ() - position2D.GetZ()), minDist);
+        }
+    }
+
+    return minDist;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+    float KalmanSplittingAlgorithm::GetDistanceToEventHit(HitKDTree2D &kdTree, const CaloHit *const pCaloHit, const CaloHitList &clusterPathHits) const
+{
+     // Collect close hits
+    HitKDNode2DList foundHits;
+    KDTreeBox searchRegionHits(build_2d_kd_search_region(pCaloHit, m_searchRegion1D, m_searchRegion1D));
+    kdTree.search(searchRegionHits, foundHits);
+    // Filter
+    bool found(false);
+    float minDistSq(std::numeric_limits<float>::max());
+    for (const auto &hit : foundHits)
+    {
+        const CaloHit *const pFoundHit(hit.data);
+
+        if (std::find(clusterPathHits.begin(), clusterPathHits.end(), pFoundHit) != clusterPathHits.end())
+            continue;
+
+        found = true;
+        minDistSq = std::min(minDistSq, (pCaloHit->GetPositionVector() - pFoundHit->GetPositionVector()).GetMagnitudeSquared());
+    }
+
+    return (found ? std::sqrt(minDistSq) : -1.f);
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+float KalmanSplittingAlgorithm::GetDistanceToClusterHit(const ClusterPath::const_iterator &currentHit, 
+    const ClusterPath::const_iterator &endIter) const
+{
+    const ClusterPath::const_iterator nextHit(std::next(currentHit));
+
+    if (nextHit == endIter)
+        return -1.f;
+
+    return (currentHit->second.first->GetPositionVector() - nextHit->second.first->GetPositionVector()).GetMagnitude();
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+float KalmanSplittingAlgorithm::GetDistanceToSecVertex(const CaloHit *const pCaloHit, const HitType hitType) const
+{
+    if (!m_pSecVertexList)
+        return -1.f;
+
+    float bestSepSq(std::numeric_limits<float>::max());
+    for (const Vertex *const pSecVertex : *m_pSecVertexList)
+    {
+        const CartesianVector secVtxPos(LArGeometryHelper::ProjectPosition(this->GetPandora(), pSecVertex->GetPosition(), hitType));
+        bestSepSq = std::min(bestSepSq, (secVtxPos - pCaloHit->GetPositionVector()).GetMagnitudeSquared());
+    }
+
+    return std::sqrt(bestSepSq);
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
 StatusCode KalmanSplittingAlgorithm::ReadSettings(const TiXmlHandle xmlHandle)
 {
-    PANDORA_RETURN_RESULT_IF_AND_IF(
-        STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "MinClusterLength", m_minClusterLength));
+    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, 
+        XmlHelper::ReadValue(xmlHandle, "CaloHitListName", m_caloHitListName));
 
-    PANDORA_RETURN_RESULT_IF_AND_IF(
-        STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "KalmanDelta", m_kalmanDelta));
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, 
+        XmlHelper::ReadValue(xmlHandle, "SecVertexListName", m_secVertexListName));
 
-    PANDORA_RETURN_RESULT_IF_AND_IF(
-        STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "KalmanProcessVarCoeff", m_kalmanProcessVarCoeff));
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, 
+        XmlHelper::ReadValue(xmlHandle, "MinClusterHits", m_minClusterHits));
 
-    PANDORA_RETURN_RESULT_IF_AND_IF(
-        STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "KalmanMeasurementVarCoeff", m_kalmanMeasurementVarCoeff));
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, 
+        XmlHelper::ReadValue(xmlHandle, "SlidingWindow", m_slidingWindow));
 
-    PANDORA_RETURN_RESULT_IF_AND_IF(
-        STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "MinTransSeparation", m_minTransSeparation));
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, 
+        XmlHelper::ReadValue(xmlHandle, "LBinSize", m_lBinSize));
 
-    PANDORA_RETURN_RESULT_IF_AND_IF(
-        STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "SegmentWindows", m_segmentWindows));
-
-    PANDORA_RETURN_RESULT_IF_AND_IF(
-        STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "MinDeviation", m_minDeviation));
-
-    PANDORA_RETURN_RESULT_IF_AND_IF(
-        STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "MaxSpread", m_maxSpread));
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, 
+        XmlHelper::ReadValue(xmlHandle, "SearchRegion1D", m_searchRegion1D));
 
     return ClusterSplittingAlgorithm::ReadSettings(xmlHandle);
 }
