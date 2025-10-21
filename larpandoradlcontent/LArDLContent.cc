@@ -23,6 +23,7 @@
 #include "larpandoradlcontent/LArTrackShowerId/DlHitTrackShowerIdAlgorithm.h"
 #include "larpandoradlcontent/LArTrackShowerId/DlPfoCharacterisationAlgorithm.h"
 #include "larpandoradlcontent/LArTwoDReco/DlTrackShowerStreamSelectionAlgorithm.h"
+#include "larpandoradlcontent/LArTwoDReco/DLClusterSplittingAlgorithm.h"
 #include "larpandoradlcontent/LArVertex/DlSecondaryVertexingAlgorithm.h"
 #include "larpandoradlcontent/LArVertex/DlVertexingAlgorithm.h"
 
@@ -32,6 +33,7 @@
 #define LAR_DL_ALGORITHM_LIST(d)                                                                      \
     d("LArDLMaster",                     DLMasterAlgorithm)                                           \
     d("LArDLClusterCharacterisation",    DlClusterCharacterisationAlgorithm)                          \
+    d("LArDLClusterSplitting",           DLClusterSplittingAlgorithm)                                 \
     d("LArDLHitTrackShowerId",           DlHitTrackShowerIdAlgorithm)                                 \
     d("LArDLHitValidation",              DlHitValidationAlgorithm)                                    \
     d("LArDLNeutrinoHierarchy",          DLNeutrinoHierarchyAlgorithm)                                \
