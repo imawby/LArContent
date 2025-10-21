@@ -44,6 +44,8 @@ DLClusterSplittingAlgorithm::DLClusterSplittingAlgorithm() :
 
 StatusCode DLClusterSplittingAlgorithm::Run()
 {
+    PANDORA_MONITORING_API(SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_XZ, -1.f, 1.f, 1.f));
+
     // Get view hits
     const CaloHitList *pCaloHitList(nullptr);
     if (PandoraContentApi::GetList(*this, m_caloHitListName, pCaloHitList) != STATUS_CODE_SUCCESS)
@@ -59,8 +61,21 @@ StatusCode DLClusterSplittingAlgorithm::Run()
     const ClusterList *pClusterList(nullptr);
     PandoraContentApi::GetList(*this, m_clusterListName, pClusterList);
 
+    if ((!pClusterList) || pClusterList->empty())
+        return STATUS_CODE_SUCCESS;
+
+    // Make current...
+    if (PandoraContentApi::ReplaceCurrentList<Cluster>(*this, m_clusterListName) != STATUS_CODE_SUCCESS)
+    {
+        std::cout << "isobel cannot make current - sad" << std::endl;
+        throw;
+    }
+
+    ClusterVector internalClusterVector(pClusterList->begin(), pClusterList->end());
+    //internalClusterVector.sort(LArClusterHelper::SortByNHits);
+
     // Probe clusters
-    for (const Cluster *const pCluster : *pClusterList)
+    for (const Cluster *const pCluster : internalClusterVector)
         this->ThisDivideCaloHits(pCluster);
 
     m_pSecVertexList = nullptr;
@@ -78,6 +93,10 @@ StatusCode DLClusterSplittingAlgorithm::ThisDivideCaloHits(const Cluster *const 
 
     if (clusterHits.size() < m_minClusterHits)
         return STATUS_CODE_NOT_FOUND;
+
+    ClusterList visCluster({pCluster});
+    PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &visCluster, "Cluster", BLACK);
+
 
     // Can we make fit?
     try
@@ -97,14 +116,99 @@ StatusCode DLClusterSplittingAlgorithm::ThisDivideCaloHits(const Cluster *const 
         this->FillFeatures(clusterPath, clusterFit, features);
 
         // Get windows
-        this->GetWindows(features);
+        IntVector splitIndices;
+        this->GetWindows(features, splitIndices);
+
+        // Remove any that are too close to the nu vertex (network picks up on hit sharing)
+        IntVector splitIndicesFiltered;
+        FloatVector lSplit;
+
+        //NeutrinoVertices3D
+        const VertexList *pVertexList(nullptr);
+        PandoraContentApi::GetList(*this, "NeutrinoVertices3D", pVertexList);
+
+        if (!pVertexList || pVertexList->empty())
+            return STATUS_CODE_SUCCESS;
+
+        const CartesianVector nuVertexPosition(pVertexList->front()->GetPosition());
+
+        std::cout << "-----------------------------------------" << std::endl;
+        std::cout << "-----------------------------------------" << std::endl;
+        for (const int splitIndex : splitIndices)
+        {
+            CartesianVector position(clusterPath.at(splitIndex).first->GetPositionVector());
+
+            if ((nuVertexPosition - position).GetMagnitude() > 5.f)
+            {
+                float thisL(0.f), thisT(0.f);
+                clusterFit.GetLocalPosition(position, thisL, thisT);
+
+                lSplit.push_back(thisL);
+                splitIndicesFiltered.push_back(splitIndex);
+                PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &position, "SplitPoint", VIOLET, 2);
+            }
+        }
+
+        int nSplitPositions(lSplit.size());
+
+        if (nSplitPositions == 0)
+        {
+            PandoraMonitoringApi::ViewEvent(this->GetPandora());
+            return STATUS_CODE_NOT_FOUND;
+        }
+
+        // insert max numbers..
+        lSplit.insert(lSplit.begin(), std::numeric_limits<float>::min());
+        lSplit.insert(lSplit.end(), std::numeric_limits<float>::max());
+        std::vector<CaloHitList> splitClusterHits((nSplitPositions + 1), CaloHitList());
+
+        for (const CaloHit *const pCaloHit : clusterHits)
+        {
+            float thisL(0.f), thisT(0.f);
+            clusterFit.GetLocalPosition(pCaloHit->GetPositionVector(), thisL, thisT);
+
+            for (int i = 0; i <= nSplitPositions; ++i)
+            {
+                if ((thisL > lSplit.at(i)) && (thisL < lSplit.at(i + 1)))
+                {
+                    splitClusterHits[i].push_back(pCaloHit);
+                    break;
+                }
+            }
+        }
+
+        std::cout << "nHits: " << clusterHits.size() << std::endl;
+
+        for (auto &entry : splitClusterHits)
+            std::cout << "nFragHits:; " << entry.size() << std::endl;
+
+        // Split clusters
+        // Begin cluster fragmentation operations
+        const ClusterList clusterList(1, pCluster);
+        std::string clusterListToSaveName, clusterListToDeleteName;
+
+        PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=,
+            PandoraContentApi::InitializeFragmentation(*this, clusterList, clusterListToDeleteName, clusterListToSaveName));
+
+        for (CaloHitList &caloHitList : splitClusterHits)
+        {
+            PandoraContentApi::Cluster::Parameters parameters;
+            parameters.m_caloHitList = caloHitList;
+
+            const Cluster *pNewCluster(nullptr);
+            PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::Cluster::Create(*this, parameters, pNewCluster));
+        }
+
+        // End cluster fragmentation operations
+        PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::EndFragmentation(*this, clusterListToSaveName, clusterListToDeleteName));
     }
     catch (...)
     {
         return STATUS_CODE_NOT_FOUND;
     }
 
-    // Do not want to run twice?
+    PandoraMonitoringApi::ViewEvent(this->GetPandora());
+
     return STATUS_CODE_NOT_FOUND;
 }
 
@@ -357,14 +461,11 @@ float DLClusterSplittingAlgorithm::GetDistanceToSecVertex(const CaloHit *const p
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void DLClusterSplittingAlgorithm::GetWindows(Features &features)
+void DLClusterSplittingAlgorithm::GetWindows(Features &features, IntVector &splitIndices)
 {
     const int m_windowLength(48);
     int sequenceLength(features.m_transverse.size());
     FloatVector windowStart, windowEnd;
-    // std::vector<FloatVector> positions;
-    // FloatVector windowScores;
-    // std::vector<FloatVector> splitScores;
 
     // If too small, then pad
     if (sequenceLength < m_windowLength)
@@ -426,12 +527,14 @@ void DLClusterSplittingAlgorithm::GetWindows(Features &features)
         }
     }
 
-
     LArDLHelper::TorchOutput windowOutput, splitPosOutput;
     LArDLHelper::Forward(m_windowModel, {input}, windowOutput);
     LArDLHelper::Forward(m_splitPosModel, {input}, splitPosOutput);
     torch::TensorAccessor<float, 2> windowOutputAccessor = windowOutput.accessor<float, 2>();
     torch::TensorAccessor<float, 3> splitPosOutputAccessor = splitPosOutput.accessor<float, 3>();
+
+    IntVector splitIndices_temp;
+    FloatVector splitScores_temp;
 
     for (unsigned int i = 0; i < windowStart.size(); ++i)
     {
@@ -440,17 +543,64 @@ void DLClusterSplittingAlgorithm::GetWindows(Features &features)
         std::cout << "not contaminated: " << static_cast<float>(windowOutputAccessor[i][0]) << std::endl;
         std::cout << "contaminated: " << static_cast<float>(windowOutputAccessor[i][1]) << std::endl;
         std::cout << "shower: " << static_cast<float>(windowOutputAccessor[i][2]) << std::endl;
+
+        // Is contaminated?
+        if (windowOutputAccessor[i][1] > 0.5)
+        {
+            // Is there a split point?
+            for (int j = 0; j < m_windowLength; ++j)
+            {
+                const int sequenceIndex(windowStart.at(i) + j);
+                const int nextWindowStart((i+1) == windowStart.size() ? std::numeric_limits<int>::max() : windowStart.at(i+1));
+
+                // make sure we only use the last window for the overlap region...
+                if (sequenceIndex >= nextWindowStart)
+                    continue;
+
+                if (static_cast<float>(splitPosOutputAccessor[i][j][0] > 0.5))
+                {
+                    splitIndices_temp.push_back(sequenceIndex);
+                    splitScores_temp.push_back(static_cast<float>(splitPosOutputAccessor[i][j][0]));
+                }
+            }
+        }
     }
 
-    std::cout << "-----------------------------------------" << std::endl;
-    std::cout << "-----------------------------------------" << std::endl;
+    // The model will often identify consecutive splitting positions around the truth, so identify one point
+    int previousIndex(-2), bestIndex(-1);
+    float bestScore(-1.f);
 
-    for (unsigned int i = 0; i < windowStart.size(); ++i)
+    for (unsigned int iSplit = 0; iSplit < splitIndices_temp.size(); ++iSplit)
     {
-        for (int j = 0; j < m_windowLength; ++j)
+        int thisIndex(splitIndices_temp.at(iSplit));
+        float thisScore(splitScores_temp.at(iSplit));
+
+        // If this is the first entry
+        if (thisIndex == splitIndices_temp.front())
         {
-            std::cout << "j = " << j << ": " << static_cast<float>(splitPosOutputAccessor[i][j][0]) << std::endl;
+            bestIndex = thisIndex;
+            bestScore = thisScore;
         }
+        else if (thisIndex == (previousIndex + 1))
+        {
+            if (thisScore > bestScore)
+            {
+                bestScore = thisScore;
+                bestIndex = thisIndex;
+            }
+        }
+        else
+        {
+            splitIndices.push_back(bestIndex);
+            bestScore = -1.f;
+            bestIndex = -1;
+        }
+
+        previousIndex = thisIndex;
+
+        // If this is the last entry
+        if (previousIndex == splitIndices_temp.back())
+            splitIndices.push_back(bestIndex);
     }
 }
 

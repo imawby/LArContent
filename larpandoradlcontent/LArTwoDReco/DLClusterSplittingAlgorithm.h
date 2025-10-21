@@ -78,7 +78,7 @@ private:
 
     float GetDistanceToSecVertex(const pandora::CaloHit *const pCaloHit, const pandora::HitType hitType) const;
 
-    void GetWindows(Features &features);
+    void GetWindows(Features &features, pandora::IntVector &splitIndices);
 
     std::string m_caloHitListName;
     std::string m_clusterListName;
