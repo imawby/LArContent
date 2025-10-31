@@ -117,10 +117,25 @@ void CheatingKalmanSplittingAlgorithm::FillPandoraMaps(const ClusterList *const 
     // Fill our hit map
     for (const CaloHit *const pCaloHit : *pCaloHitList)
     {
+        // Remove if the hit share isn't very high i.e. 90%?
         try
         {
-            const MCParticle *const pMainMCParticle(MCParticleHelper::GetMainMCParticle(pCaloHit));
-            hitToMCParticleMap[pCaloHit] = pMainMCParticle;
+            const MCParticleWeightMap hitMCParticleWeightMap(pCaloHit->GetMCParticleWeightMap());
+
+            MCParticleVector mcParticleVector;
+            for (const MCParticleWeightMap::value_type &mapEntry : hitMCParticleWeightMap) mcParticleVector.push_back(mapEntry.first);
+            std::sort(mcParticleVector.begin(), mcParticleVector.end(), PointerLessThan<MCParticle>());
+
+            for (const MCParticle *const pMCParticle : mcParticleVector)
+            {
+                const float weight(hitMCParticleWeightMap.at(pMCParticle));
+
+                if (weight > 0.9f)
+                {
+                    hitToMCParticleMap[pCaloHit] = pMCParticle;
+                    break;
+                }
+            }
         }
         catch (...) { continue; }
     }
