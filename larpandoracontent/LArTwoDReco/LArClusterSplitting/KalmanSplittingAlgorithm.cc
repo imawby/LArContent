@@ -16,6 +16,8 @@
 
 #include "larpandoracontent/LArTwoDReco/LArClusterSplitting/KalmanSplittingAlgorithm.h"
 
+
+
 using namespace pandora;
 
 namespace lar_content
@@ -90,6 +92,9 @@ StatusCode KalmanSplittingAlgorithm::DivideCaloHits(const Cluster *const pCluste
         // Get features
         Features features;
         this->FillFeatures(clusterPath, clusterFit, features);
+
+        // Get windows
+        this->GetWindows(features);
     }
     catch (...)
     {
@@ -324,6 +329,92 @@ float KalmanSplittingAlgorithm::GetDistanceToSecVertex(const CaloHit *const pCal
     }
 
     return std::sqrt(bestSepSq);
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void KalmanSplittingAlgorithm::GetWindows(Features &features) const
+{
+    const int m_windowLength(48);
+    int sequenceLength(features.m_transverse.size());
+    FloatVector windowStart, windowEnd;
+    // std::vector<FloatVector> positions;
+    // FloatVector windowScores;
+    // std::vector<FloatVector> splitScores;
+
+    // If too small, then pad
+    if (sequenceLength < m_windowLength)
+    {
+        for (int i = 0; i < (m_windowLength - sequenceLength); ++i)
+        {
+            features.m_transverse.push_back(-9999.9f);
+            features.m_energy.push_back(-9999.9f);
+            features.m_hitWidth.push_back(-9999.9f);
+            features.m_theta.push_back(-9999.9f);
+            features.m_secVertex.push_back(-9999.9f);
+            features.m_gapSep.push_back(-9999.9f);
+            features.m_eventHitSep.push_back(-9999.9f);
+            features.m_clusterHitSep.push_back(-9999.9f);
+        }
+
+        windowStart.push_back(0);
+        windowEnd.push_back(m_windowLength);
+    }
+    // If too big then split
+    else if (sequenceLength > m_windowLength)
+    {
+        const int nWindows(std::floor(sequenceLength) / m_windowLength);
+
+        for (int i = 0; i < nWindows; ++i)
+        {
+            windowStart.push_back(m_windowLength * i);
+            windowEnd.push_back(m_windowLength * (i + 1));
+        }
+
+        if (sequenceLength % m_windowLength != 0)
+        {
+            windowStart.push_back(sequenceLength - m_windowLength);
+            windowEnd.push_back(sequenceLength);
+        }
+    }
+
+    std::cout << "-------------------------------" << std::endl;
+    std::cout << "PRINTING WINDOWS" << std::endl;
+    std::cout << "sequence length: " << sequenceLength << std::endl;
+    std::cout << "-------------------------------" << std::endl;
+
+    for (unsigned int i = 0; i < windowStart.size(); ++i)
+    {
+        std::cout << "start: " << windowStart.at(i) << std::endl;
+        std::cout << "end: " << windowEnd.at(i) << std::endl;
+
+        FloatVector v2 = FloatVector(features.m_transverse.begin() + windowStart.at(i), features.m_transverse.begin() + windowEnd.at(i));
+        std::cout << "length: " << v2.size() << std::endl;
+
+    }
+
+
+    // LArDLHelper::TorchInput input;
+    // LArDLHelper::InitialiseInput({1, 6}, input);
+
+    // int insertIndex(0);
+
+    // for (const FloatVector &edgeOutput : {outputUp, outputDown})
+    // {
+    //     for (int i = 0; i < 3; ++i)
+    //     {
+    //         input[0][insertIndex] = edgeOutput.at(i);
+    //         ++insertIndex;
+    //     }
+    // }
+
+    // LArDLHelper::TorchOutput output;
+    // LArDLHelper::Forward(m_primaryTrackClassifierModel, {input}, output);
+    // torch::TensorAccessor<float, 2> outputAccessor = output.accessor<float, 2>();
+
+
+
+
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
