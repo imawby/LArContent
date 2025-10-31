@@ -52,6 +52,7 @@
 
 #include "larpandoracontent/LArHelpers/LArGeometryHelper.h"
 
+#include "larpandoracontent/LArMonitoring/ClusterValidationAlgorithm.h"
 #include "larpandoracontent/LArMonitoring/CosmicRayTaggingMonitoringTool.h"
 #include "larpandoracontent/LArMonitoring/EventClusterValidationAlgorithm.h"
 #include "larpandoracontent/LArMonitoring/HierarchyMonitoringAlgorithm.h"
@@ -241,6 +242,7 @@
     d("LArMuonLeadingEventValidation",          MuonLeadingEventValidationAlgorithm)                                            \
     d("LArElectronInitialRegionRefinement",     ElectronInitialRegionRefinementAlgorithm)                                       \
     d("LArNeutrinoEventValidation",             NeutrinoEventValidationAlgorithm)                                               \
+    d("LArClusterValidation",                   ClusterValidationAlgorithm)                                                     \
     d("LArEventClusterValidation",              EventClusterValidationAlgorithm)                                                \
     d("LArTestBeamEventValidation",             TestBeamEventValidationAlgorithm)                                               \
     d("LArTestBeamHierarchyEventValidation",    TestBeamHierarchyEventValidationAlgorithm)                                      \
