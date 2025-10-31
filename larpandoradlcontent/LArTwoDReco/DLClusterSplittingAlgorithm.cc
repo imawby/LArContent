@@ -94,10 +94,6 @@ StatusCode DLClusterSplittingAlgorithm::ThisDivideCaloHits(const Cluster *const 
     if (clusterHits.size() < m_minClusterHits)
         return STATUS_CODE_NOT_FOUND;
 
-    ClusterList visCluster({pCluster});
-    PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &visCluster, "Cluster", BLACK);
-
-
     // Can we make fit?
     try
     {
@@ -115,12 +111,15 @@ StatusCode DLClusterSplittingAlgorithm::ThisDivideCaloHits(const Cluster *const 
         Features features;
         this->FillFeatures(clusterPath, clusterFit, features);
 
+        std::vector<int> clusterLPositions;
+        for (auto entry1 : clusterPath)
+            clusterLPositions.push_back(entry1.first);
+
         // Get windows
         IntVector splitIndices;
         this->GetWindows(features, splitIndices);
 
         // Remove any that are too close to the nu vertex (network picks up on hit sharing)
-        IntVector splitIndicesFiltered;
         FloatVector lSplit;
 
         //NeutrinoVertices3D
@@ -132,19 +131,18 @@ StatusCode DLClusterSplittingAlgorithm::ThisDivideCaloHits(const Cluster *const 
 
         const CartesianVector nuVertexPosition(pVertexList->front()->GetPosition());
 
-        std::cout << "-----------------------------------------" << std::endl;
-        std::cout << "-----------------------------------------" << std::endl;
+        //std::cout << "-----------------------------------------" << std::endl;
+        //std::cout << "-----------------------------------------" << std::endl;
         for (const int splitIndex : splitIndices)
         {
-            CartesianVector position(clusterPath.at(splitIndex).first->GetPositionVector());
+            int clusterSplitIndex(clusterLPositions.at(splitIndex));
+            CartesianVector position(clusterPath.at(clusterSplitIndex).first->GetPositionVector());
 
             if ((nuVertexPosition - position).GetMagnitude() > 5.f)
             {
                 float thisL(0.f), thisT(0.f);
                 clusterFit.GetLocalPosition(position, thisL, thisT);
-
                 lSplit.push_back(thisL);
-                splitIndicesFiltered.push_back(splitIndex);
                 PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &position, "SplitPoint", VIOLET, 2);
             }
         }
@@ -153,9 +151,13 @@ StatusCode DLClusterSplittingAlgorithm::ThisDivideCaloHits(const Cluster *const 
 
         if (nSplitPositions == 0)
         {
-            PandoraMonitoringApi::ViewEvent(this->GetPandora());
+            //PandoraMonitoringApi::ViewEvent(this->GetPandora());
             return STATUS_CODE_NOT_FOUND;
         }
+    
+        ClusterList visCluster({pCluster});
+        PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &visCluster, "Cluster", BLACK);
+        PandoraMonitoringApi::ViewEvent(this->GetPandora());
 
         // insert max numbers..
         lSplit.insert(lSplit.begin(), std::numeric_limits<float>::min());
@@ -176,11 +178,6 @@ StatusCode DLClusterSplittingAlgorithm::ThisDivideCaloHits(const Cluster *const 
                 }
             }
         }
-
-        std::cout << "nHits: " << clusterHits.size() << std::endl;
-
-        for (auto &entry : splitClusterHits)
-            std::cout << "nFragHits:; " << entry.size() << std::endl;
 
         // Split clusters
         // Begin cluster fragmentation operations
@@ -206,8 +203,6 @@ StatusCode DLClusterSplittingAlgorithm::ThisDivideCaloHits(const Cluster *const 
     {
         return STATUS_CODE_NOT_FOUND;
     }
-
-    PandoraMonitoringApi::ViewEvent(this->GetPandora());
 
     return STATUS_CODE_NOT_FOUND;
 }
@@ -503,10 +498,10 @@ void DLClusterSplittingAlgorithm::GetWindows(Features &features, IntVector &spli
         }
     }
 
-    std::cout << "-------------------------------" << std::endl;
-    std::cout << "PRINTING WINDOWS" << std::endl;
-    std::cout << "sequence length: " << sequenceLength << std::endl;
-    std::cout << "-------------------------------" << std::endl;
+    // std::cout << "-------------------------------" << std::endl;
+    // std::cout << "PRINTING WINDOWS" << std::endl;
+    // std::cout << "sequence length: " << sequenceLength << std::endl;
+    // std::cout << "-------------------------------" << std::endl;
 
     // (n_windows, sequence_length, n_features)
     LArDLHelper::TorchInput input;
@@ -538,11 +533,11 @@ void DLClusterSplittingAlgorithm::GetWindows(Features &features, IntVector &spli
 
     for (unsigned int i = 0; i < windowStart.size(); ++i)
     {
-        std::cout << "start: " << windowStart.at(i) << std::endl;
-        std::cout << "end: " << windowEnd.at(i) << std::endl;
-        std::cout << "not contaminated: " << static_cast<float>(windowOutputAccessor[i][0]) << std::endl;
-        std::cout << "contaminated: " << static_cast<float>(windowOutputAccessor[i][1]) << std::endl;
-        std::cout << "shower: " << static_cast<float>(windowOutputAccessor[i][2]) << std::endl;
+        // std::cout << "start: " << windowStart.at(i) << std::endl;
+        // std::cout << "end: " << windowEnd.at(i) << std::endl;
+        // std::cout << "not contaminated: " << static_cast<float>(windowOutputAccessor[i][0]) << std::endl;
+        // std::cout << "contaminated: " << static_cast<float>(windowOutputAccessor[i][1]) << std::endl;
+        // std::cout << "shower: " << static_cast<float>(windowOutputAccessor[i][2]) << std::endl;
 
         // Is contaminated?
         if (windowOutputAccessor[i][1] > 0.5)
@@ -559,6 +554,7 @@ void DLClusterSplittingAlgorithm::GetWindows(Features &features, IntVector &spli
 
                 if (static_cast<float>(splitPosOutputAccessor[i][j][0] > 0.5))
                 {
+                    //splitIndices.push_back(sequenceIndex);
                     splitIndices_temp.push_back(sequenceIndex);
                     splitScores_temp.push_back(static_cast<float>(splitPosOutputAccessor[i][j][0]));
                 }
