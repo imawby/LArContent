@@ -28,9 +28,12 @@ class CheatingKalmanSplittingAlgorithm : public pandora::Algorithm
 class MCContaminant
 {
 public:
-    MCContaminant(const pandora::CartesianVector &startPosition, const pandora::CartesianVector &endPosition, 
+    MCContaminant(const pandora::CartesianVector &contStartPosition, const pandora::CartesianVector &contEndPosition,
+        const pandora::CartesianVector &startPosition, const pandora::CartesianVector &endPosition, 
         const pandora::CartesianVector &startDirection, const pandora::CartesianVector &endDirection);
 
+    pandora::CartesianVector m_contStartPosition;
+    pandora::CartesianVector m_contEndPosition;
     pandora::CartesianVector m_startPosition;
     pandora::CartesianVector m_endPosition;
     pandora::CartesianVector m_startDirection;
@@ -62,7 +65,7 @@ private:
     void FillPandoraMaps(const pandora::ClusterList *const pClusterList, const pandora::CaloHitList *const pCaloHitList, 
                          ClusterToSplitPositionsMap &clusterToSplitPositionsMap, std::map<const pandora::Cluster *, int> &contaminantCounts);
 
-    void FindContaminants(const MCParticleToHitListMap &clusterMCParticleToHitListMap, ContaminantMap &contaminantMap);
+    void FindContaminants(const MCParticleToHitListMap &mainHitListMap, const MCParticleToHitListMap &contHitListMap, ContaminantMap &contaminantMap);
 
     void FindSplitPositions(const pandora::Cluster *const pCluster, const ContaminantMap &contaminantMap, pandora::CartesianPointVector &splitPositions);
 
@@ -83,7 +86,7 @@ private:
 
     float GetDistanceToClusterHit(const ClusterPath::iterator &currentHit, const ClusterPath::iterator &endIter);
 
-    float GetDistanceToGap(const pandora::CartesianVector &position2D) const;
+    float GetDistanceToGap(const pandora::CaloHit *const pPrevHit, const pandora::CaloHit *const pCurrentHit) const;
 
     float GetDistanceToSecVertex(const pandora::CaloHit *const pCaloHit, const pandora::VertexList *const pSecVertexList, 
                                  const pandora::HitType hitType);

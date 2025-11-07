@@ -11,6 +11,7 @@
 #include "larpandoracontent/LArHelpers/LArClusterHelper.h"
 #include "larpandoracontent/LArHelpers/LArGeometryHelper.h"
 #include "larpandoracontent/LArHelpers/LArKalmanHelper.h"
+#include "larpandoracontent/LArObjects/LArCaloHit.h"
 #include "larpandoracontent/LArObjects/LArTwoDSlidingFitResult.h"
 #include "larpandoracontent/LArTwoDReco/LArClusterSplitting/KalmanFit.h"
 #include "larpandoracontent/LArUtility/KalmanFilter.h"
@@ -24,8 +25,11 @@ using namespace pandora;
 namespace lar_content
 {
 
-CheatingKalmanSplittingAlgorithm::MCContaminant::MCContaminant(const pandora::CartesianVector &startPosition, const pandora::CartesianVector &endPosition, 
+CheatingKalmanSplittingAlgorithm::MCContaminant::MCContaminant(const pandora::CartesianVector &contStartPosition, 
+    const pandora::CartesianVector &contEndPosition, const pandora::CartesianVector &startPosition, const pandora::CartesianVector &endPosition, 
     const pandora::CartesianVector &startDirection, const pandora::CartesianVector &endDirection) :
+    m_contStartPosition(contStartPosition),
+    m_contEndPosition(contEndPosition),
     m_startPosition(startPosition),
     m_endPosition(endPosition),
     m_startDirection(startDirection),
@@ -112,30 +116,24 @@ StatusCode CheatingKalmanSplittingAlgorithm::Run()
 void CheatingKalmanSplittingAlgorithm::FillPandoraMaps(const ClusterList *const pClusterList, const CaloHitList *const pCaloHitList, 
     ClusterToSplitPositionsMap &clusterToSplitPositionsMap, std::map<const Cluster *, int> &contaminantCounts)
 {
-    HitToMCParticleMap hitToMCParticleMap;
+    HitToMCParticleMap hitToMainMCParticleMap; // Dominating MCParticle
+    std::map<const CaloHit*, std::vector<const MCParticle*>> hitToContMCParticleMap; // Contributing MCParticle
 
     // Fill our hit map
     for (const CaloHit *const pCaloHit : *pCaloHitList)
     {
-        // Remove if the hit share isn't very high i.e. 90%?
+        // Identify contributing MCParticles
+        const MCParticleWeightMap hitMCParticleWeightMap(pCaloHit->GetMCParticleWeightMap());
+        for (const auto &entry : hitMCParticleWeightMap)
+        {
+            if (entry.second > 0.1)
+                hitToContMCParticleMap[pCaloHit].push_back(entry.first);
+        }
+        // Identify dominant MCParticles
         try
         {
-            const MCParticleWeightMap hitMCParticleWeightMap(pCaloHit->GetMCParticleWeightMap());
-
-            MCParticleVector mcParticleVector;
-            for (const MCParticleWeightMap::value_type &mapEntry : hitMCParticleWeightMap) mcParticleVector.push_back(mapEntry.first);
-            std::sort(mcParticleVector.begin(), mcParticleVector.end(), PointerLessThan<MCParticle>());
-
-            for (const MCParticle *const pMCParticle : mcParticleVector)
-            {
-                const float weight(hitMCParticleWeightMap.at(pMCParticle));
-
-                if (weight > 0.9f)
-                {
-                    hitToMCParticleMap[pCaloHit] = pMCParticle;
-                    break;
-                }
-            }
+            const MCParticle *const pMCParticle(MCParticleHelper::GetMainMCParticle(pCaloHit));
+            hitToMainMCParticleMap[pCaloHit] = pMCParticle;
         }
         catch (...) { continue; }
     }
@@ -143,31 +141,31 @@ void CheatingKalmanSplittingAlgorithm::FillPandoraMaps(const ClusterList *const 
     // Now understand each cluster composition
     for (const Cluster *const pCluster : *pClusterList)
     {
-        MCParticleToHitListMap contaminantHitListMap;
-
         CaloHitList clusterHits;
         LArClusterHelper::GetAllHits(pCluster, clusterHits);
 
+        // Fill contaminant hit lists
+        MCParticleToHitListMap mainHitListMap, contHitListMap;
         for (const CaloHit *const pCaloHit : clusterHits)
         {
-            if (hitToMCParticleMap.find(pCaloHit) == hitToMCParticleMap.end())
-                continue;
+            if (hitToContMCParticleMap.find(pCaloHit) != hitToContMCParticleMap.end())
+                for (const MCParticle *const pContMCParticle : hitToContMCParticleMap.at(pCaloHit))
+                    contHitListMap[pContMCParticle].push_back(pCaloHit);
 
-            contaminantHitListMap[hitToMCParticleMap.at(pCaloHit)].push_back(pCaloHit);
+            if (hitToMainMCParticleMap.find(pCaloHit) != hitToMainMCParticleMap.end())
+                mainHitListMap[hitToMainMCParticleMap.at(pCaloHit)].push_back(pCaloHit);
         }
 
+        // Record number of contaminants (for tree filling later)
         int nContaminants(0);
-        for (auto &entry : contaminantHitListMap)
-        {
+        for (auto &entry : mainHitListMap)
             if (entry.second.size() >= 3)
                 ++nContaminants;
-        }
-
         contaminantCounts.insert(std::make_pair(pCluster, nContaminants));
 
         // Find contaminants
         ContaminantMap contaminantMap;
-        this->FindContaminants(contaminantHitListMap, contaminantMap);
+        this->FindContaminants(mainHitListMap, contHitListMap, contaminantMap);
 
         // Now find split positions
         CartesianPointVector splitPositions;
@@ -180,50 +178,90 @@ void CheatingKalmanSplittingAlgorithm::FillPandoraMaps(const ClusterList *const 
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void CheatingKalmanSplittingAlgorithm::FindContaminants(const MCParticleToHitListMap &contaminantHitListMap, ContaminantMap &contaminantMap)
+void CheatingKalmanSplittingAlgorithm::FindContaminants(const MCParticleToHitListMap &mainHitListMap, 
+    const MCParticleToHitListMap &contHitListMap, ContaminantMap &contaminantMap)
 {
-    // Find contaminants
-    for (const auto &entry : contaminantHitListMap)
-    {
-        const MCParticle *const pMCContaminant(entry.first);
-        const CaloHitList &contaminantHits(entry.second);
-        const HitType hitType(contaminantHits.front()->GetHitType());
-        const unsigned int nHits(contaminantHits.size());
+    // Sort
+    MCParticleVector mcParticleVector;
+    for (const auto &entry : mainHitListMap) mcParticleVector.push_back(entry.first);
+    std::sort(mcParticleVector.begin(), mcParticleVector.end(), PointerLessThan<MCParticle>());
 
-        // Is there a significant contamination?
-        if (nHits < m_minTargetMCHits)
+    // Find contaminants
+    for (const MCParticle *const pMCContaminant : mcParticleVector)
+    {
+        // Get hits MCParticle contributed to
+        if (contHitListMap.find(pMCContaminant) == contHitListMap.end())
+            continue;
+
+        const CaloHitList &mainHits(mainHitListMap.at(pMCContaminant));
+        const CaloHitList &contHits(contHitListMap.at(pMCContaminant));
+        const HitType hitType(mainHits.front()->GetHitType());
+
+        // Can we see an isolated particle? 
+        unsigned int hitCount(0);
+        for (const CaloHit *const pCaloHit : mainHits)
+        {
+            const MCParticleWeightMap hitMCParticleWeightMap(pCaloHit->GetMCParticleWeightMap());
+            for (const auto &entry : hitMCParticleWeightMap)
+            {
+                if (entry.second > 0.9f)
+                {
+                    ++hitCount;
+                    break;
+                }
+            }
+        }
+        if (hitCount < m_minTargetMCHits)
             continue;
 
         // Now build contaminant object
         const CartesianVector trueStart(LArGeometryHelper::ProjectPosition(this->GetPandora(), pMCContaminant->GetVertex(), hitType));
-        // If photon then do furthest point from vertex?
+        // This isn't great for photons, but I think that's okay, they're not the target here
         const CartesianVector trueEnd(LArGeometryHelper::ProjectPosition(this->GetPandora(), pMCContaminant->GetEndpoint(), hitType));
 
+        CartesianVector contStartPosition(0.f,0.f,0.f), contEndPosition(0.f,0.f,0.f);
         CartesianVector startPosition(0.f,0.f,0.f), endPosition(0.f,0.f,0.f);
         CartesianVector startDirection(0.f,0.f,0.f), endDirection(0.f,0.f,0.f);
         CartesianPointVector fitPositions;
 
-        float startSepSq(std::numeric_limits<float>::max());
-        float endSepSq(std::numeric_limits<float>::max());
+        float contStartSepSq(std::numeric_limits<float>::max()), contEndSepSq(std::numeric_limits<float>::max());
+        float startSepSq(std::numeric_limits<float>::max()), endSepSq(std::numeric_limits<float>::max());
         
-        for (const CaloHit *const pContaminantHit : contaminantHits)
+        for (const CaloHit *const pContHit : contHits)
         {
-            float this_startSepSq((pContaminantHit->GetPositionVector() - trueStart).GetMagnitudeSquared());
-            float this_endSepSq((pContaminantHit->GetPositionVector() - trueEnd).GetMagnitudeSquared());
+            float this_startSepSq((pContHit->GetPositionVector() - trueStart).GetMagnitudeSquared());
+            float this_endSepSq((pContHit->GetPositionVector() - trueEnd).GetMagnitudeSquared());
 
-            if (this_startSepSq < startSepSq)
+            if (this_startSepSq < contStartSepSq)
             {
-                startSepSq = this_startSepSq;
-                startPosition = pContaminantHit->GetPositionVector();
+                contStartSepSq = this_startSepSq;
+                contStartPosition = pContHit->GetPositionVector();
             }
 
-            if (this_endSepSq < endSepSq)
+            if (this_endSepSq < contEndSepSq)
             { 
-                endSepSq = this_endSepSq;
-                endPosition = pContaminantHit->GetPositionVector();
+                contEndSepSq = this_endSepSq;
+                contEndPosition = pContHit->GetPositionVector();
             }
 
-            fitPositions.push_back(pContaminantHit->GetPositionVector());
+            // Do fit for contributing positions
+            fitPositions.push_back(pContHit->GetPositionVector());
+
+            // Now find start/end positions used for splitting
+            if (std::find(mainHits.begin(), mainHits.end(), pContHit) != mainHits.end())
+            {
+                if (this_startSepSq < startSepSq)
+                {
+                    startSepSq = this_startSepSq;
+                    startPosition = pContHit->GetPositionVector();
+                }
+
+                if (this_endSepSq < endSepSq)
+                { 
+                    endSepSq = this_endSepSq;
+                    endPosition = pContHit->GetPositionVector();
+                }
+            }
         }
 
         try
@@ -237,7 +275,8 @@ void CheatingKalmanSplittingAlgorithm::FindContaminants(const MCParticleToHitLis
             clusterFit.GetGlobalFitDirection(endL, endDirection);
 
             // Now form and add to map
-            contaminantMap.insert(std::make_pair(pMCContaminant, MCContaminant(startPosition, endPosition, startDirection, endDirection)));
+            contaminantMap.insert(std::make_pair(pMCContaminant, 
+                MCContaminant(contStartPosition, contEndPosition, startPosition, endPosition, startDirection, endDirection)));
         }
         catch (...)
         {
@@ -248,7 +287,8 @@ void CheatingKalmanSplittingAlgorithm::FindContaminants(const MCParticleToHitLis
             endDirection = startDirection;
 
             // Now form and add to map
-            contaminantMap.insert(std::make_pair(pMCContaminant, MCContaminant(startPosition, endPosition, startDirection, endDirection)));
+            contaminantMap.insert(std::make_pair(pMCContaminant, 
+                MCContaminant(contStartPosition, contEndPosition, startPosition, endPosition, startDirection, endDirection)));
         }
     }
 }
@@ -279,6 +319,7 @@ void CheatingKalmanSplittingAlgorithm::FindSplitPositions(const Cluster *const p
 
             const MCContaminant thisContaminant(contaminantMap.at(pThisContaminant));
 
+            CartesianPointVector contPositions({thisContaminant.m_contStartPosition, thisContaminant.m_contEndPosition});
             CartesianPointVector positions({thisContaminant.m_startPosition, thisContaminant.m_endPosition});
             float l1(-1.f), t1(-1.f), l2(-1.f), t2(-1.f);
             clusterFit.GetLocalPosition(positions.at(0), l1, t1);
@@ -306,7 +347,7 @@ void CheatingKalmanSplittingAlgorithm::FindSplitPositions(const Cluster *const p
             //PandoraMonitoringApi::ViewEvent(this->GetPandora());
         //////////////////////////////////////////
 
-            // Does particle live inside another?
+            // Does split pos live inside another particle?
             bool contained(false);
 
             // const float currentMinL(std::min(l1, l2));
@@ -320,8 +361,9 @@ void CheatingKalmanSplittingAlgorithm::FindSplitPositions(const Cluster *const p
                     continue;
 
                 const MCContaminant testContaminant(contaminantMap.at(pTestContaminant));
-                const CartesianVector &testStart(testContaminant.m_startPosition);
-                const CartesianVector &testEnd(testContaminant.m_endPosition);
+                // ATTN: use contributing endpoints here!
+                const CartesianVector &testStart(testContaminant.m_contStartPosition);
+                const CartesianVector &testEnd(testContaminant.m_contEndPosition);
 
         //////////////////////////////////////////
         // Draw contaminant
@@ -415,8 +457,6 @@ void CheatingKalmanSplittingAlgorithm::ProbeContaminants(const ClusterList *cons
         if (clusterHits.size() < m_minClusterHits)
             continue;
 
-        std::cout << "clusterHits.size():" << clusterHits.size() << std::endl;
-
         const HitType hitType(LArClusterHelper::GetClusterHitType(pCluster));
 
         // Does it have any contamination?
@@ -445,8 +485,6 @@ void CheatingKalmanSplittingAlgorithm::ProbeContaminants(const ClusterList *cons
 
         try
         {
-            std::cout << "hitType: " << hitType << std::endl;
-
             // Make a fit for the cluster
             const TwoDSlidingFitResult clusterFit(pCluster, m_slidingWindow, LArGeometryHelper::GetWirePitch(this->GetPandora(), hitType));
             const CartesianVector clusterMin(clusterFit.GetGlobalMinLayerPosition());
@@ -530,6 +568,8 @@ void CheatingKalmanSplittingAlgorithm::ProbeContaminants(const ClusterList *cons
 
             float cumulativeEnergy(0.f);
 
+            const CaloHit *pPrevPathCaloHit(nullptr);
+
             for (ClusterPath::iterator iter = clusterPath.begin(); iter != clusterPath.end(); ++iter)
             {
                 longitudinal.push_back(iter->first);
@@ -542,8 +582,10 @@ void CheatingKalmanSplittingAlgorithm::ProbeContaminants(const ClusterList *cons
                 width.push_back(pPathCaloHit->GetCellSize1());
                 eventHitSep.push_back(this->GetDistanceToEventHit(kdTree_event, pCluster, pPathCaloHit));
                 clusterHitSep.push_back(this->GetDistanceToClusterHit(iter, clusterPath.end()));
-                gapSep.push_back(this->GetDistanceToGap(pPathCaloHit->GetPositionVector()));
+                gapSep.push_back(this->GetDistanceToGap(pPrevPathCaloHit, pPathCaloHit));
                 secvertex.push_back(this->GetDistanceToSecVertex(pPathCaloHit, pSecVertexList, hitType));
+
+                pPrevPathCaloHit = pPathCaloHit;
             }
 
             //////////////////////////////////
@@ -758,38 +800,30 @@ float CheatingKalmanSplittingAlgorithm::GetDistanceToClusterHit(const ClusterPat
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-float CheatingKalmanSplittingAlgorithm::GetDistanceToGap(const CartesianVector &position2D) const
+float CheatingKalmanSplittingAlgorithm::GetDistanceToGap(const CaloHit *const pPrevHit, const CaloHit *const pCurrentHit) const
 {
-    const DetectorGapList detectorGapList(this->GetPandora().GetGeometry()->GetDetectorGapList());
+    if (!pPrevHit)
+        return 1.f;
 
-    float minDist(std::numeric_limits<float>::max());
+    const LArCaloHit *const pPrevLArHit(dynamic_cast<const LArCaloHit *>(pPrevHit));
+    const LArCaloHit *const pCurrentLArHit(dynamic_cast<const LArCaloHit *>(pCurrentHit));
 
-    if (detectorGapList.empty())
-        minDist = -1.f;
+    if (!pPrevLArHit || !pCurrentLArHit)
+        return 1.f;
 
-    for (const DetectorGap *const pDetectorGap : detectorGapList)
-    {
-        const LineGap *const pLineGap(dynamic_cast<const LineGap *>(pDetectorGap));
+    unsigned int prevTPCID(pPrevLArHit->GetLArTPCVolumeId());
+    unsigned int currentTPCID(pCurrentLArHit->GetLArTPCVolumeId());
 
-        if (!pLineGap)
-            continue;
-        
-        const LineGapType lineGapType(pLineGap->GetLineGapType());
-            
-        if (lineGapType == TPC_DRIFT_GAP)
-        {
-            minDist = std::min(std::fabs(pLineGap->GetLineStartX() - position2D.GetX()), minDist);
-            minDist = std::min(std::fabs(pLineGap->GetLineEndX() - position2D.GetX()), minDist);
-        }
+    if (prevTPCID != currentTPCID)
+        return 0.f;
 
-        if ((lineGapType == TPC_WIRE_GAP_VIEW_U) || (lineGapType == TPC_WIRE_GAP_VIEW_V) || (lineGapType == TPC_WIRE_GAP_VIEW_W))
-        {
-            minDist = std::min(std::fabs(pLineGap->GetLineStartZ() - position2D.GetZ()), minDist);
-            minDist = std::min(std::fabs(pLineGap->GetLineEndZ() - position2D.GetZ()), minDist);
-        }
-    }
+    unsigned int prevChildVolID(pPrevLArHit->GetDaughterVolumeId());
+    unsigned int currentChildVolID(pCurrentLArHit->GetDaughterVolumeId());
 
-    return minDist;
+    if (prevChildVolID != currentChildVolID)
+        return 0.f;
+
+    return 1.f;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
