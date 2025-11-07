@@ -1,15 +1,17 @@
 /**
- *  @file   larpandoracontent/LArTwoDReco/LArClusterSplitting/DLClusterSplittingAlgorithm.h
+ *  @file   larpandoracontent/LArTwoDReco/LArClusterSplitting/CleanDLClusterSplittingAlgorithm.h
  *
  *  @brief  Header file for the two dimensional sliding fit splitting algorithm class.
  *
  *  $Log: $
  */
-#ifndef LAR_DL_CLUSTER_SPLITTING_ALGORITHM_H
-#define LAR_DL_CLUSTER_SPLITTING_ALGORITHM_H 1
+#ifndef LAR_CLEAN_DL_CLUSTER_SPLITTING_ALGORITHM_H
+#define LAR_CLEAN_DL_CLUSTER_SPLITTING_ALGORITHM_H 1
 
 #include "Pandora/PandoraInternal.h"
 
+#include "larpandoracontent/LArObjects/LArTwoDSlidingFitResult.h"
+#include "larpandoracontent/LArUtility/KalmanFilter.h"
 #include "larpandoracontent/LArUtility/KDTreeLinkerAlgoT.h"
 #include "larpandoracontent/LArTwoDReco/LArClusterSplitting/ClusterSplittingAlgorithm.h"
 
@@ -17,77 +19,112 @@ namespace lar_dl_content
 {
 
 /**
- *  @brief  DLClusterSplittingAlgorithm class
+ *  @brief  CleanDLClusterSplittingAlgorithm class
  */
-class DLClusterSplittingAlgorithm : public pandora::Algorithm
+class CleanDLClusterSplittingAlgorithm : public pandora::Algorithm
 {
 
-class Features
+class ClusterHit
 {
 public:
 
-    float NormaliseTransverse(const float feature);
-    float NormaliseEnergy(const float feature);
-    float NormaliseHitWidth(const float feature);
-    float NormaliseTheta(const float feature);
-    float NormaliseSecVertex(const float feature);
-    float NormaliseGapSep(const float feature);
-    float NormaliseEventHitSep(const float feature);
-    float NormaliseClusterHitSep(const float feature);
-    void SmoothFeature(pandora::FloatVector &feature);
+    ClusterHit(const pandora::CaloHit *const pCaloHit, const float l, const float t);
 
-    pandora::FloatVector m_transverse;
-    pandora::FloatVector m_energy;
-    pandora::FloatVector m_hitWidth;
-    pandora::FloatVector m_theta;
-    pandora::FloatVector m_secVertex;
-    pandora::FloatVector m_gapSep;
-    pandora::FloatVector m_eventHitSep;
-    pandora::FloatVector m_clusterHitSep;
+    /**
+     *  @brief  HierarchyPfo == operator
+     *
+     *  @param  rhs the pfo to compare
+     */
+    bool operator==(const ClusterHit &rhs) const;
+
+    float m_l;
+    float m_t;
+    const pandora::CaloHit *m_pHit;
+};
+
+class Feature
+{
+public:
+
+    Feature(const float mean, const float std, const pandora::FloatVector &sequence);
+    void Normalise();
+    void Smooth();
+
+    float m_mean;
+    float m_std;
+    pandora::FloatVector m_sequence;
 };
 
 public:
     /**
      *  @brief  Default constructor
      */
-    DLClusterSplittingAlgorithm();
+    CleanDLClusterSplittingAlgorithm();
 
     pandora::StatusCode Run();
 
 private:
+    typedef std::vector<ClusterHit> ClusterPath;
     typedef lar_content::KDTreeLinkerAlgo<const pandora::CaloHit *, 2> HitKDTree2D;
     typedef lar_content::KDTreeNodeInfoT<const pandora::CaloHit *, 2> HitKDNode2D;
     typedef std::vector<HitKDNode2D> HitKDNode2DList;
-    typedef std::map<int, std::pair<const pandora::CaloHit*, float>> ClusterPath;
+    //typedef std::map<int, std::pair<const pandora::CaloHit*, float>> ClusterPath;
+    typedef std::map<std::string, Feature> Features;
 
     pandora::StatusCode ReadSettings(const pandora::TiXmlHandle xmlHandle);
 
-    pandora::StatusCode ThisDivideCaloHits(const pandora::Cluster *const pCluster);
+    pandora::StatusCode GetLists();
+
+    void ProcessCluster(const pandora::Cluster *const pCluster, HitKDTree2D &kdTree);
 
     void FindPath(const pandora::Cluster *const pCluster, const lar_content::TwoDSlidingFitResult &clusterFit, ClusterPath &clusterPath) const;
 
-    void FillFeatures(const ClusterPath &clusterPath, const lar_content::TwoDSlidingFitResult &clusterFit, Features &features) const;
+    void InitialiseFeatures(Features &features) const;
+
+    void FillFeatures(const ClusterPath &clusterPath, const lar_content::TwoDSlidingFitResult &clusterFit, Features &features, HitKDTree2D &kdTree) const;
+
+    lar_content::KalmanFilter2D InitialiseKalmanFilter(const ClusterPath &clusterPath) const;
 
     float GetAngle(const pandora::CartesianVector &position2D, const lar_content::TwoDSlidingFitResult &clusterFit) const;
 
-    float GetDistanceToGap(const pandora::CartesianVector &position2D, const pandora::HitType hitType) const;
+    float GetDistanceToGap(const pandora::CaloHit *const pPrevHit, const pandora::CaloHit *const pCurrentHit) const;
 
     float GetDistanceToEventHit(HitKDTree2D &kdTree, const pandora::CaloHit *const pCaloHit, const pandora::CaloHitList &clusterPathHits) const;
 
-    float GetDistanceToClusterHit(const ClusterPath::const_iterator &currentHit, const ClusterPath::const_iterator &endIter) const;
+    float GetDistanceToClusterHit(const ClusterHit &currentHit, const ClusterHit &nextHit) const;
 
     float GetDistanceToSecVertex(const pandora::CaloHit *const pCaloHit, const pandora::HitType hitType) const;
 
-    void GetWindows(Features &features, pandora::IntVector &splitIndices);
+    void GetSplitIndices(const Features &features, pandora::IntVector &splitIndices);
+
+    void GetSplitIndices(const Features &features, const pandora::IntVector &windowStart, 
+        pandora::IntVector &splitIndices, pandora::FloatVector &splitScores);
+
+    void FilterModelOutput(const pandora::FloatVector &splitScores, pandora::IntVector &splitIndices) const;
+
+    void FilterSplitIndices(const ClusterPath &clusterPath, const pandora::HitType hitType, pandora::IntVector &splitIndices) const;
+
+    std::vector<pandora::CaloHitList> DivideCaloHits(const pandora::CaloHitList &clusterHits, const ClusterPath &clusterPath, 
+        const lar_content::TwoDSlidingFitResult &clusterFit, const pandora::IntVector &splitIndices) const;
+
+    void SplitCluster(const pandora::Cluster *const pCluster, const std::vector<pandora::CaloHitList> &splitClusterHits) const;
 
     std::string m_caloHitListName;
     std::string m_clusterListName;
+    std::string m_nuVertexListName;
     std::string m_secVertexListName;
+    const pandora::CaloHitList *m_pCaloHitList;
+    const pandora::ClusterList *m_pClusterList;
+    const pandora::VertexList *m_pNuVertexList;
     const pandora::VertexList *m_pSecVertexList;
     unsigned int m_minClusterHits;
     int m_slidingWindow;
     float m_lBinSize;
     float m_searchRegion1D;
+    unsigned int m_windowLength;
+    float m_isContaminatedThreshold;
+    float m_isSplitThreshold;
+
     std::string m_windowModelName;
     LArDLHelper::TorchModel m_windowModel;
     std::string m_splitPosModelName;
@@ -96,83 +133,44 @@ private:
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-inline float DLClusterSplittingAlgorithm::Features::NormaliseTransverse(const float feature)
+inline CleanDLClusterSplittingAlgorithm::ClusterHit::ClusterHit(const pandora::CaloHit *const pCaloHit, const float l, const float t) :
+    m_l(l),
+    m_t(t),
+    m_pHit(pCaloHit)
 {
-    /* mean: -0.007181927387650833 */
-    /* stan_dev: 2.5722720356088034 */
-    return (feature - (-0.01)) / 2.57;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-inline float DLClusterSplittingAlgorithm::Features::NormaliseEnergy(const float feature)
+inline bool CleanDLClusterSplittingAlgorithm::ClusterHit::operator==(const ClusterHit &rhs) const
 {
-    /* mean: 0.48753944268089333 */
-    /* stan_dev: 0.2795828223860681 */
-    return (feature - 0.49) / 0.28;
+    return this->m_l == rhs.m_l;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-inline float DLClusterSplittingAlgorithm::Features::NormaliseHitWidth(const float feature)
+inline CleanDLClusterSplittingAlgorithm::Feature::Feature(const float mean, const float std, const pandora::FloatVector &sequence) :
+    m_mean(mean),
+    m_std(std),
+    m_sequence(sequence)
 {
-    /* mean: 0.5638581256164427 */
-    /* stan_dev: 0.16363261394475448 */
-    return (feature - 0.56) / 0.16;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-inline float DLClusterSplittingAlgorithm::Features::NormaliseTheta(const float feature)
+inline void CleanDLClusterSplittingAlgorithm::Feature::Normalise()
 {
-    /* mean: -0.011612029556346253 */
-    /* stan_dev: 0.10516526130812948 */
-    return (feature - (-0.01)) / 0.11;
+    for (float &val : m_sequence)
+        val = (val - m_mean) / m_std;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-inline float DLClusterSplittingAlgorithm::Features::NormaliseSecVertex(const float feature)
+inline void CleanDLClusterSplittingAlgorithm::Feature::Smooth()
 {
-    /* mean: 93.18852645417384 */
-    /* stan_dev: 103.39096393057723 */
-    return (feature - 93.19) / 103.39;
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-
-inline float DLClusterSplittingAlgorithm::Features::NormaliseGapSep(const float feature)
-{
-    /* mean: 171.77832424311225 */
-    /* stan_dev: 101.44208765041625 */
-    return (feature - 171.78) / 101.44;
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-
-inline float DLClusterSplittingAlgorithm::Features::NormaliseEventHitSep(const float feature)
-{
-    /* mean: 5.003103494406862 */
-    /* stan_dev: 5.832603908694449 */
-    return (feature - 5.00) / 5.83;
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-
-inline float DLClusterSplittingAlgorithm::Features::NormaliseClusterHitSep(const float feature)
-{
-    /* mean: 0.5379566560251992 */
-    /* stan_dev: 0.1261325429847093 */
-    return (feature - 0.54) / 0.13;
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-
-inline void DLClusterSplittingAlgorithm::Features::SmoothFeature(pandora::FloatVector &feature)
-{
-    pandora::FloatVector temp(feature);
+    pandora::FloatVector temp(m_sequence);
     
-    for (unsigned int iEntry = 0; iEntry < feature.size(); ++iEntry)
+    for (unsigned int iEntry = 0; iEntry < m_sequence.size(); ++iEntry)
     {
         float total(temp.at(iEntry));
         int nEntries(1);
@@ -195,10 +193,10 @@ inline void DLClusterSplittingAlgorithm::Features::SmoothFeature(pandora::FloatV
             }
         }
 
-        feature[iEntry] = (total / nEntries);
+        m_sequence[iEntry] = (total / nEntries);
     }
 }
 
 } // namespace lar_content
 
-#endif // #ifndef LAR_DL_CLUSTER_SPLITTING_ALGORITHM_H
+#endif // #ifndef LAR_CLEAN_DL_CLUSTER_SPLITTING_ALGORITHM_H

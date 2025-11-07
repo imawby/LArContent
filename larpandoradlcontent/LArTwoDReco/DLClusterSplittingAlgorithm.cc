@@ -1,5 +1,5 @@
 /**
- *  @file   larpandoracontent/LArTwoDReco/LArClusterSplitting/DLClusterSplittingAlgorithm.cc
+ *  @file   larpandoracontent/LArTwoDReco/LArClusterSplitting/CleanDLClusterSplittingAlgorithm.cc
  *
  *  @brief  Implementation of the two dimensional sliding fit splitting algorithm class.
  *
@@ -11,13 +11,13 @@
 #include "larpandoracontent/LArHelpers/LArClusterHelper.h"
 #include "larpandoracontent/LArHelpers/LArFileHelper.h"
 #include "larpandoracontent/LArHelpers/LArGeometryHelper.h"
+#include "larpandoracontent/LArObjects/LArCaloHit.h"
 #include "larpandoracontent/LArObjects/LArTwoDSlidingFitResult.h"
 #include "larpandoracontent/LArUtility/KalmanFilter.h"
 #include "larpandoracontent/LArUtility/KDTreeLinkerAlgoT.h"
 
-
 #include "larpandoradlcontent/LArHelpers/LArDLHelper.h"
-#include "larpandoradlcontent/LArTwoDReco/DLClusterSplittingAlgorithm.h"
+#include "larpandoradlcontent/LArTwoDReco/CleanDLClusterSplittingAlgorithm.h"
 
 #include <torch/script.h>
 #include <torch/torch.h>
@@ -30,193 +30,130 @@ namespace lar_dl_content
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-DLClusterSplittingAlgorithm::DLClusterSplittingAlgorithm() :
+CleanDLClusterSplittingAlgorithm::CleanDLClusterSplittingAlgorithm() :
+    m_nuVertexListName("NeutrinoVertices3D"),
     m_secVertexListName("SecondaryVertices3D"),
+    m_pCaloHitList(nullptr),
+    m_pClusterList(nullptr),
+    m_pNuVertexList(nullptr),
     m_pSecVertexList(nullptr),
     m_minClusterHits(50),
     m_slidingWindow(20),
     m_lBinSize(0.5f),
-    m_searchRegion1D(20.f)
+    m_searchRegion1D(20.f),
+    m_windowLength(48),
+    m_isContaminatedThreshold(0.5f),
+    m_isSplitThreshold(0.5f)
 {
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-StatusCode DLClusterSplittingAlgorithm::Run()
+StatusCode CleanDLClusterSplittingAlgorithm::Run()
 {
-    //PANDORA_MONITORING_API(SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_XZ, -1.f, 1.f, 1.f));
-
-    // Get view hits
-    const CaloHitList *pCaloHitList(nullptr);
-    if (PandoraContentApi::GetList(*this, m_caloHitListName, pCaloHitList) != STATUS_CODE_SUCCESS)
+    if (this->GetLists() != STATUS_CODE_SUCCESS)
         return STATUS_CODE_SUCCESS;
 
-    if ((!pCaloHitList) || pCaloHitList->empty())
-        return STATUS_CODE_SUCCESS;
-
-    // Get secondary vertices (it's okay if the list is empty)
-    PandoraContentApi::GetList(*this, m_secVertexListName, m_pSecVertexList);
-
-    // Get clusters
-    const ClusterList *pClusterList(nullptr);
-    PandoraContentApi::GetList(*this, m_clusterListName, pClusterList);
-
-    if ((!pClusterList) || pClusterList->empty())
-        return STATUS_CODE_SUCCESS;
-
-    // Make current...
-    if (PandoraContentApi::ReplaceCurrentList<Cluster>(*this, m_clusterListName) != STATUS_CODE_SUCCESS)
-    {
-        std::cout << "isobel cannot make current - sad" << std::endl;
-        throw;
-    }
-
-    ClusterVector internalClusterVector(pClusterList->begin(), pClusterList->end());
-    std::sort(internalClusterVector.begin(), internalClusterVector.end(), LArClusterHelper::SortByNHits);
+    // For cluster features, we need a KDTree
+    HitKDTree2D kdTree;
+    HitKDNode2DList kdNode2DList;
+    KDTreeBox kdTreeBox(fill_and_bound_2d_kd_tree(*m_pCaloHitList, kdNode2DList));
+    kdTree.build(kdNode2DList, kdTreeBox);
 
     // Probe clusters
-    for (const Cluster *const pCluster : internalClusterVector)
-        this->ThisDivideCaloHits(pCluster);
+    ClusterVector internalClusterVector(m_pClusterList->begin(), m_pClusterList->end());
+    std::sort(internalClusterVector.begin(), internalClusterVector.end(), LArClusterHelper::SortByNHits);
 
-    m_pSecVertexList = nullptr;
+    for (const Cluster *const pCluster : internalClusterVector)
+        this->ProcessCluster(pCluster, kdTree);
 
     return STATUS_CODE_SUCCESS;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-StatusCode DLClusterSplittingAlgorithm::ThisDivideCaloHits(const Cluster *const pCluster)
+StatusCode CleanDLClusterSplittingAlgorithm::GetLists()
+{
+    // Get 2D CaloHits - must find
+    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetList(*this, m_caloHitListName, m_pCaloHitList))
+
+    if ((!m_pCaloHitList) || m_pCaloHitList->empty())
+        return STATUS_CODE_NOT_FOUND;
+
+    // Get 2D Clusters - must find
+    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetList(*this, m_clusterListName, m_pClusterList))
+
+    if ((!m_pClusterList) || m_pClusterList->empty())
+        return STATUS_CODE_NOT_FOUND;
+
+    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::ReplaceCurrentList<Cluster>(*this, m_clusterListName))
+
+    // Get NeutrinoVertex - must find
+    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetList(*this, m_nuVertexListName, m_pNuVertexList));
+
+    if (!m_pNuVertexList || (m_pNuVertexList->size() != 1))
+        return STATUS_CODE_NOT_FOUND;
+
+    // Get secondary vertices - okay if not found
+    PandoraContentApi::GetList(*this, m_secVertexListName, m_pSecVertexList);
+
+    return STATUS_CODE_SUCCESS;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void CleanDLClusterSplittingAlgorithm::ProcessCluster(const Cluster *const pCluster, HitKDTree2D &kdTree)
 {
     // Enough hits?
     CaloHitList clusterHits;
     LArClusterHelper::GetAllHits(pCluster, clusterHits);
 
     if (clusterHits.size() < m_minClusterHits)
-        return STATUS_CODE_NOT_FOUND;
+        return;
 
-    // Can we make fit?
     try
     {
+        // Perform sliding fit
         const HitType hitType(LArClusterHelper::GetClusterHitType(pCluster));
         const TwoDSlidingFitResult clusterFit(pCluster, m_slidingWindow, LArGeometryHelper::GetWirePitch(this->GetPandora(), hitType));
 
         // Find pathway through the cluster
         ClusterPath clusterPath;
         this->FindPath(pCluster, clusterFit, clusterPath);
-
-        if (clusterPath.empty())
-            return STATUS_CODE_NOT_FOUND;
+                      
+        if (clusterPath.size() < m_windowLength)
+            return;
 
         // Get features
         Features features;
-        this->FillFeatures(clusterPath, clusterFit, features);
+        this->InitialiseFeatures(features);
+        this->FillFeatures(clusterPath, clusterFit, features, kdTree);
 
-        std::vector<int> clusterLPositions;
-        for (auto entry1 : clusterPath)
-            clusterLPositions.push_back(entry1.first);
-
-        // Get windows
+        // Get split indices
         IntVector splitIndices;
-        this->GetWindows(features, splitIndices);
+        this->GetSplitIndices(features, splitIndices);
 
         // Remove any that are too close to the nu vertex (network picks up on hit sharing)
-        FloatVector lSplit;
+        this->FilterSplitIndices(clusterPath, hitType, splitIndices);
 
-        //NeutrinoVertices3D
-        const VertexList *pVertexList(nullptr);
-        PandoraContentApi::GetList(*this, "NeutrinoVertices3D", pVertexList);
+        if (splitIndices.empty())
+            return;
 
-        if (!pVertexList || pVertexList->empty())
-            return STATUS_CODE_SUCCESS;
+        // Divide calo hits
+        std::vector<CaloHitList> splitClusterHits(this->DivideCaloHits(clusterHits, clusterPath, clusterFit, splitIndices));
 
-        const CartesianVector nuVertexPosition3D(pVertexList->front()->GetPosition());
-        const CartesianVector nuVertexPosition(LArGeometryHelper::ProjectPosition(this->GetPandora(), nuVertexPosition3D, hitType));
-
-        //std::cout << "-----------------------------------------" << std::endl;
-        //std::cout << "-----------------------------------------" << std::endl;
-        for (const int splitIndex : splitIndices)
-        {
-            int clusterSplitIndex(clusterLPositions.at(splitIndex));
-            CartesianVector position(clusterPath.at(clusterSplitIndex).first->GetPositionVector());
-
-            if ((nuVertexPosition - position).GetMagnitude() > 5.f)
-            {
-                float thisL(0.f), thisT(0.f);
-                clusterFit.GetLocalPosition(position, thisL, thisT);
-                lSplit.push_back(thisL);
-                //PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &position, "SplitPoint", VIOLET, 2);
-            }
-        }
-
-        for (auto &entry : lSplit)
-        {
-            std::cout << "lSplit: " << entry << std::endl;
-        }
-
-
-        int nSplitPositions(lSplit.size());
-
-        if (nSplitPositions == 0)
-        {
-            //PandoraMonitoringApi::ViewEvent(this->GetPandora());
-            return STATUS_CODE_NOT_FOUND;
-        }
-    
-        // ClusterList visCluster({pCluster});
-        // PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &visCluster, "Cluster", BLACK);
-        // PandoraMonitoringApi::ViewEvent(this->GetPandora());
-
-        // insert max numbers..
-        lSplit.insert(lSplit.begin(), std::numeric_limits<float>::min());
-        lSplit.insert(lSplit.end(), std::numeric_limits<float>::max());
-        std::vector<CaloHitList> splitClusterHits((nSplitPositions + 1), CaloHitList());
-
-        for (const CaloHit *const pCaloHit : clusterHits)
-        {
-            float thisL(0.f), thisT(0.f);
-            clusterFit.GetLocalPosition(pCaloHit->GetPositionVector(), thisL, thisT);
-
-            for (int i = 0; i <= nSplitPositions; ++i)
-            {
-                if ((thisL > lSplit.at(i)) && (thisL < lSplit.at(i + 1)))
-                {
-                    splitClusterHits[i].push_back(pCaloHit);
-                    break;
-                }
-            }
-        }
+        if (splitClusterHits.size() < 2)
+            return;
 
         // Split clusters
-        // Begin cluster fragmentation operations
-        const ClusterList clusterList(1, pCluster);
-        std::string clusterListToSaveName, clusterListToDeleteName;
-
-        PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=,
-            PandoraContentApi::InitializeFragmentation(*this, clusterList, clusterListToDeleteName, clusterListToSaveName));
-
-        for (CaloHitList &caloHitList : splitClusterHits)
-        {
-            PandoraContentApi::Cluster::Parameters parameters;
-            parameters.m_caloHitList = caloHitList;
-
-            const Cluster *pNewCluster(nullptr);
-            PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::Cluster::Create(*this, parameters, pNewCluster));
-        }
-
-        // End cluster fragmentation operations
-        PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::EndFragmentation(*this, clusterListToSaveName, clusterListToDeleteName));
+        this->SplitCluster(pCluster, splitClusterHits);
     }
-    catch (...)
-    {
-        return STATUS_CODE_NOT_FOUND;
-    }
-
-    return STATUS_CODE_NOT_FOUND;
+    catch (...) {}
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void DLClusterSplittingAlgorithm::FindPath(const Cluster *const pCluster, const TwoDSlidingFitResult &clusterFit, ClusterPath &clusterPath) const
+void CleanDLClusterSplittingAlgorithm::FindPath(const Cluster *const pCluster, const TwoDSlidingFitResult &clusterFit, ClusterPath &clusterPath) const
 {
     // Get cluster hits
     CaloHitList clusterHits;
@@ -229,64 +166,64 @@ void DLClusterSplittingAlgorithm::FindPath(const Cluster *const pCluster, const 
         clusterFit.GetLocalPosition(pCaloHit->GetPositionVector(), thisHitL, thisHitT);
         const int lBinIndex(std::floor(thisHitL / m_lBinSize));
 
-        if (clusterPath.find(lBinIndex) != clusterPath.end())
-            if (thisHitT > clusterPath.at(lBinIndex).second)
-                continue;
+        ClusterHit clusterHit(pCaloHit, lBinIndex, thisHitT);
 
-        clusterPath[lBinIndex] = std::make_pair(pCaloHit, thisHitT);
+        const auto iter(std::find(clusterPath.begin(), clusterPath.end(), clusterHit));
+
+        if (iter == clusterPath.end())
+        {
+            clusterPath.emplace_back(clusterHit);
+        }
+        else if (thisHitT < iter->m_t)
+        {
+            *iter = clusterHit;
+        }
     }
+
+    // Order low->high l
+    std::sort(clusterPath.begin(), clusterPath.end(), [](const ClusterHit &lhs, const ClusterHit &rhs) { return lhs.m_l < rhs.m_l; });
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void DLClusterSplittingAlgorithm::FillFeatures(const ClusterPath &clusterPath, const TwoDSlidingFitResult &clusterFit, Features &features) const
+void CleanDLClusterSplittingAlgorithm::InitialiseFeatures(Features &features) const
+{
+    features.insert(std::make_pair("Transverse", Feature((-0.01), 2.57, std::vector<float>())));
+    features.insert(std::make_pair("Energy", Feature(0.49, 0.28, std::vector<float>())));
+    features.insert(std::make_pair("HitWidth", Feature(0.56, 0.16, std::vector<float>())));
+    features.insert(std::make_pair("Theta", Feature((-0.01), 0.11, std::vector<float>())));
+    features.insert(std::make_pair("SecVertex", Feature(93.19, 103.39, std::vector<float>())));
+    features.insert(std::make_pair("GapSep", Feature(171.78, 101.44, std::vector<float>())));
+    features.insert(std::make_pair("EventHitSep", Feature(5.00, 5.83, std::vector<float>())));
+    features.insert(std::make_pair("ClusterHitSep", Feature(0.54, 0.13, std::vector<float>())));
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void CleanDLClusterSplittingAlgorithm::FillFeatures(const ClusterPath &clusterPath, const TwoDSlidingFitResult &clusterFit, Features &features,
+    HitKDTree2D &kdTree) const
 {
     // Get path hits, and their total energy
-    float totalEnergy(0.f);
-    CaloHitList clusterPathHits;
+    CaloHitList clusterPathHits; float totalEnergy(0.f);
     for (const auto &entry : clusterPath)
     {
-        const CaloHit *const pPathCaloHit(entry.second.first);
+        const CaloHit *const pPathCaloHit(entry.m_pHit);
         totalEnergy += pPathCaloHit->GetElectromagneticEnergy();
         clusterPathHits.push_back(pPathCaloHit);
     }
 
-    // Get KDTree
-    const CaloHitList *pCaloHitList(nullptr);
-    if (PandoraContentApi::GetList(*this, m_caloHitListName, pCaloHitList) != STATUS_CODE_SUCCESS)
-        return;
-
-    if ((!pCaloHitList) || pCaloHitList->empty())
-        return;
-
-    HitKDTree2D kdTree;
-    HitKDNode2DList kdNode2DList;
-    KDTreeBox kdTreeBox(fill_and_bound_2d_kd_tree(*pCaloHitList, kdNode2DList));
-    kdTree.build(kdNode2DList, kdTreeBox);
-
-    // Kalman Config
-    const LArTPC *const pTPC(this->GetPandora().GetGeometry()->GetLArTPCMap().begin()->second);
-    const HitType view(clusterPath.begin()->second.first->GetHitType());
-    const float pitch(view == TPC_VIEW_U ? pTPC->GetWirePitchU() : view == TPC_VIEW_V ? pTPC->GetWirePitchV() : pTPC->GetWirePitchW());
-    const float m_kalmanDelta(1.f), m_kalmanProcessVarCoeff(1.f), m_kalmanMeasurementVarCoeff(1.f);
-    const float processVariance{m_kalmanProcessVarCoeff * pitch * pitch};
-    const float measurementVariance{m_kalmanMeasurementVarCoeff * pitch * pitch};
-
-    // Initialise Kalman fit
-    Eigen::VectorXd init(2);
-    const float seedL(clusterPath.begin()->first), seedT(clusterPath.begin()->second.second);
-    init << seedL, seedT;
-    KalmanFilter2D kalmanFilter2D(m_kalmanDelta, processVariance, measurementVariance, init);
-
-    bool processedFirst(false);
-    float cumulativeEnergy(0.f);
+    // Initialise KalmanFilter
+    KalmanFilter2D kalmanFilter2D(this->InitialiseKalmanFilter(clusterPath));
 
     // Fill features
-    for (ClusterPath::const_iterator iter = clusterPath.begin(); iter != clusterPath.end(); ++iter)
+    bool processedFirst(false); float cumulativeEnergy(0.f);
+    for (unsigned int i = 0; i < clusterPath.size(); ++i)
     {
+        const ClusterHit &clusterHit(clusterPath.at(i));
+
         if (!processedFirst)
         {
-            features.m_theta.push_back(-4.f);
+            features.at("Theta").m_sequence.push_back(-4.f);
             processedFirst = true;
         }
         else
@@ -295,7 +232,7 @@ void DLClusterSplittingAlgorithm::FillFeatures(const ClusterPath &clusterPath, c
             kalmanFilter2D.Predict();
             // Update feature
             Eigen::VectorXd eigenXd(2);
-            const CartesianVector thisPosition(iter->first, 0.f, iter->second.second);
+            const CartesianVector thisPosition(clusterHit.m_l, 0.f, clusterHit.m_t);
             eigenXd << thisPosition.GetX(), thisPosition.GetZ();
             kalmanFilter2D.Update(eigenXd);
             // Get scatter angle
@@ -308,65 +245,70 @@ void DLClusterSplittingAlgorithm::FillFeatures(const ClusterPath &clusterPath, c
                 openingAngleL *= (openingAngleT > (M_PI * 0.5f)) ? (-1.f) : 1.f;
             }
             catch (...) {};
-            features.m_theta.push_back(openingAngleL);
+            features.at("Theta").m_sequence.push_back(openingAngleL);
         }
 
-        const CaloHit *const pPathCaloHit(iter->second.first);
+        const CaloHit *const pPathCaloHit(clusterHit.m_pHit);
         cumulativeEnergy += pPathCaloHit->GetElectromagneticEnergy();
 
-        features.m_transverse.push_back(iter->second.second);
-        features.m_energy.push_back(cumulativeEnergy / totalEnergy);
-        features.m_hitWidth.push_back(pPathCaloHit->GetCellSize1());
-        features.m_secVertex.push_back(
+        features.at("Transverse").m_sequence.push_back(clusterHit.m_t);
+        features.at("Energy").m_sequence.push_back(cumulativeEnergy / totalEnergy);
+        features.at("HitWidth").m_sequence.push_back(pPathCaloHit->GetCellSize1());
+        features.at("SecVertex").m_sequence.push_back(
             this->GetDistanceToSecVertex(pPathCaloHit, pPathCaloHit->GetHitType()));
-        features.m_eventHitSep.push_back(
+        features.at("EventHitSep").m_sequence.push_back(
             this->GetDistanceToEventHit(kdTree, pPathCaloHit, clusterPathHits));
-        features.m_clusterHitSep.push_back(
-            this->GetDistanceToClusterHit(iter, clusterPath.end()));
-        features.m_gapSep.push_back(
-            this->GetDistanceToGap(pPathCaloHit->GetPositionVector(), pPathCaloHit->GetHitType()));
+        features.at("ClusterHitSep").m_sequence.push_back(i == (clusterPath.size() - 1) ? -1.f :
+            this->GetDistanceToClusterHit(clusterHit, clusterPath.at(i + 1)));
+        features.at("GapSep").m_sequence.push_back(i == 0 ? 1.f :
+            this->GetDistanceToGap(clusterPath.at(i -1).m_pHit, pPathCaloHit));
     }
 
-    // Smooth
-    features.SmoothFeature(features.m_transverse);
-    features.SmoothFeature(features.m_energy);
-    features.SmoothFeature(features.m_hitWidth);
-    features.SmoothFeature(features.m_theta);
-    features.SmoothFeature(features.m_secVertex);
-    features.SmoothFeature(features.m_eventHitSep);
-    features.SmoothFeature(features.m_clusterHitSep);
-    features.SmoothFeature(features.m_gapSep);
-
-    // Normalise -.-
-    for (unsigned int i = 0; i < features.m_transverse.size(); ++i)
+    // Smooth and normalise
+    for (auto &entry : features)
     {
-        features.m_transverse[i] = features.NormaliseTransverse(features.m_transverse[i]);
-        features.m_energy[i] = features.NormaliseEnergy(features.m_energy[i]);
-        features.m_hitWidth[i] = features.NormaliseHitWidth(features.m_hitWidth[i]);
-        features.m_theta[i] = features.NormaliseTheta(features.m_theta[i]);
-        features.m_secVertex[i] = features.NormaliseSecVertex(features.m_secVertex[i]);
-        features.m_eventHitSep[i] = features.NormaliseEventHitSep(features.m_eventHitSep[i]);
-        features.m_clusterHitSep[i] = features.NormaliseClusterHitSep(features.m_clusterHitSep[i]);
-        features.m_gapSep[i] = features.NormaliseGapSep(features.m_gapSep[i]);
+        if (entry.first == "GapSep")
+            continue;
+
+        entry.second.Smooth();
+        entry.second.Normalise();
     }
 
-    // std::vector<std::string> name({"T", "En", "hit width", "theta", "sec vertex", "event hit", "cluster hit", "gap sep"});
-    // std::vector<std::vector<float>> jam({features.m_transverse, features.m_energy, features.m_hitWidth, features.m_theta, features.m_secVertex, features.m_eventHitSep, features.m_clusterHitSep, features.m_gapSep});
-
-    // for (int i=0; i < 8; ++i)
-    // {
-    //     std::cout << "----------" << std::endl;
-    //     std::cout << name.at(i) << std::endl;
-    //     for (int j =0; j < 5; ++j)
-    //     {
-    //         std::cout << jam.at(i).at(j) << std::endl;
-    //     }
-    // }
+    for (auto &entry : features)
+    {
+        std::cout << "----------" << std::endl;
+        std::cout << entry.first << std::endl;
+        for (int i =0; i < 5; ++i)
+        {
+            std::cout << entry.second.m_sequence.at(i) << std::endl;
+        }
+    }
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-float DLClusterSplittingAlgorithm::GetAngle(const CartesianVector &position2D, const TwoDSlidingFitResult &clusterFit) const
+KalmanFilter2D CleanDLClusterSplittingAlgorithm::InitialiseKalmanFilter(const ClusterPath &clusterPath) const
+{
+    // Kalman Config
+    const LArTPC *const pTPC(this->GetPandora().GetGeometry()->GetLArTPCMap().begin()->second);
+    const HitType view(clusterPath.begin()->m_pHit->GetHitType());
+    const float pitch(view == TPC_VIEW_U ? pTPC->GetWirePitchU() : view == TPC_VIEW_V ? pTPC->GetWirePitchV() : pTPC->GetWirePitchW());
+    const float kalmanDelta(1.f), kalmanProcessVarCoeff(1.f), kalmanMeasurementVarCoeff(1.f);
+    const float processVariance{kalmanProcessVarCoeff * pitch * pitch};
+    const float measurementVariance{kalmanMeasurementVarCoeff * pitch * pitch};
+
+    // Initialise Kalman fit
+    Eigen::VectorXd init(2);
+    const float seedL(clusterPath.begin()->m_l), seedT(clusterPath.begin()->m_t);
+    init << seedL, seedT;
+    KalmanFilter2D kalmanFilter2D(kalmanDelta, processVariance, measurementVariance, init);
+
+    return kalmanFilter2D;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+float CleanDLClusterSplittingAlgorithm::GetAngle(const CartesianVector &position2D, const TwoDSlidingFitResult &clusterFit) const
 {
     float thisL(0.f), thisT(0.f);
     clusterFit.GetLocalPosition(position2D, thisL, thisT);
@@ -384,44 +326,35 @@ float DLClusterSplittingAlgorithm::GetAngle(const CartesianVector &position2D, c
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-float DLClusterSplittingAlgorithm::GetDistanceToGap(const CartesianVector &position2D, const HitType hitType) const
+float CleanDLClusterSplittingAlgorithm::GetDistanceToGap(const CaloHit *const pPrevHit, const CaloHit *const pCurrentHit) const
 {
-    const DetectorGapList detectorGapList(this->GetPandora().GetGeometry()->GetDetectorGapList());
+    if (!pPrevHit)
+        return 1.f;
 
-    if (detectorGapList.empty())
-        return -1.f;
+    const LArCaloHit *const pPrevLArHit(dynamic_cast<const LArCaloHit *>(pPrevHit));
+    const LArCaloHit *const pCurrentLArHit(dynamic_cast<const LArCaloHit *>(pCurrentHit));
 
-    float minDist(std::numeric_limits<float>::max());
-    for (const DetectorGap *const pDetectorGap : detectorGapList)
-    {
-        const LineGap *const pLineGap(dynamic_cast<const LineGap *>(pDetectorGap));
+    if (!pPrevLArHit || !pCurrentLArHit)
+        return 1.f;
 
-        if (!pLineGap)
-            continue;
-        
-        const LineGapType lineGapType(pLineGap->GetLineGapType());
-            
-        if (lineGapType == TPC_DRIFT_GAP)
-        {
-            minDist = std::min(std::fabs(pLineGap->GetLineStartX() - position2D.GetX()), minDist);
-            minDist = std::min(std::fabs(pLineGap->GetLineEndX() - position2D.GetX()), minDist);
-        }
+    unsigned int prevTPCID(pPrevLArHit->GetLArTPCVolumeId());
+    unsigned int currentTPCID(pCurrentLArHit->GetLArTPCVolumeId());
 
-        if (((hitType == TPC_VIEW_U) && (lineGapType == TPC_WIRE_GAP_VIEW_U)) ||
-            ((hitType == TPC_VIEW_V) && (lineGapType == TPC_WIRE_GAP_VIEW_V)) ||
-            ((hitType == TPC_VIEW_W) && (lineGapType == TPC_WIRE_GAP_VIEW_W)))
-        {
-            minDist = std::min(std::fabs(pLineGap->GetLineStartZ() - position2D.GetZ()), minDist);
-            minDist = std::min(std::fabs(pLineGap->GetLineEndZ() - position2D.GetZ()), minDist);
-        }
-    }
+    if (prevTPCID != currentTPCID)
+        return 0.f;
 
-    return minDist;
+    unsigned int prevChildVolID(pPrevLArHit->GetDaughterVolumeId());
+    unsigned int currentChildVolID(pCurrentLArHit->GetDaughterVolumeId());
+
+    if (prevChildVolID != currentChildVolID)
+        return 0.f;
+
+    return 1.f;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-    float DLClusterSplittingAlgorithm::GetDistanceToEventHit(HitKDTree2D &kdTree, const CaloHit *const pCaloHit, const CaloHitList &clusterPathHits) const
+float CleanDLClusterSplittingAlgorithm::GetDistanceToEventHit(HitKDTree2D &kdTree, const CaloHit *const pCaloHit, const CaloHitList &clusterPathHits) const
 {
      // Collect close hits
     HitKDNode2DList foundHits;
@@ -446,20 +379,15 @@ float DLClusterSplittingAlgorithm::GetDistanceToGap(const CartesianVector &posit
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-float DLClusterSplittingAlgorithm::GetDistanceToClusterHit(const ClusterPath::const_iterator &currentHit, 
-    const ClusterPath::const_iterator &endIter) const
+float CleanDLClusterSplittingAlgorithm::GetDistanceToClusterHit(const ClusterHit &currentHit, 
+    const ClusterHit &nextHit) const
 {
-    const ClusterPath::const_iterator nextHit(std::next(currentHit));
-
-    if (nextHit == endIter)
-        return -1.f;
-
-    return (currentHit->second.first->GetPositionVector() - nextHit->second.first->GetPositionVector()).GetMagnitude();
+    return (currentHit.m_pHit->GetPositionVector() - nextHit.m_pHit->GetPositionVector()).GetMagnitude();
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-float DLClusterSplittingAlgorithm::GetDistanceToSecVertex(const CaloHit *const pCaloHit, const HitType hitType) const
+float CleanDLClusterSplittingAlgorithm::GetDistanceToSecVertex(const CaloHit *const pCaloHit, const HitType hitType) const
 {
     if (!m_pSecVertexList)
         return -1.f;
@@ -476,104 +404,83 @@ float DLClusterSplittingAlgorithm::GetDistanceToSecVertex(const CaloHit *const p
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void DLClusterSplittingAlgorithm::GetWindows(Features &features, IntVector &splitIndices)
+void CleanDLClusterSplittingAlgorithm::GetSplitIndices(const Features &features, IntVector &splitIndices)
 {
-    const int m_windowLength(48);
-    int sequenceLength(features.m_transverse.size());
-    FloatVector windowStart, windowEnd;
+    // Find the window start indices
+    IntVector windowStart;
+    const int sequenceLength(features.at("Transverse").m_sequence.size());
+    const int nWindows(std::floor(sequenceLength) / m_windowLength);
 
-    // If too small, then pad
-    if (sequenceLength < m_windowLength)
-    {
-        for (int i = 0; i < (m_windowLength - sequenceLength); ++i)
-        {
-            features.m_transverse.push_back(-9999.9f);
-            features.m_energy.push_back(-9999.9f);
-            features.m_hitWidth.push_back(-9999.9f);
-            features.m_theta.push_back(-9999.9f);
-            features.m_secVertex.push_back(-9999.9f);
-            features.m_gapSep.push_back(-9999.9f);
-            features.m_eventHitSep.push_back(-9999.9f);
-            features.m_clusterHitSep.push_back(-9999.9f);
-        }
+    for (int i = 0; i < nWindows; ++i)
+        windowStart.push_back(m_windowLength * i);
 
-        windowStart.push_back(0);
-        windowEnd.push_back(m_windowLength);
-    }
-    else if (sequenceLength == m_windowLength)
-    {
-        windowStart.push_back(0);
-    }
-    // If too big then split
-    else if (sequenceLength > m_windowLength)
-    {
-        const int nWindows(std::floor(sequenceLength) / m_windowLength);
-
-        for (int i = 0; i < nWindows; ++i)
-        {
-            windowStart.push_back(m_windowLength * i);
-            windowEnd.push_back(m_windowLength * (i + 1));
-        }
-
-        if (sequenceLength % m_windowLength != 0)
-        {
-            windowStart.push_back(sequenceLength - m_windowLength);
-            windowEnd.push_back(sequenceLength);
-        }
-    }
+    if (sequenceLength % m_windowLength != 0)
+        windowStart.push_back(sequenceLength - m_windowLength);
 
     std::cout << "-------------" << std::endl;
     for (auto &entry : windowStart)
         std::cout << "windowStart: " << entry << std::endl;
 
-    // std::cout << "-------------------------------" << std::endl;
-    // std::cout << "PRINTING WINDOWS" << std::endl;
-    // std::cout << "sequence length: " << sequenceLength << std::endl;
-    // std::cout << "-------------------------------" << std::endl;
+    // Now get split indices and associated scores
+    FloatVector splitScores;
+    this->GetSplitIndices(features, windowStart, splitIndices, splitScores);
 
-    // (n_windows, sequence_length, n_features)
-    LArDLHelper::TorchInput input;
+    // The model will often identify consecutive splitting positions around the truth, so identify one point
+    this->FilterModelOutput(splitScores, splitIndices);
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void CleanDLClusterSplittingAlgorithm::GetSplitIndices(const Features &features, const IntVector &windowStart, IntVector &splitIndices, 
+    FloatVector &splitScores)
+{
+    // Create network input
+    LArDLHelper::TorchInput input; // (n_windows, sequence_length, n_features)
     LArDLHelper::InitialiseInput({static_cast<int>(windowStart.size()), m_windowLength, 8}, input); 
 
     for (unsigned int i = 0; i < windowStart.size(); ++i)
     {
-        for (int j = 0; j < m_windowLength; ++j)
+        for (unsigned int j = 0; j < m_windowLength; ++j)
         {
-            input[i][j][0] = features.m_transverse.at(windowStart.at(i) + j);
-            input[i][j][1] = features.m_energy.at(windowStart.at(i) + j);
-            input[i][j][2] = features.m_hitWidth.at(windowStart.at(i) + j);
-            input[i][j][3] = features.m_theta.at(windowStart.at(i) + j);
-            input[i][j][4] = features.m_secVertex.at(windowStart.at(i) + j);
-            input[i][j][5] = features.m_gapSep.at(windowStart.at(i) + j);
-            input[i][j][6] = features.m_eventHitSep.at(windowStart.at(i) + j);
-            input[i][j][7] = features.m_clusterHitSep.at(windowStart.at(i) + j);
+            input[i][j][0] = features.at("Transverse").m_sequence.at(windowStart.at(i) + j);
+            input[i][j][1] = features.at("Energy").m_sequence.at(windowStart.at(i) + j);
+            input[i][j][2] = features.at("HitWidth").m_sequence.at(windowStart.at(i) + j);
+            input[i][j][3] = features.at("Theta").m_sequence.at(windowStart.at(i) + j);
+            input[i][j][4] = features.at("SecVertex").m_sequence.at(windowStart.at(i) + j);
+            input[i][j][5] = features.at("GapSep").m_sequence.at(windowStart.at(i) + j);
+            input[i][j][6] = features.at("EventHitSep").m_sequence.at(windowStart.at(i) + j);
+            input[i][j][7] = features.at("ClusterHitSep").m_sequence.at(windowStart.at(i) + j);
         }
     }
 
+    // Get model output
     LArDLHelper::TorchOutput windowOutput, splitPosOutput;
     LArDLHelper::Forward(m_windowModel, {input}, windowOutput);
     LArDLHelper::Forward(m_splitPosModel, {input}, splitPosOutput);
     torch::TensorAccessor<float, 2> windowOutputAccessor = windowOutput.accessor<float, 2>();
     torch::TensorAccessor<float, 3> splitPosOutputAccessor = splitPosOutput.accessor<float, 3>();
 
-    IntVector splitIndices_temp;
-    FloatVector splitScores_temp;
-
     for (unsigned int i = 0; i < windowStart.size(); ++i)
     {
-        // std::cout << "start: " << windowStart.at(i) << std::endl;
-        // std::cout << "end: " << windowEnd.at(i) << std::endl;
-        // std::cout << "not contaminated: " << static_cast<float>(windowOutputAccessor[i][0]) << std::endl;
-        // std::cout << "contaminated: " << static_cast<float>(windowOutputAccessor[i][1]) << std::endl;
-        // std::cout << "shower: " << static_cast<float>(windowOutputAccessor[i][2]) << std::endl;
+        // Apply softmax
+        float bkgProb(exp(windowOutputAccessor[i][0])), sigProb(exp(windowOutputAccessor[i][1])), shrProb(exp(windowOutputAccessor[i][2]));
+        //float bkgProb_new = (bkgProb) / (bkgProb + sigProb + shrProb);
+        float sigProb_new = (sigProb) / (bkgProb + sigProb + shrProb);
+        //float shrProb_new = (shrProb) / (bkgProb + sigProb + shrProb);
 
-        std::cout << "isContamScore: " << windowOutputAccessor[i][1] << std::endl;
+        //std::cout << "--" << std::endl;
+        //std::cout << "bkgProb: " << bkgProb_new << std::endl;
+        //std::cout << "sigProb: " << sigProb_new << std::endl;
+        //std::cout << "shrProb: " << shrProb_new << std::endl;
+        //std::cout << "--" << std::endl;
+
+        //std::cout << "isContamScore: " << sigProb << std::endl;
 
         // Is contaminated?
-        if (windowOutputAccessor[i][1] > 0.5)
+        if (sigProb_new > m_isContaminatedThreshold)
         {
             // Is there a split point?
-            for (int j = 0; j < m_windowLength; ++j)
+            for (unsigned int j = 0; j < m_windowLength; ++j)
             {
                 const int sequenceIndex(windowStart.at(i) + j);
                 const int nextWindowStart((i+1) == windowStart.size() ? std::numeric_limits<int>::max() : windowStart.at(i+1));
@@ -582,38 +489,47 @@ void DLClusterSplittingAlgorithm::GetWindows(Features &features, IntVector &spli
                 if (sequenceIndex >= nextWindowStart)
                     continue;
 
-                if (static_cast<float>(splitPosOutputAccessor[i][j][0] > 0.5))
+                // Apply sigmoid
+                float splitProb(1.f / (1.f + exp(-splitPosOutputAccessor[i][j][0])));
+
+                std::cout << "splitProb: " << splitProb << std::endl;
+
+                if (splitProb > m_isSplitThreshold)
                 {
-                    //splitIndices.push_back(sequenceIndex);
-                    splitIndices_temp.push_back(sequenceIndex);
-                    splitScores_temp.push_back(static_cast<float>(splitPosOutputAccessor[i][j][0]));
+                    splitIndices.push_back(sequenceIndex);
+                    splitScores.push_back(static_cast<float>(splitProb));
                 }
             }
         }
     }
 
-    for (unsigned int i=0; i < splitIndices_temp.size(); ++i)
+    // for (unsigned int i=0; i < splitIndices.size(); ++i)
+    // {
+    //     std::cout << "index: " << splitIndices.at(i) << std::endl;
+    //     std::cout << "score: " << splitScores.at(i) << std::endl;
+    // }
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void CleanDLClusterSplittingAlgorithm::FilterModelOutput(const FloatVector &splitScores, IntVector &splitIndices) const
+{
+    if (splitIndices.empty())
+        return;
+
+    IntVector splitIndices_temp(splitIndices);
+    splitIndices.clear();
+
+    int bestIndex = splitIndices_temp.front();
+    float bestScore = splitScores.front();
+    int previousIndex = splitIndices_temp.front();
+
+    for (unsigned int i = 1; i < splitIndices_temp.size(); ++i)
     {
-        std::cout << "index: " << splitIndices_temp.at(i) << std::endl;
-        std::cout << "score: " << splitScores_temp.at(i) << std::endl;
-    }
+        int thisIndex = splitIndices_temp.at(i);
+        float thisScore = splitScores.at(i);
 
-    // The model will often identify consecutive splitting positions around the truth, so identify one point
-    int previousIndex(-2), bestIndex(-1);
-    float bestScore(-1.f);
-
-    for (unsigned int iSplit = 0; iSplit < splitIndices_temp.size(); ++iSplit)
-    {
-        int thisIndex(splitIndices_temp.at(iSplit));
-        float thisScore(splitScores_temp.at(iSplit));
-
-        // If this is the first entry
-        if (thisIndex == splitIndices_temp.front())
-        {
-            bestIndex = thisIndex;
-            bestScore = thisScore;
-        }
-        else if (thisIndex == (previousIndex + 1))
+        if (thisIndex == previousIndex + 1)
         {
             if (thisScore > bestScore)
             {
@@ -624,21 +540,117 @@ void DLClusterSplittingAlgorithm::GetWindows(Features &features, IntVector &spli
         else
         {
             splitIndices.push_back(bestIndex);
-            bestScore = -1.f;
-            bestIndex = -1;
+
+            bestIndex = thisIndex;
+            bestScore = thisScore;
         }
 
         previousIndex = thisIndex;
-
-        // If this is the last entry
-        if (previousIndex == splitIndices_temp.back())
-            splitIndices.push_back(bestIndex);
     }
+
+    // Push the last run
+    splitIndices.push_back(bestIndex);
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-StatusCode DLClusterSplittingAlgorithm::ReadSettings(const TiXmlHandle xmlHandle)
+void CleanDLClusterSplittingAlgorithm::FilterSplitIndices(const ClusterPath &clusterPath, const HitType hitType, IntVector &splitIndices) const
+{
+    IntVector filteredIndices;
+    const CartesianVector &nuVertex3D(m_pNuVertexList->front()->GetPosition());
+    const CartesianVector nuVertexPosition(LArGeometryHelper::ProjectPosition(this->GetPandora(), nuVertex3D, hitType));
+
+    for (const int splitIndex : splitIndices)
+    {
+        if (splitIndex >= static_cast<int>(clusterPath.size()))
+        {
+            std::cout << "AHHHHHHHH" << std::endl;
+            throw;
+        }
+
+        const CartesianVector &position(clusterPath.at(splitIndex).m_pHit->GetPositionVector());
+        
+        if ((nuVertexPosition - position).GetMagnitude() > 5.f)
+            filteredIndices.push_back(splitIndex);
+    }
+
+    splitIndices.swap(filteredIndices);
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+std::vector<CaloHitList> CleanDLClusterSplittingAlgorithm::DivideCaloHits(const CaloHitList &clusterHits, const ClusterPath &clusterPath, 
+    const TwoDSlidingFitResult &clusterFit, const IntVector &splitIndices) const
+{
+    // Get l-coord of split index
+    FloatVector lSplit;
+    for (const int splitIndex : splitIndices)
+    {
+        CartesianVector position(clusterPath.at(splitIndex).m_pHit->GetPositionVector());
+        float thisL(0.f), thisT(0.f);
+        clusterFit.GetLocalPosition(position, thisL, thisT);
+        lSplit.push_back(thisL);
+     }
+
+    // for (auto &entry : lSplit)
+    // {
+    //     std::cout << "lSplit: " << entry << std::endl;
+    // }
+
+    lSplit.insert(lSplit.begin(), std::numeric_limits<float>::lowest());
+    lSplit.insert(lSplit.end(), std::numeric_limits<float>::max());
+    const int nSplitPositions(lSplit.size() - 2);
+    std::vector<CaloHitList> splitClusterHits((nSplitPositions + 1), CaloHitList());
+
+    for (const CaloHit *const pCaloHit : clusterHits)
+    {
+        float thisL(0.f), thisT(0.f);
+        clusterFit.GetLocalPosition(pCaloHit->GetPositionVector(), thisL, thisT);
+
+        for (int i = 0; i <= nSplitPositions; ++i)
+        {
+            if ((thisL > lSplit.at(i)) && (thisL < lSplit.at(i + 1)))
+            {
+                splitClusterHits[i].push_back(pCaloHit);
+                break;
+            }
+        }
+    }
+
+    // Remove empty lists
+    splitClusterHits.erase(std::remove_if(splitClusterHits.begin(), splitClusterHits.end(),
+        [](const CaloHitList& list){ return list.empty(); }), splitClusterHits.end());
+
+    return splitClusterHits;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void CleanDLClusterSplittingAlgorithm::SplitCluster(const Cluster *const pCluster, const std::vector<CaloHitList> &splitClusterHits) const
+{
+    // Begin cluster fragmentation operations
+    const ClusterList clusterList(1, pCluster);
+    std::string clusterListToSaveName, clusterListToDeleteName;
+
+    PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=,
+        PandoraContentApi::InitializeFragmentation(*this, clusterList, clusterListToDeleteName, clusterListToSaveName));
+
+    for (const CaloHitList &caloHitList : splitClusterHits)
+    {
+        PandoraContentApi::Cluster::Parameters parameters;
+        parameters.m_caloHitList = caloHitList;
+
+        const Cluster *pNewCluster(nullptr);
+        PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::Cluster::Create(*this, parameters, pNewCluster));
+    }
+
+    // End cluster fragmentation operations
+    PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::EndFragmentation(*this, clusterListToSaveName, clusterListToDeleteName));
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+StatusCode CleanDLClusterSplittingAlgorithm::ReadSettings(const TiXmlHandle xmlHandle)
 {
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, 
         XmlHelper::ReadValue(xmlHandle, "CaloHitListName", m_caloHitListName));
@@ -660,6 +672,18 @@ StatusCode DLClusterSplittingAlgorithm::ReadSettings(const TiXmlHandle xmlHandle
 
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, 
         XmlHelper::ReadValue(xmlHandle, "SearchRegion1D", m_searchRegion1D));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, 
+        XmlHelper::ReadValue(xmlHandle, "WindowLength", m_windowLength));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, 
+        XmlHelper::ReadValue(xmlHandle, "IsContaminatedThreshold", m_isContaminatedThreshold));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, 
+        XmlHelper::ReadValue(xmlHandle, "IsSplitThreshold", m_isSplitThreshold));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, 
+        XmlHelper::ReadValue(xmlHandle, "WindowLength", m_windowLength));
 
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle, "WindowModelName", m_windowModelName));
     m_windowModelName = LArFileHelper::FindFileInPath(m_windowModelName, "FW_SEARCH_PATH");
