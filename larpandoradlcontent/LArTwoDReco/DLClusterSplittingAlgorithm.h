@@ -174,10 +174,10 @@ inline void DLClusterSplittingAlgorithm::Features::SmoothFeature(pandora::FloatV
     
     for (unsigned int iEntry = 0; iEntry < feature.size(); ++iEntry)
     {
-        float total(0.f);
-        int nEntries(0);
+        float total(temp.at(iEntry));
+        int nEntries(1);
 
-        for (unsigned int iWindow = 0; iWindow < 5; ++iWindow)
+        for (unsigned int iWindow = 1; iWindow <= 4; ++iWindow)
         {
             const int belowIndex(iEntry - iWindow);
             const unsigned int aboveIndex(iEntry + iWindow);

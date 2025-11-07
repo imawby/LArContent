@@ -44,7 +44,7 @@ DLClusterSplittingAlgorithm::DLClusterSplittingAlgorithm() :
 
 StatusCode DLClusterSplittingAlgorithm::Run()
 {
-    PANDORA_MONITORING_API(SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_XZ, -1.f, 1.f, 1.f));
+    //PANDORA_MONITORING_API(SetEveDisplayParameters(this->GetPandora(), true, DETECTOR_VIEW_XZ, -1.f, 1.f, 1.f));
 
     // Get view hits
     const CaloHitList *pCaloHitList(nullptr);
@@ -72,7 +72,7 @@ StatusCode DLClusterSplittingAlgorithm::Run()
     }
 
     ClusterVector internalClusterVector(pClusterList->begin(), pClusterList->end());
-    //internalClusterVector.sort(LArClusterHelper::SortByNHits);
+    std::sort(internalClusterVector.begin(), internalClusterVector.end(), LArClusterHelper::SortByNHits);
 
     // Probe clusters
     for (const Cluster *const pCluster : internalClusterVector)
@@ -103,7 +103,7 @@ StatusCode DLClusterSplittingAlgorithm::ThisDivideCaloHits(const Cluster *const 
         // Find pathway through the cluster
         ClusterPath clusterPath;
         this->FindPath(pCluster, clusterFit, clusterPath);
-                      
+
         if (clusterPath.empty())
             return STATUS_CODE_NOT_FOUND;
 
@@ -129,7 +129,8 @@ StatusCode DLClusterSplittingAlgorithm::ThisDivideCaloHits(const Cluster *const 
         if (!pVertexList || pVertexList->empty())
             return STATUS_CODE_SUCCESS;
 
-        const CartesianVector nuVertexPosition(pVertexList->front()->GetPosition());
+        const CartesianVector nuVertexPosition3D(pVertexList->front()->GetPosition());
+        const CartesianVector nuVertexPosition(LArGeometryHelper::ProjectPosition(this->GetPandora(), nuVertexPosition3D, hitType));
 
         //std::cout << "-----------------------------------------" << std::endl;
         //std::cout << "-----------------------------------------" << std::endl;
@@ -143,9 +144,15 @@ StatusCode DLClusterSplittingAlgorithm::ThisDivideCaloHits(const Cluster *const 
                 float thisL(0.f), thisT(0.f);
                 clusterFit.GetLocalPosition(position, thisL, thisT);
                 lSplit.push_back(thisL);
-                PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &position, "SplitPoint", VIOLET, 2);
+                //PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &position, "SplitPoint", VIOLET, 2);
             }
         }
+
+        for (auto &entry : lSplit)
+        {
+            std::cout << "lSplit: " << entry << std::endl;
+        }
+
 
         int nSplitPositions(lSplit.size());
 
@@ -155,9 +162,9 @@ StatusCode DLClusterSplittingAlgorithm::ThisDivideCaloHits(const Cluster *const 
             return STATUS_CODE_NOT_FOUND;
         }
     
-        ClusterList visCluster({pCluster});
-        PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &visCluster, "Cluster", BLACK);
-        PandoraMonitoringApi::ViewEvent(this->GetPandora());
+        // ClusterList visCluster({pCluster});
+        // PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &visCluster, "Cluster", BLACK);
+        // PandoraMonitoringApi::ViewEvent(this->GetPandora());
 
         // insert max numbers..
         lSplit.insert(lSplit.begin(), std::numeric_limits<float>::min());
@@ -342,6 +349,19 @@ void DLClusterSplittingAlgorithm::FillFeatures(const ClusterPath &clusterPath, c
         features.m_clusterHitSep[i] = features.NormaliseClusterHitSep(features.m_clusterHitSep[i]);
         features.m_gapSep[i] = features.NormaliseGapSep(features.m_gapSep[i]);
     }
+
+    // std::vector<std::string> name({"T", "En", "hit width", "theta", "sec vertex", "event hit", "cluster hit", "gap sep"});
+    // std::vector<std::vector<float>> jam({features.m_transverse, features.m_energy, features.m_hitWidth, features.m_theta, features.m_secVertex, features.m_eventHitSep, features.m_clusterHitSep, features.m_gapSep});
+
+    // for (int i=0; i < 8; ++i)
+    // {
+    //     std::cout << "----------" << std::endl;
+    //     std::cout << name.at(i) << std::endl;
+    //     for (int j =0; j < 5; ++j)
+    //     {
+    //         std::cout << jam.at(i).at(j) << std::endl;
+    //     }
+    // }
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -480,6 +500,10 @@ void DLClusterSplittingAlgorithm::GetWindows(Features &features, IntVector &spli
         windowStart.push_back(0);
         windowEnd.push_back(m_windowLength);
     }
+    else if (sequenceLength == m_windowLength)
+    {
+        windowStart.push_back(0);
+    }
     // If too big then split
     else if (sequenceLength > m_windowLength)
     {
@@ -497,6 +521,10 @@ void DLClusterSplittingAlgorithm::GetWindows(Features &features, IntVector &spli
             windowEnd.push_back(sequenceLength);
         }
     }
+
+    std::cout << "-------------" << std::endl;
+    for (auto &entry : windowStart)
+        std::cout << "windowStart: " << entry << std::endl;
 
     // std::cout << "-------------------------------" << std::endl;
     // std::cout << "PRINTING WINDOWS" << std::endl;
@@ -539,6 +567,8 @@ void DLClusterSplittingAlgorithm::GetWindows(Features &features, IntVector &spli
         // std::cout << "contaminated: " << static_cast<float>(windowOutputAccessor[i][1]) << std::endl;
         // std::cout << "shower: " << static_cast<float>(windowOutputAccessor[i][2]) << std::endl;
 
+        std::cout << "isContamScore: " << windowOutputAccessor[i][1] << std::endl;
+
         // Is contaminated?
         if (windowOutputAccessor[i][1] > 0.5)
         {
@@ -560,6 +590,12 @@ void DLClusterSplittingAlgorithm::GetWindows(Features &features, IntVector &spli
                 }
             }
         }
+    }
+
+    for (unsigned int i=0; i < splitIndices_temp.size(); ++i)
+    {
+        std::cout << "index: " << splitIndices_temp.at(i) << std::endl;
+        std::cout << "score: " << splitScores_temp.at(i) << std::endl;
     }
 
     // The model will often identify consecutive splitting positions around the truth, so identify one point
