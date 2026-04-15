@@ -98,6 +98,8 @@ void ElectronInitialRegionRefinementAlgorithm::FillShowerPfoVector(PfoVector &sh
         return;
     }
 
+    showerPfoVector.insert(showerPfoVector.begin(), pPfoList->begin(), pPfoList->end());
+
     std::sort(showerPfoVector.begin(), showerPfoVector.end(), LArPfoHelper::SortByNHits);
 }
 
