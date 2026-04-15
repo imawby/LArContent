@@ -37,12 +37,10 @@ ElectronInitialRegionRefinementAlgorithm::ElectronInitialRegionRefinementAlgorit
     m_pShowerStartFinderTool{nullptr},
     m_pProtoShowerMatchingTool{nullptr},
     m_showerPfoListName{""},
-    m_trackPfoListName{""},
     m_neutrinoVertexListName{""},
     m_caloHitListNameU{""},
     m_caloHitListNameV{""},
     m_caloHitListNameW{""},
-    m_allOutcomes(false),
     m_minShowerHits3D(50),
     m_showerSlidingFitWindow(1000),
     m_maxCoincidenceTransverseSeparation(5.f),
@@ -89,24 +87,13 @@ StatusCode ElectronInitialRegionRefinementAlgorithm::Run()
 
 void ElectronInitialRegionRefinementAlgorithm::FillShowerPfoVector(PfoVector &showerPfoVector) const
 {
-    const PfoList *pShowerPfoList(nullptr);
+    const PfoList *pPfoList(nullptr);
 
-    if (PandoraContentApi::GetList(*this, m_showerPfoListName, pShowerPfoList) != STATUS_CODE_SUCCESS)
+    if (PandoraContentApi::GetList(*this, m_showerPfoListName, pPfoList) != STATUS_CODE_SUCCESS)
         return;
 
-    if (pShowerPfoList && !pShowerPfoList->empty())
-        showerPfoVector.insert(showerPfoVector.begin(), pShowerPfoList->begin(), pShowerPfoList->end());
-
-    if (m_allOutcomes)
-    {
-        const PfoList *pTrackPfoList(nullptr);
-
-        if (PandoraContentApi::GetList(*this, m_trackPfoListName, pTrackPfoList) != STATUS_CODE_SUCCESS)
-            return;
-
-        if (pTrackPfoList && !pTrackPfoList->empty())
-            showerPfoVector.insert(showerPfoVector.begin(), pTrackPfoList->begin(), pTrackPfoList->end());
-    }
+    if (pPfoList && !pPfoList->empty())
+        showerPfoVector.insert(showerPfoVector.begin(), pPfoList->begin(), pPfoList->end());
 
     std::sort(showerPfoVector.begin(), showerPfoVector.end(), LArPfoHelper::SortByNHits);
 }
@@ -476,7 +463,7 @@ void ElectronInitialRegionRefinementAlgorithm::RefineHitsToAdd(
 
             const float otherT((eventPeakDirection.GetCrossProduct(displacement)).GetMagnitudeSquared());
 
-            if ((otherT < thisT) || (otherT < (m_unambiguousThreshold * m_unambiguousThreshold)))
+            if ((otherT < thisT) || (otherT < m_unambiguousThreshold))
             {
                 found = true;
 
@@ -693,7 +680,6 @@ bool ElectronInitialRegionRefinementAlgorithm::IsElectron(const ParticleFlowObje
 StatusCode ElectronInitialRegionRefinementAlgorithm::ReadSettings(const TiXmlHandle xmlHandle)
 {
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle, "ShowerPfoListName", m_showerPfoListName));
-    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "TrackPfoListName", m_trackPfoListName));
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle, "NeutrinoVertexListName", m_neutrinoVertexListName));
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle, "CaloHitListNameU", m_caloHitListNameU));
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, XmlHelper::ReadValue(xmlHandle, "CaloHitListNameV", m_caloHitListNameV));
@@ -740,8 +726,6 @@ StatusCode ElectronInitialRegionRefinementAlgorithm::ReadSettings(const TiXmlHan
 
     if (!m_pProtoShowerMatchingTool)
         return STATUS_CODE_INVALID_PARAMETER;
-
-    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "AllOutcomes", m_allOutcomes));
 
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "MinShowerHits3D", m_minShowerHits3D));
 
