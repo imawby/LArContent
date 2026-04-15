@@ -92,8 +92,11 @@ void ElectronInitialRegionRefinementAlgorithm::FillShowerPfoVector(PfoVector &sh
     if (PandoraContentApi::GetList(*this, m_showerPfoListName, pPfoList) != STATUS_CODE_SUCCESS)
         return;
 
-    if (pPfoList && !pPfoList->empty())
-        showerPfoVector.insert(showerPfoVector.begin(), pPfoList->begin(), pPfoList->end());
+    if (!pPfoList || pPfoList->empty())
+    {
+        std::cout << "ElectronInitialRegionRefinementAlgorithm: unable to find shower pfo list " << m_showerPfoListName << std::endl;
+        return;
+    }
 
     std::sort(showerPfoVector.begin(), showerPfoVector.end(), LArPfoHelper::SortByNHits);
 }
