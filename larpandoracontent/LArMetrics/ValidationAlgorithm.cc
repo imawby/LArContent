@@ -38,7 +38,6 @@ ValidationAlgorithm::ValidationAlgorithm() :
 
 ValidationAlgorithm::~ValidationAlgorithm()
 {
-    PANDORA_MONITORING_API(SaveTree(this->GetPandora(), "AlgTree", m_fileName.c_str(), "UPDATE"));
     PANDORA_MONITORING_API(SaveTree(this->GetPandora(), "EventTree", m_fileName.c_str(), "UPDATE"));
     PANDORA_MONITORING_API(SaveTree(this->GetPandora(), "HierarchyTree", m_fileName.c_str(), "UPDATE"));
     PANDORA_MONITORING_API(SaveTree(this->GetPandora(), "PFPTree", m_fileName.c_str(), "UPDATE"));
@@ -94,9 +93,10 @@ StatusCode ValidationAlgorithm::Run()
     // Input entry for each hierarchy
     for (unsigned int i = 0; i < nuParticlesVec.size(); ++i)
     {
-        // ATTN: I am pretty certain this vector is sorted, check with Andy
         MCParticleVector targetMC; PfoVector bestRecoMatch; IntVector isTarget;
+        // ATTN: matches are NOT sorted
         LArHierarchyHelper::MCMatchesVector mcMatchesVec(matchInfo.GetMatches(nuParticlesVec.at(i)));
+
         for (const LArHierarchyHelper::MCMatches &mcMatches : mcMatchesVec)
         {
             // Is MCParticle a target?
@@ -112,7 +112,7 @@ StatusCode ValidationAlgorithm::Run()
             targetMC.push_back(pMCNode->GetMCParticles().front());
 
             // Determine best match pfo (if it exists)
-            if (nMatches == 0) //|| (!mcMatches.IsQuality(quality)))
+            if (nMatches == 0)
             {
                 bestRecoMatch.push_back(nullptr);
             }
@@ -141,9 +141,6 @@ StatusCode ValidationAlgorithm::Run()
         // Run tools
         for (BaseValidationTool *const pValidationTool : m_validationToolVector)
             pValidationTool->Run(this, nuParticlesVec.at(i), mcMatchesVec, targetMC, bestRecoMatch);
-
-        PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "AlgTree", "IsTarget", &isTarget));
-        PANDORA_MONITORING_API(FillTree(this->GetPandora(), "AlgTree"));
     }
 
     return STATUS_CODE_SUCCESS;
@@ -151,7 +148,7 @@ StatusCode ValidationAlgorithm::Run()
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-    bool ValidationAlgorithm::IsReconstructable(const LArHierarchyHelper::MCHierarchy::Node *pMCNode)
+bool ValidationAlgorithm::IsReconstructable(const LArHierarchyHelper::MCHierarchy::Node *pMCNode)
 {
     unsigned int nHitsU(0), nHitsV(0), nHitsW(0);
     const CaloHitList caloHitList(pMCNode->GetCaloHits());

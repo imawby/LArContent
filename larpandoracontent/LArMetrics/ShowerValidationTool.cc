@@ -42,62 +42,202 @@ void ShowerValidationTool::Run(const Algorithm *const pAlgorithm, const MCPartic
     for (unsigned int i = 0; i < targetMC.size(); ++i)
     {
         const MCParticle *const pMC(targetMC.at(i));
+        bool doesMCHaveDir(pMC->GetMomentum().GetMagnitudeSquared() > std::numeric_limits<float>::epsilon());
         const Pfo *const pPfo(bestRecoMatch.at(i));
 
-        // Some truth variables
-        this->GetTrueLength(mcMatchesVec, pMC, showerTreeVars);
-        this->GetInitialRegionVars(mcMatchesVec, pMC, pPfo, showerTreeVars);
-
-        // Look at reco 
-        bool success(pPfo);
-        if (success)
+        // Fill MC-related vars
+        if (doesMCHaveDir)
         {
-            float recoShrLength(-1.f);
-            CartesianVector recoShrVtx(0.f, 0.f, 0.f), recoShrDir(0.f, 0.f, 0.f);
-            success = this->FitShower(pPfo, recoShrVtx, recoShrDir, recoShrLength);
-
-            if (success)
-            {
-                showerTreeVars.m_recoShrVtxX.push_back(recoShrVtx.GetX());
-                showerTreeVars.m_recoShrVtxY.push_back(recoShrVtx.GetY());
-                showerTreeVars.m_recoShrVtxZ.push_back(recoShrVtx.GetZ());
-                showerTreeVars.m_recoShrDirX.push_back(recoShrDir.GetX());
-                showerTreeVars.m_recoShrDirY.push_back(recoShrDir.GetY());
-                showerTreeVars.m_recoShrDirZ.push_back(recoShrDir.GetZ());
-                showerTreeVars.m_recoShrLength.push_back(recoShrLength);
-
-                if (pMC->GetMomentum().GetMagnitudeSquared() < std::numeric_limits<float>::epsilon())
-                {
-                    showerTreeVars.m_recoShrDirAcc.push_back(-1.f);
-                }
-                else
-                {
-                    const CartesianVector trueDir(pMC->GetMomentum().GetUnitVector());
-                    showerTreeVars.m_recoShrDirAcc.push_back(trueDir.GetOpeningAngle(recoShrDir));
-                }
-
-                this->GetMoliere(pPfo, recoShrVtx, recoShrDir, showerTreeVars);
-            }
+            this->GetTrueLength(mcMatchesVec, pMC, showerTreeVars);
+            this->GetInitialRegionVars(mcMatchesVec, pMC, pPfo, showerTreeVars);
+        }
+        else
+        {
+            this->FillForNullMCDir(showerTreeVars);
         }
 
-        if (!success)
+        // Perform shower fit 
+        float recoShrLength(-1.f);
+        CartesianVector recoShrVtx(0.f, 0.f, 0.f), recoShrDir(0.f, 0.f, 0.f);
+        bool fitSuccess(pPfo && (this->FitShower(pPfo, recoShrVtx, recoShrDir, recoShrLength)));
+
+        if (fitSuccess)
         {
-            showerTreeVars.m_recoShrVtxX.push_back(-9999.f);
-            showerTreeVars.m_recoShrVtxY.push_back(-9999.f);
-            showerTreeVars.m_recoShrVtxZ.push_back(-9999.f);
-            showerTreeVars.m_recoShrDirX.push_back(-9999.f);
-            showerTreeVars.m_recoShrDirY.push_back(-9999.f);
-            showerTreeVars.m_recoShrDirZ.push_back(-9999.f);
-            showerTreeVars.m_recoShrLength.push_back(-1.f);
-            showerTreeVars.m_recoShrDirAcc.push_back(-1.f);
-            showerTreeVars.m_moliereRadius.push_back(-1.f);
-            showerTreeVars.m_coreRecoLength.push_back(-1.f);
+            this->GetRecoVertexInfo(recoShrVtx, recoShrDir, recoShrLength, (doesMCHaveDir ? pMC : nullptr), showerTreeVars);
+            this->GetMoliere(pPfo, recoShrVtx, recoShrDir, showerTreeVars);
+        }
+        else
+        {
+            this->FillForFailedPfo(showerTreeVars);
         }
     }
 
     this->FillTree(showerTreeVars);
 }
 
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void ShowerValidationTool::GetTrueLength(const LArHierarchyHelper::MCMatchesVector &mcMatchesVec, const MCParticle *const pMCParticle,
+     ShowerTreeVars &showerTreeVars)
+{
+    // Get 3D positions/directions
+    const CartesianVector trueShrVtx(pMCParticle->GetVertex());
+    const CartesianVector trueShrDir(pMCParticle->GetMomentum().GetUnitVector());
+    const CartesianVector trueShrDirSeed(trueShrVtx + (trueShrDir * 10.0f));
+
+    // Need to loop over matches to get MCNode
+    CaloHitList mcHits;
+    for (const LArHierarchyHelper::MCMatches &mcMatches : mcMatchesVec)
+    {
+        if (mcMatches.GetMC()->GetMCParticles().front() == pMCParticle)
+            mcHits = mcMatches.GetMC()->GetCaloHits();
+    }
+
+    // Find X% containment in longitudinal
+    for (const HitType &hitType : {TPC_VIEW_U, TPC_VIEW_V, TPC_VIEW_W})
+    {
+        float totalEnergy(0.f); // need for function call
+        CaloHitVector viewMCHits;
+        this->GetHitsOfType(mcHits, hitType, viewMCHits, totalEnergy);
+
+        const CartesianVector trueShrVtx2D(LArGeometryHelper::ProjectPosition(this->GetPandora(), trueShrVtx, hitType));
+        const CartesianVector trueShrDirSeed2D(LArGeometryHelper::ProjectPosition(this->GetPandora(), trueShrDirSeed, hitType));
+        const CartesianVector trueShrDir2D((trueShrDirSeed2D - trueShrVtx2D).GetUnitVector());
+
+        // Order hits wrt l
+        std::sort(viewMCHits.begin(), viewMCHits.end(),
+                  [&trueShrDir2D, &trueShrVtx2D](const CaloHit *const pCaloHitA, const CaloHit *const pCaloHitB) -> bool
+        {
+            const CartesianVector positionA(pCaloHitA->GetPositionVector() - trueShrVtx2D);
+            const CartesianVector positionB(pCaloHitB->GetPositionVector() - trueShrVtx2D);
+            
+            const float lA(trueShrDir2D.GetDotProduct(positionA));
+            const float lB(trueShrDir2D.GetDotProduct(positionB));
+
+            return lA < lB;
+        });
+
+        // Calculate 'true length'
+        FloatVector &trueLength(hitType == TPC_VIEW_U ? showerTreeVars.m_coreTrueLengthFromU : 
+                                hitType == TPC_VIEW_V ? showerTreeVars.m_coreTrueLengthFromV : showerTreeVars.m_coreTrueLengthFromW);
+
+        float runningEnergySum(0.f), endpointL(-9999.f);
+        for (const CaloHit *const pHit2D : viewMCHits)
+        {
+            const float hitEnergy(std::fabs(pHit2D->GetElectromagneticEnergy()));
+            runningEnergySum += hitEnergy;
+
+            if ((totalEnergy > std::numeric_limits<float>::epsilon()) && 
+                ((runningEnergySum / totalEnergy) > m_trueLengthEnergyFrac))
+            {
+                const CartesianVector displacement(pHit2D->GetPositionVector() - trueShrVtx2D);
+                endpointL = trueShrDir2D.GetDotProduct(displacement);
+                break;
+            }
+        }
+
+        if (endpointL > -9990.f)
+        {
+            const CartesianVector showerEndpoint2D(trueShrVtx2D + (trueShrDir2D * endpointL));
+            const float scale3D((showerEndpoint2D.GetX() - trueShrVtx2D.GetX()) / trueShrDir.GetX());
+            trueLength.push_back(scale3D);
+        }
+        else
+        {
+            trueLength.push_back(-1.f);
+        }
+    }
+}//------------------------------------------------------------------------------------------------------------------------------------------
+
+void ShowerValidationTool::GetInitialRegionVars(const LArHierarchyHelper::MCMatchesVector &mcMatchesVec, const MCParticle *const pMCParticle, 
+    const Pfo *const pPfo, ShowerTreeVars &showerTreeVars)
+{
+    // Loop over matches to get MCNode
+    CaloHitList mcHits;
+    for (const LArHierarchyHelper::MCMatches &mcMatches : mcMatchesVec)
+    {
+        if (mcMatches.GetMC()->GetMCParticles().front() == pMCParticle)
+            mcHits = mcMatches.GetMC()->GetCaloHits();
+    }
+
+    // Get 3D positions/directions
+    const CartesianVector trueShrVtx(pMCParticle->GetVertex());
+    const CartesianVector trueShrDir(pMCParticle->GetMomentum().GetUnitVector());
+    const CartesianVector trueShrDirSeed(trueShrVtx + (trueShrDir * m_initialRegion3D));
+
+    int nTotalInitialMCHits(0), nTotalInitialPfoHits(0), nTotalInitialSharedHits(0);
+    for (const HitType &hitType : {TPC_VIEW_U, TPC_VIEW_V, TPC_VIEW_W})
+    {
+        const CartesianVector trueShrVtx2D(LArGeometryHelper::ProjectPosition(this->GetPandora(), trueShrVtx, hitType));
+        const CartesianVector trueShrDirSeed2D(LArGeometryHelper::ProjectPosition(this->GetPandora(), trueShrDirSeed, hitType));
+        const CartesianVector trueShrDir2D((trueShrDirSeed2D - trueShrVtx2D).GetUnitVector());
+        const float initialRegionL(trueShrDir2D.GetDotProduct(trueShrDirSeed2D - trueShrVtx2D));
+
+        // Find initial region MC hits
+        float totalEnergy(0.f); // need for function call
+        CaloHitVector viewMCHits, initialMCHits;
+        this->GetHitsOfType(mcHits, hitType, viewMCHits, totalEnergy);
+        for (const CaloHit *const pCaloHit : viewMCHits)
+        {
+            const float l(trueShrDir2D.GetDotProduct(pCaloHit->GetPositionVector() - trueShrVtx2D));
+
+            if (l < initialRegionL)
+                initialMCHits.push_back(pCaloHit);
+        }
+        nTotalInitialMCHits += initialMCHits.size();
+
+        int nInitialPfoHits(0), nSharedHits(0);
+        if (pPfo)
+        {
+            // Find initial region pfo hits
+            CaloHitList viewPfoHitList;
+            LArPfoHelper::GetCaloHits(pPfo, hitType, viewPfoHitList);
+            CaloHitVector viewPfoHits(viewPfoHitList.begin(), viewPfoHitList.end()), initialPfoHits;
+            for (const CaloHit *const pCaloHit : viewPfoHits)
+            {
+                const float l(trueShrDir2D.GetDotProduct(pCaloHit->GetPositionVector() - trueShrVtx2D));
+                
+                if (l < initialRegionL)
+                    initialPfoHits.push_back(pCaloHit);
+            }
+            nInitialPfoHits = initialPfoHits.size();
+            nTotalInitialPfoHits += nInitialPfoHits;
+
+            // Get shared hits
+            for (const CaloHit *const pCaloHit : initialMCHits)
+            {
+                if (std::find(initialPfoHits.begin(), initialPfoHits.end(), pCaloHit) != initialPfoHits.end())
+                    ++nSharedHits; 
+            }
+            nTotalInitialSharedHits += nSharedHits;
+        }
+
+        IntVector &viewNInitialMCHits(hitType == TPC_VIEW_U ? showerTreeVars.m_nInitialMCHitsU : 
+            hitType == TPC_VIEW_V ? showerTreeVars.m_nInitialMCHitsV : showerTreeVars.m_nInitialMCHitsW);
+        IntVector &viewNInitialPfoHits(hitType == TPC_VIEW_U ? showerTreeVars.m_nInitialPfoHitsU : 
+            hitType == TPC_VIEW_V ? showerTreeVars.m_nInitialPfoHitsV : showerTreeVars.m_nInitialPfoHitsW);
+        FloatVector &viewCompleteness(hitType == TPC_VIEW_U ? showerTreeVars.m_initialCompletenessU : 
+            hitType == TPC_VIEW_V ? showerTreeVars.m_initialCompletenessV : showerTreeVars.m_initialCompletenessW);
+        FloatVector &viewPurity(hitType == TPC_VIEW_U ? showerTreeVars.m_initialPurityU : 
+            hitType == TPC_VIEW_V ? showerTreeVars.m_initialPurityV : showerTreeVars.m_initialPurityW);
+
+        const float thisCompleteness(initialMCHits.size() == 0 ? 0 : static_cast<float>(nSharedHits) / initialMCHits.size());
+        const float thisPurity(nInitialPfoHits == 0 ? 0 : static_cast<float>(nSharedHits) / nInitialPfoHits);
+        viewNInitialMCHits.push_back(initialMCHits.size());
+        viewNInitialPfoHits.push_back(nInitialPfoHits);
+        viewCompleteness.push_back(thisCompleteness);
+        viewPurity.push_back(thisPurity);
+    }
+
+    const float completeness(nTotalInitialMCHits == 0 ? 0 : static_cast<float>(nTotalInitialSharedHits) / nTotalInitialMCHits);
+    const float purity(nTotalInitialPfoHits == 0 ? 0 : static_cast<float>(nTotalInitialSharedHits) / nTotalInitialPfoHits);
+
+    showerTreeVars.m_nInitialMCHits.push_back(nTotalInitialMCHits);
+    showerTreeVars.m_nInitialPfoHits.push_back(nTotalInitialPfoHits);
+    showerTreeVars.m_initialCompleteness.push_back(completeness);
+    showerTreeVars.m_initialPurity.push_back(purity);
+}
+  
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 // Replicate PandoraShower fitting
@@ -140,6 +280,26 @@ bool ShowerValidationTool::FitShower(const Pfo *const pPfo, CartesianVector &sho
     showerLength = larShowerPCA.GetAxisLengths().GetX();
 
     return true;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void ShowerValidationTool::GetRecoVertexInfo(const CartesianVector &recoShrVtx, const CartesianVector &recoShrDir, const float recoShrLength,
+    const MCParticle *const pMC, ShowerTreeVars &showerTreeVars)
+{
+    showerTreeVars.m_recoShrVtxX.push_back(recoShrVtx.GetX());
+    showerTreeVars.m_recoShrVtxY.push_back(recoShrVtx.GetY());
+    showerTreeVars.m_recoShrVtxZ.push_back(recoShrVtx.GetZ());
+    showerTreeVars.m_recoShrDirX.push_back(recoShrDir.GetX());
+    showerTreeVars.m_recoShrDirY.push_back(recoShrDir.GetY());
+    showerTreeVars.m_recoShrDirZ.push_back(recoShrDir.GetZ());
+    showerTreeVars.m_recoShrLength.push_back(recoShrLength);
+    
+    if (pMC)
+    {
+        const CartesianVector trueDir(pMC->GetMomentum().GetUnitVector());
+        showerTreeVars.m_recoShrDirAcc.push_back(trueDir.GetOpeningAngle(recoShrDir));
+    }
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -233,217 +393,45 @@ void ShowerValidationTool::GetMoliere(const Pfo *const pPfo, const CartesianVect
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void ShowerValidationTool::GetTrueLength(const LArHierarchyHelper::MCMatchesVector &mcMatchesVec, const MCParticle *const pMCParticle,
-     ShowerTreeVars &showerTreeVars)
+void ShowerValidationTool::FillForNullMCDir(ShowerTreeVars &showerTreeVars)
 {
-    // First, return if MCParticle has no energy/direction - IDK why this happens to our targets
-    if (pMCParticle->GetMomentum().GetMagnitudeSquared() < std::numeric_limits<float>::epsilon())
-    {
-        showerTreeVars.m_coreTrueLengthFromU.push_back(-1.f);
-        showerTreeVars.m_coreTrueLengthFromV.push_back(-1.f);
-        showerTreeVars.m_coreTrueLengthFromW.push_back(-1.f);
-        return;
-    }
-
-    // Get 3D positions/directions
-    const CartesianVector trueShrVtx(pMCParticle->GetVertex());
-    const CartesianVector trueShrDir(pMCParticle->GetMomentum().GetUnitVector());
-    const CartesianVector trueShrDirSeed(trueShrVtx + (trueShrDir * 10.0f));
-
-    // Sorry for looping over matches again :( 
-    CaloHitList mcHits;
-    for (const LArHierarchyHelper::MCMatches &mcMatches : mcMatchesVec)
-    {
-        if (mcMatches.GetMC()->GetMCParticles().front() == pMCParticle)
-            mcHits = mcMatches.GetMC()->GetCaloHits();
-    }
-
-    // Find X% containment in longitudinal
-    for (const HitType &hitType : {TPC_VIEW_U, TPC_VIEW_V, TPC_VIEW_W})
-    {
-        float totalEnergy(0.f); // need for function call
-        CaloHitVector viewMCHits;
-        this->GetHitsOfType(mcHits, hitType, viewMCHits, totalEnergy);
-
-        const CartesianVector trueShrVtx2D(LArGeometryHelper::ProjectPosition(this->GetPandora(), trueShrVtx, hitType));
-        const CartesianVector trueShrDirSeed2D(LArGeometryHelper::ProjectPosition(this->GetPandora(), trueShrDirSeed, hitType));
-        const CartesianVector trueShrDir2D((trueShrDirSeed2D - trueShrVtx2D).GetUnitVector());
-
-        // Order hits wrt l
-        std::sort(viewMCHits.begin(), viewMCHits.end(),
-                  [&trueShrDir2D, &trueShrVtx2D](const CaloHit *const pCaloHitA, const CaloHit *const pCaloHitB) -> bool
-        {
-            const CartesianVector positionA(pCaloHitA->GetPositionVector() - trueShrVtx2D);
-            const CartesianVector positionB(pCaloHitB->GetPositionVector() - trueShrVtx2D);
-            
-            const float lA(trueShrDir2D.GetDotProduct(positionA));
-            const float lB(trueShrDir2D.GetDotProduct(positionB));
-
-            return lA < lB;
-        });
-
-        // Calculate 'true length'
-        FloatVector &trueLength(hitType == TPC_VIEW_U ? showerTreeVars.m_coreTrueLengthFromU : 
-                                hitType == TPC_VIEW_V ? showerTreeVars.m_coreTrueLengthFromV : showerTreeVars.m_coreTrueLengthFromW);
-
-        float runningEnergySum(0.f), endpointL(-9999.f);
-        for (const CaloHit *const pHit2D : viewMCHits)
-        {
-            const float hitEnergy(std::fabs(pHit2D->GetElectromagneticEnergy()));
-            runningEnergySum += hitEnergy;
-
-            if ((totalEnergy > std::numeric_limits<float>::epsilon()) && 
-                ((runningEnergySum / totalEnergy) > m_trueLengthEnergyFrac))
-            {
-                const CartesianVector displacement(pHit2D->GetPositionVector() - trueShrVtx2D);
-                endpointL = trueShrDir2D.GetDotProduct(displacement);
-                break;
-            }
-        }
-
-        if (endpointL > -9990.f)
-        {
-            const CartesianVector showerEndpoint2D(trueShrVtx2D + (trueShrDir2D * endpointL));
-            const float scale3D((showerEndpoint2D.GetX() - trueShrVtx2D.GetX()) / trueShrDir.GetX());
-            trueLength.push_back(scale3D);
-        }
-        else
-        {
-            trueLength.push_back(-1.f);
-        }
-    }
+    showerTreeVars.m_coreTrueLengthFromU.push_back(-1.f);
+    showerTreeVars.m_coreTrueLengthFromV.push_back(-1.f);
+    showerTreeVars.m_coreTrueLengthFromW.push_back(-1.f);
+    showerTreeVars.m_nInitialMCHits.push_back(-1.f);
+    showerTreeVars.m_nInitialMCHitsU.push_back(-1.f);
+    showerTreeVars.m_nInitialMCHitsV.push_back(-1.f);
+    showerTreeVars.m_nInitialMCHitsW.push_back(-1.f);
+    showerTreeVars.m_nInitialPfoHits.push_back(-1.f);
+    showerTreeVars.m_nInitialPfoHitsU.push_back(-1.f);
+    showerTreeVars.m_nInitialPfoHitsV.push_back(-1.f);
+    showerTreeVars.m_nInitialPfoHitsW.push_back(-1.f);
+    showerTreeVars.m_initialCompleteness.push_back(-1.f);
+    showerTreeVars.m_initialCompletenessU.push_back(-1.f);
+    showerTreeVars.m_initialCompletenessV.push_back(-1.f);
+    showerTreeVars.m_initialCompletenessW.push_back(-1.f);
+    showerTreeVars.m_initialPurity.push_back(-1.f);
+    showerTreeVars.m_initialPurityU.push_back(-1.f);
+    showerTreeVars.m_initialPurityV.push_back(-1.f);
+    showerTreeVars.m_initialPurityW.push_back(-1.f);
+    showerTreeVars.m_recoShrDirAcc.push_back(-1.f);
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void ShowerValidationTool::GetHitsOfType(const CaloHitList &inputList, const HitType hitType, CaloHitVector &outputVector, float &totalEnergy)
+void ShowerValidationTool::FillForFailedPfo(ShowerTreeVars &showerTreeVars)
 {
-    totalEnergy = 0.f;
-
-    for (const CaloHit *const pCaloHit : inputList)
-    {
-        if (pCaloHit->GetHitType() == hitType)
-        {
-            totalEnergy += pCaloHit->GetElectromagneticEnergy();
-            outputVector.push_back(pCaloHit);
-        }
-    }
+    showerTreeVars.m_recoShrVtxX.push_back(-9999.f);
+    showerTreeVars.m_recoShrVtxY.push_back(-9999.f);
+    showerTreeVars.m_recoShrVtxZ.push_back(-9999.f);
+    showerTreeVars.m_recoShrDirX.push_back(-9999.f);
+    showerTreeVars.m_recoShrDirY.push_back(-9999.f);
+    showerTreeVars.m_recoShrDirZ.push_back(-9999.f);
+    showerTreeVars.m_recoShrLength.push_back(-1.f);
+    showerTreeVars.m_recoShrDirAcc.push_back(-1.f);
+    showerTreeVars.m_moliereRadius.push_back(-1.f);
+    showerTreeVars.m_coreRecoLength.push_back(-1.f);
 }
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-
-void ShowerValidationTool::GetInitialRegionVars(const LArHierarchyHelper::MCMatchesVector &mcMatchesVec, const MCParticle *const pMCParticle, 
-    const Pfo *const pPfo, ShowerTreeVars &showerTreeVars)
-{
-    // First, return if MCParticle has no energy/direction - IDK why this happens to our targets
-    if (pMCParticle->GetMomentum().GetMagnitudeSquared() < std::numeric_limits<float>::epsilon())
-    {
-        showerTreeVars.m_nInitialMCHits.push_back(-1.f);
-        showerTreeVars.m_nInitialMCHitsU.push_back(-1.f);
-        showerTreeVars.m_nInitialMCHitsV.push_back(-1.f);
-        showerTreeVars.m_nInitialMCHitsW.push_back(-1.f);
-        showerTreeVars.m_nInitialPfoHits.push_back(-1.f);
-        showerTreeVars.m_nInitialPfoHitsU.push_back(-1.f);
-        showerTreeVars.m_nInitialPfoHitsV.push_back(-1.f);
-        showerTreeVars.m_nInitialPfoHitsW.push_back(-1.f);
-        showerTreeVars.m_initialCompleteness.push_back(-1.f);
-        showerTreeVars.m_initialCompletenessU.push_back(-1.f);
-        showerTreeVars.m_initialCompletenessV.push_back(-1.f);
-        showerTreeVars.m_initialCompletenessW.push_back(-1.f);
-        showerTreeVars.m_initialPurity.push_back(-1.f);
-        showerTreeVars.m_initialPurityU.push_back(-1.f);
-        showerTreeVars.m_initialPurityV.push_back(-1.f);
-        showerTreeVars.m_initialPurityW.push_back(-1.f);
-        return;
-    }
-
-    // Sorry for looping over matches again :( 
-    CaloHitList mcHits;
-    for (const LArHierarchyHelper::MCMatches &mcMatches : mcMatchesVec)
-    {
-        if (mcMatches.GetMC()->GetMCParticles().front() == pMCParticle)
-            mcHits = mcMatches.GetMC()->GetCaloHits();
-    }
-
-    // Get 3D positions/directions
-    const CartesianVector trueShrVtx(pMCParticle->GetVertex());
-    const CartesianVector trueShrDir(pMCParticle->GetMomentum().GetUnitVector());
-    const CartesianVector trueShrDirSeed(trueShrVtx + (trueShrDir * m_initialRegion3D));
-
-    int nTotalInitialMCHits(0), nTotalInitialPfoHits(0), nTotalInitialSharedHits(0);
-    for (const HitType &hitType : {TPC_VIEW_U, TPC_VIEW_V, TPC_VIEW_W})
-    {
-        const CartesianVector trueShrVtx2D(LArGeometryHelper::ProjectPosition(this->GetPandora(), trueShrVtx, hitType));
-        const CartesianVector trueShrDirSeed2D(LArGeometryHelper::ProjectPosition(this->GetPandora(), trueShrDirSeed, hitType));
-        const CartesianVector trueShrDir2D((trueShrDirSeed2D - trueShrVtx2D).GetUnitVector());
-        const float initialRegionL(trueShrDir2D.GetDotProduct(trueShrDirSeed2D - trueShrVtx2D));
-
-        // Find initial region MC hits
-        float totalEnergy(0.f); // need for function call
-        CaloHitVector viewMCHits, initialMCHits;
-        this->GetHitsOfType(mcHits, hitType, viewMCHits, totalEnergy);
-        for (const CaloHit *const pCaloHit : viewMCHits)
-        {
-            const float l(trueShrDir2D.GetDotProduct(pCaloHit->GetPositionVector() - trueShrVtx2D));
-
-            if (l < initialRegionL)
-                initialMCHits.push_back(pCaloHit);
-        }
-        nTotalInitialMCHits += initialMCHits.size();
-
-        int nInitialPfoHits(0), nSharedHits(0);
-        if (pPfo)
-        {
-            // Find initial region pfo hits
-            CaloHitList viewPfoHitList;
-            LArPfoHelper::GetCaloHits(pPfo, hitType, viewPfoHitList);
-            CaloHitVector viewPfoHits(viewPfoHitList.begin(), viewPfoHitList.end()), initialPfoHits;
-            for (const CaloHit *const pCaloHit : viewPfoHits)
-            {
-                const float l(trueShrDir2D.GetDotProduct(pCaloHit->GetPositionVector() - trueShrVtx2D));
-                
-                if (l < initialRegionL)
-                    initialPfoHits.push_back(pCaloHit);
-            }
-            nInitialPfoHits = initialPfoHits.size();
-            nTotalInitialPfoHits += nInitialPfoHits;
-
-            // Get shared hits
-            for (const CaloHit *const pCaloHit : initialMCHits)
-            {
-                if (std::find(initialPfoHits.begin(), initialPfoHits.end(), pCaloHit) != initialPfoHits.end())
-                    ++nSharedHits; 
-            }
-            nTotalInitialSharedHits += nSharedHits;
-        }
-
-        IntVector &viewNInitialMCHits(hitType == TPC_VIEW_U ? showerTreeVars.m_nInitialMCHitsU : 
-            hitType == TPC_VIEW_V ? showerTreeVars.m_nInitialMCHitsV : showerTreeVars.m_nInitialMCHitsW);
-        IntVector &viewNInitialPfoHits(hitType == TPC_VIEW_U ? showerTreeVars.m_nInitialPfoHitsU : 
-            hitType == TPC_VIEW_V ? showerTreeVars.m_nInitialPfoHitsV : showerTreeVars.m_nInitialPfoHitsW);
-        FloatVector &viewCompleteness(hitType == TPC_VIEW_U ? showerTreeVars.m_initialCompletenessU : 
-            hitType == TPC_VIEW_V ? showerTreeVars.m_initialCompletenessV : showerTreeVars.m_initialCompletenessW);
-        FloatVector &viewPurity(hitType == TPC_VIEW_U ? showerTreeVars.m_initialPurityU : 
-            hitType == TPC_VIEW_V ? showerTreeVars.m_initialPurityV : showerTreeVars.m_initialPurityW);
-
-        const float thisCompleteness(initialMCHits.size() == 0 ? 0 : static_cast<float>(nSharedHits) / initialMCHits.size());
-        const float thisPurity(nInitialPfoHits == 0 ? 0 : static_cast<float>(nSharedHits) / nInitialPfoHits);
-        viewNInitialMCHits.push_back(initialMCHits.size());
-        viewNInitialPfoHits.push_back(nInitialPfoHits);
-        viewCompleteness.push_back(thisCompleteness);
-        viewPurity.push_back(thisPurity);
-    }
-
-    const float completeness(nTotalInitialMCHits == 0 ? 0 : static_cast<float>(nTotalInitialSharedHits) / nTotalInitialMCHits);
-    const float purity(nTotalInitialPfoHits == 0 ? 0 : static_cast<float>(nTotalInitialSharedHits) / nTotalInitialPfoHits);
-
-    showerTreeVars.m_nInitialMCHits.push_back(nTotalInitialMCHits);
-    showerTreeVars.m_nInitialPfoHits.push_back(nTotalInitialPfoHits);
-    showerTreeVars.m_initialCompleteness.push_back(completeness);
-    showerTreeVars.m_initialPurity.push_back(purity);
-}
-
-
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 

@@ -22,7 +22,9 @@ using namespace pandora;
 namespace lar_content
 {
 
-TrackValidationTool::TrackValidationTool()
+TrackValidationTool::TrackValidationTool() :
+    m_edgeBuffer(5.f),
+    m_slidingFitWindow(20)
 {
 }
 
@@ -45,158 +47,164 @@ void TrackValidationTool::Run(const Algorithm *const pAlgorithm, const MCParticl
         const MCParticle *const pMC(targetMC.at(i));
         const Pfo *const pBestMatch(bestRecoMatch.at(i));
 
-        this->GetVertexAndEndpointVars(pMC, pBestMatch, trackTreeVars);
+        // MC-related vars
+        this->GetTrueVertexAndEndpointVars(pMC, trackTreeVars);
         this->GetTrueEndRegionVars(mcMatchesVec, pMC, pBestMatch, trackTreeVars);
+
+        CartesianVector recoVertex(0.f, 0.f, 0.f), recoVertexDir(0.f, 0.f, 0.f);
+        CartesianVector recoEndpoint(0.f, 0.f, 0.f), recoEndpointDir(0.f, 0.f, 0.f);
+        bool fitSuccess(pBestMatch && (this->FitTrack(pBestMatch, recoVertex, recoVertexDir, recoEndpoint, recoEndpointDir)));
+
+        if (fitSuccess)
+        {
+            this->GetRecoVertexAndEndpointVars(pMC, recoVertex, recoVertexDir, recoEndpoint, recoEndpointDir, trackTreeVars);
+        }
+        else
+        {
+            this->FillForFailedPfo(trackTreeVars);
+        }
     }
 
-    this->MichelValidation(pAlgorithm, targetMC, bestRecoMatch, trackTreeVars);
+    this->MichelValidation(targetMC, bestRecoMatch, trackTreeVars);
     this->FillTree(trackTreeVars);
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void TrackValidationTool::GetVertexAndEndpointVars(const MCParticle *const pMCParticle, const Pfo *const pPfo, TrackTreeVars &trackTreeVars)
+void TrackValidationTool::GetTrueVertexAndEndpointVars(const MCParticle *const pMCParticle, TrackTreeVars &trackTreeVars)
 {
+    int isLeaving(0);
     const LArMCParticle *const pLArMC(dynamic_cast<const LArMCParticle *>(pMCParticle));
     const CartesianVector trueEndpoint(pLArMC->GetEndpoint());
-
-    // Is leaving?
-    const float buffer(5.f);
-    int isLeaving(0);
     LArGeometryHelper::DetectorBoundaries detectorBoundaries(LArGeometryHelper::GetDetectorBoundaries(this->GetPandora()));
 
-    if ((std::fabs(trueEndpoint.GetX() - detectorBoundaries.m_xBoundaries.first) < buffer) || 
-        (std::fabs(trueEndpoint.GetX() - detectorBoundaries.m_xBoundaries.second) < buffer) ||
-        (std::fabs(trueEndpoint.GetY() - detectorBoundaries.m_yBoundaries.first) < buffer) ||
-        (std::fabs(trueEndpoint.GetY() - detectorBoundaries.m_yBoundaries.second) < buffer) ||
-        (std::fabs(trueEndpoint.GetZ() - detectorBoundaries.m_zBoundaries.first) < buffer) || 
-        (std::fabs(trueEndpoint.GetZ() - detectorBoundaries.m_zBoundaries.second) < buffer))
+    if ((std::fabs(trueEndpoint.GetX() - detectorBoundaries.m_xBoundaries.first) < m_edgeBuffer) || 
+        (std::fabs(trueEndpoint.GetX() - detectorBoundaries.m_xBoundaries.second) < m_edgeBuffer) ||
+        (std::fabs(trueEndpoint.GetY() - detectorBoundaries.m_yBoundaries.first) < m_edgeBuffer) ||
+        (std::fabs(trueEndpoint.GetY() - detectorBoundaries.m_yBoundaries.second) < m_edgeBuffer) ||
+        (std::fabs(trueEndpoint.GetZ() - detectorBoundaries.m_zBoundaries.first) < m_edgeBuffer) || 
+        (std::fabs(trueEndpoint.GetZ() - detectorBoundaries.m_zBoundaries.second) < m_edgeBuffer))
     {
         isLeaving = 1;
     }
 
     trackTreeVars.m_isLeaving.push_back(isLeaving);
-
-
-    if (!pPfo)
-    {
-        trackTreeVars.m_recoEndpointX.push_back(-9999.f);
-        trackTreeVars.m_recoEndpointY.push_back(-9999.f);
-        trackTreeVars.m_recoEndpointZ.push_back(-9999.f);
-        trackTreeVars.m_recoEndpointAcc.push_back(-9999.f);
-        trackTreeVars.m_recoStartDirX.push_back(-9999.f);
-        trackTreeVars.m_recoStartDirY.push_back(-9999.f);
-        trackTreeVars.m_recoStartDirZ.push_back(-9999.f);
-        trackTreeVars.m_startDirAcc.push_back(-9999.f);
-        trackTreeVars.m_recoEndDirX.push_back(-9999.f);
-        trackTreeVars.m_recoEndDirY.push_back(-9999.f);
-        trackTreeVars.m_recoEndDirZ.push_back(-9999.f);
-        trackTreeVars.m_endDirAcc.push_back(-9999.f);
-        trackTreeVars.m_isCorrectOrientation.push_back(-1);
-    }
-    else
-    {
-        ClusterList clusters3D;
-        LArPfoHelper::GetClusters(pPfo, TPC_3D, clusters3D);     
-
-        if (clusters3D.empty())
-        {
-            trackTreeVars.m_recoEndpointX.push_back(-9999.f);
-            trackTreeVars.m_recoEndpointY.push_back(-9999.f);
-            trackTreeVars.m_recoEndpointZ.push_back(-9999.f);
-            trackTreeVars.m_recoEndpointAcc.push_back(-9999.f);
-            trackTreeVars.m_recoStartDirX.push_back(-9999.f);
-            trackTreeVars.m_recoStartDirY.push_back(-9999.f);
-            trackTreeVars.m_recoStartDirZ.push_back(-9999.f);
-            trackTreeVars.m_startDirAcc.push_back(-9999.f);
-            trackTreeVars.m_recoEndDirX.push_back(-9999.f);
-            trackTreeVars.m_recoEndDirY.push_back(-9999.f);
-            trackTreeVars.m_recoEndDirZ.push_back(-9999.f);
-            trackTreeVars.m_endDirAcc.push_back(-9999.f);
-            trackTreeVars.m_isCorrectOrientation.push_back(-1);
-        }
-        else
-        {
-            try
-            {
-                // Perform fit
-                const LArTPC *const pTPC(this->GetPandora().GetGeometry()->GetLArTPCMap().begin()->second);
-                const float pitch(pTPC->GetWirePitchW());
-                ThreeDSlidingFitResult slidingFit3D(clusters3D.front(), 20, pitch);
-
-                // Get reco vertex - this sets the reco orientation
-                const CartesianVector recoVertex(LArPfoHelper::GetVertex(pPfo)->GetPosition());
-
-                // Get reco endpoint
-                const CartesianVector minPos(slidingFit3D.GetGlobalMinLayerPosition());
-                const float minSep((recoVertex - minPos).GetMagnitudeSquared());
-                const CartesianVector maxPos(slidingFit3D.GetGlobalMaxLayerPosition());
-                const float maxSep((recoVertex - maxPos).GetMagnitudeSquared());
-                CartesianVector recoEndpoint(minSep > maxSep ? minPos : maxPos);
-
-                // Endpoint accuracy
-                const float endpointAcc((recoEndpoint - trueEndpoint).GetMagnitude());
-                const float sign((endpointAcc < std::numeric_limits<float>::epsilon() || 
-                                 (pLArMC->GetEndDirection().GetMagnitudeSquared() < std::numeric_limits<float>::epsilon()))
-                                 ? 1.f : (recoEndpoint - trueEndpoint).GetOpeningAngle(pLArMC->GetEndDirection()) < (M_PI * 0.5) ? 1.f : -1.f);
-
-                // Start direction
-                CartesianVector seedDir(recoEndpoint - recoVertex);
-                CartesianVector startDir(0.f, 0.f, 0.f);
-                const float startL(slidingFit3D.GetLongitudinalDisplacement(recoVertex));
-                if (slidingFit3D.GetGlobalFitDirection(startL, startDir) != STATUS_CODE_SUCCESS)
-                    throw StatusCodeException(STATUS_CODE_FAILURE);
-                float startSF(startDir.GetOpeningAngle(seedDir) < (M_PI * 0.5) ? 1.f : -1.f);
-                startDir *= startSF;
-                float startDirAcc(pMCParticle->GetMomentum().GetMagnitudeSquared() < std::numeric_limits<float>::epsilon() ? -1.f : 
-                                  pMCParticle->GetMomentum().GetOpeningAngle(startDir));
-
-                // End direction
-                CartesianVector endDir(0.f, 0.f, 0.f);
-                const float endL(slidingFit3D.GetLongitudinalDisplacement(recoEndpoint));
-                if (slidingFit3D.GetGlobalFitDirection(endL, endDir) != STATUS_CODE_SUCCESS)
-                    throw StatusCodeException(STATUS_CODE_FAILURE);
-                float endSF(endDir.GetOpeningAngle(seedDir) < (M_PI * 0.5) ? 1.f : -1.f);
-                endDir *= endSF;
-                float endDirAcc(pLArMC->GetEndDirection().GetMagnitudeSquared() < std::numeric_limits<float>::epsilon() ? -1.f : 
-                                pLArMC->GetEndDirection().GetOpeningAngle(endDir));
-
-                // Is flipped?
-                int isOrientationCorrect((trueEndpoint - recoEndpoint).GetMagnitudeSquared() < (trueEndpoint - recoVertex).GetMagnitudeSquared() ? 1 : 0);
-
-                trackTreeVars.m_recoEndpointX.push_back(recoEndpoint.GetX());
-                trackTreeVars.m_recoEndpointY.push_back(recoEndpoint.GetY());
-                trackTreeVars.m_recoEndpointZ.push_back(recoEndpoint.GetZ());
-                trackTreeVars.m_recoEndpointAcc.push_back(endpointAcc * sign);
-                trackTreeVars.m_recoStartDirX.push_back(startDir.GetX());
-                trackTreeVars.m_recoStartDirY.push_back(startDir.GetY());
-                trackTreeVars.m_recoStartDirZ.push_back(startDir.GetZ());
-                trackTreeVars.m_startDirAcc.push_back(startDirAcc);
-                trackTreeVars.m_recoEndDirX.push_back(endDir.GetX());
-                trackTreeVars.m_recoEndDirY.push_back(endDir.GetY());
-                trackTreeVars.m_recoEndDirZ.push_back(endDir.GetZ());
-                trackTreeVars.m_endDirAcc.push_back(endDirAcc);
-                trackTreeVars.m_isCorrectOrientation.push_back(isOrientationCorrect);
-            }
-            catch (...)
-            {
-                trackTreeVars.m_recoEndpointX.push_back(-9999.f);
-                trackTreeVars.m_recoEndpointY.push_back(-9999.f);
-                trackTreeVars.m_recoEndpointZ.push_back(-9999.f);
-                trackTreeVars.m_recoEndpointAcc.push_back(-9999.f);
-                trackTreeVars.m_recoStartDirX.push_back(-9999.f);
-                trackTreeVars.m_recoStartDirY.push_back(-9999.f);
-                trackTreeVars.m_recoStartDirZ.push_back(-9999.f);
-                trackTreeVars.m_startDirAcc.push_back(-9999.f);
-                trackTreeVars.m_recoEndDirX.push_back(-9999.f);
-                trackTreeVars.m_recoEndDirY.push_back(-9999.f);
-                trackTreeVars.m_recoEndDirZ.push_back(-9999.f);
-                trackTreeVars.m_endDirAcc.push_back(-9999.f);
-                trackTreeVars.m_isCorrectOrientation.push_back(-1);
-            }
-        }
-    }
 }
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+bool TrackValidationTool::FitTrack(const Pfo *const pPfo, CartesianVector &vertex, CartesianVector &vertexDir, 
+    CartesianVector &endpoint, CartesianVector &endpointDir)
+{
+    ClusterList clusters3D;
+    LArPfoHelper::GetClusters(pPfo, TPC_3D, clusters3D);
+
+    if (clusters3D.empty())
+        return false;
+
+    try
+    {
+        // Perform fit
+        const LArTPC *const pTPC(this->GetPandora().GetGeometry()->GetLArTPCMap().begin()->second);
+        const float pitch(pTPC->GetWirePitchW());
+        ThreeDSlidingFitResult slidingFit3D(clusters3D.front(), m_slidingFitWindow, pitch);
+
+        // Get reco vertex - this sets the reco orientation
+        vertex = LArPfoHelper::GetVertex(pPfo)->GetPosition();
+
+        // Get reco endpoint
+        const CartesianVector minPos(slidingFit3D.GetGlobalMinLayerPosition());
+        const float minSep((vertex - minPos).GetMagnitudeSquared());
+        const CartesianVector maxPos(slidingFit3D.GetGlobalMaxLayerPosition());
+        const float maxSep((vertex - maxPos).GetMagnitudeSquared());
+        endpoint = minSep > maxSep ? minPos : maxPos;
+
+        // Start direction
+        CartesianVector seedDir(endpoint - vertex);
+        const float vertexL(slidingFit3D.GetLongitudinalDisplacement(vertex));
+
+        if (slidingFit3D.GetGlobalFitDirection(vertexL, vertexDir) != STATUS_CODE_SUCCESS)
+            return false;
+
+        float vertexSF(vertexDir.GetOpeningAngle(seedDir) < (M_PI * 0.5) ? 1.f : -1.f);
+        vertexDir *= vertexSF;
+
+        // End direction
+        const float endL(slidingFit3D.GetLongitudinalDisplacement(endpoint));
+
+        if (slidingFit3D.GetGlobalFitDirection(endL, endpointDir) != STATUS_CODE_SUCCESS)
+            return false;
+
+        float endSF(endpointDir.GetOpeningAngle(seedDir) < (M_PI * 0.5) ? 1.f : -1.f);
+        endpointDir *= endSF;
+    }
+    catch (...)
+    {
+        return false;
+    }
+
+    return true;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void TrackValidationTool::GetRecoVertexAndEndpointVars(const MCParticle *const pMCParticle, const CartesianVector &recoVertex, const CartesianVector &recoVertexDir,
+    const CartesianVector &recoEndpoint, const CartesianVector &recoEndpointDir, TrackTreeVars &trackTreeVars)
+{
+    const LArMCParticle *const pLArMC(dynamic_cast<const LArMCParticle *>(pMCParticle));
+    const bool doesMCHaveStartDir(pMCParticle->GetMomentum().GetMagnitudeSquared() > std::numeric_limits<float>::epsilon());
+    const bool doesMCHaveEndDir(pLArMC->GetEndDirection().GetMagnitudeSquared() > std::numeric_limits<float>::epsilon());
+    const CartesianVector trueEndpoint(pLArMC->GetEndpoint());
+
+    // Endpoint accuracy
+    float endpointAcc((recoEndpoint - trueEndpoint).GetMagnitude());
+    const float sign((endpointAcc < std::numeric_limits<float>::epsilon() || !doesMCHaveEndDir)
+                     ? 1.f : (recoEndpoint - trueEndpoint).GetOpeningAngle(pLArMC->GetEndDirection()) < (M_PI * 0.5) ? 1.f : -1.f);
+    endpointAcc *= sign;
+
+    // Start direction
+    float startDirAcc(doesMCHaveStartDir ? pMCParticle->GetMomentum().GetOpeningAngle(recoVertexDir) : -1.f);
+
+    // End direction
+    float endDirAcc(doesMCHaveEndDir ? pLArMC->GetEndDirection().GetOpeningAngle(recoEndpointDir) : -1.f);
+
+    // Is flipped?
+    int isOrientationCorrect((trueEndpoint - recoEndpoint).GetMagnitudeSquared() < (trueEndpoint - recoVertex).GetMagnitudeSquared() ? 1 : 0);
+
+    trackTreeVars.m_recoEndpointX.push_back(recoEndpoint.GetX());
+    trackTreeVars.m_recoEndpointY.push_back(recoEndpoint.GetY());
+    trackTreeVars.m_recoEndpointZ.push_back(recoEndpoint.GetZ());
+    trackTreeVars.m_recoEndpointAcc.push_back(endpointAcc);
+    trackTreeVars.m_recoStartDirX.push_back(recoVertexDir.GetX());
+    trackTreeVars.m_recoStartDirY.push_back(recoVertexDir.GetY());
+    trackTreeVars.m_recoStartDirZ.push_back(recoVertexDir.GetZ());
+    trackTreeVars.m_startDirAcc.push_back(startDirAcc);
+    trackTreeVars.m_recoEndDirX.push_back(recoEndpointDir.GetX());
+    trackTreeVars.m_recoEndDirY.push_back(recoEndpointDir.GetY());
+    trackTreeVars.m_recoEndDirZ.push_back(recoEndpointDir.GetZ());
+    trackTreeVars.m_endDirAcc.push_back(endDirAcc);
+    trackTreeVars.m_isCorrectOrientation.push_back(isOrientationCorrect);
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void TrackValidationTool::FillForFailedPfo(TrackTreeVars &trackTreeVars)
+{
+    trackTreeVars.m_recoEndpointX.push_back(-9999.f);
+    trackTreeVars.m_recoEndpointY.push_back(-9999.f);
+    trackTreeVars.m_recoEndpointZ.push_back(-9999.f);
+    trackTreeVars.m_recoEndpointAcc.push_back(-9999.f);
+    trackTreeVars.m_recoStartDirX.push_back(-9999.f);
+    trackTreeVars.m_recoStartDirY.push_back(-9999.f);
+    trackTreeVars.m_recoStartDirZ.push_back(-9999.f);
+    trackTreeVars.m_startDirAcc.push_back(-9999.f);
+    trackTreeVars.m_recoEndDirX.push_back(-9999.f);
+    trackTreeVars.m_recoEndDirY.push_back(-9999.f);
+    trackTreeVars.m_recoEndDirZ.push_back(-9999.f);
+    trackTreeVars.m_endDirAcc.push_back(-9999.f);
+    trackTreeVars.m_isCorrectOrientation.push_back(-1);
+}
+
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -313,10 +321,9 @@ void TrackValidationTool::GetTrueEndRegionVars(const LArHierarchyHelper::MCMatch
     trackTreeVars.m_endpointPurity.push_back(purity);
 }
 
-
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void TrackValidationTool::MichelValidation(const Algorithm *const pAlgorithm, const MCParticleVector &targetMC, const PfoVector &bestRecoMatch,
+void TrackValidationTool::MichelValidation(const MCParticleVector &targetMC, const PfoVector &bestRecoMatch,
     TrackTreeVars &trackTreeVars)
 {
     for (unsigned int iMC = 0; iMC < targetMC.size(); ++iMC)
@@ -498,8 +505,14 @@ void TrackValidationTool::FillTree(TrackTreeVars &trackTreeVars)
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-StatusCode TrackValidationTool::ReadSettings(const TiXmlHandle /*xmlHandle*/)
+StatusCode TrackValidationTool::ReadSettings(const TiXmlHandle xmlHandle)
 {
+    PANDORA_RETURN_RESULT_IF_AND_IF(
+        STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "EdgeBuffer", m_edgeBuffer));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(
+        STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "SlidingFitWindow", m_slidingFitWindow));
+
     return STATUS_CODE_SUCCESS;
 }
 

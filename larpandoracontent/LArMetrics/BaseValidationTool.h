@@ -22,7 +22,6 @@ namespace lar_content
 class BaseValidationTool : public pandora::AlgorithmTool
 {
 public:
-
     virtual void Run(const pandora::Algorithm *const pAlgorithm, const pandora::MCParticle *const pMCNu, 
         const LArHierarchyHelper::MCMatchesVector &mcMatchesVec, const pandora::MCParticleVector &targetMC, 
         const pandora::PfoVector &bestRecoMatch) = 0;

@@ -12,12 +12,10 @@
 #include "Pandora/AlgorithmTool.h"
 
 #include "larpandoracontent/LArHelpers/LArHierarchyHelper.h"
-
 #include "larpandoracontent/LArMetrics/BaseValidationTool.h"
 
 namespace lar_content
 {
-
 /**
  *  @brief  EventValidationTool class
  */
@@ -27,7 +25,6 @@ public:
 
 struct EventTreeVars
 {
-
     EventTreeVars();
 
     int m_run;
@@ -62,7 +59,6 @@ private:
 
     std::string m_nuVertexPass1ListName;
     std::string m_nuVertexPass2ListName;
-    int m_eventNumber;
 };
 
 //------------------------------------------------------------------------------------------------------------------------------------------

@@ -70,19 +70,24 @@ struct ShowerTreeVars
         const LArHierarchyHelper::MCMatchesVector &mcMatchesVec, const pandora::MCParticleVector &targetMC, 
         const pandora::PfoVector &bestRecoMatch);
 
+    void GetTrueLength(const LArHierarchyHelper::MCMatchesVector &mcMatchesVec, const pandora::MCParticle *const pMCParticle,
+        ShowerTreeVars &showerTreeVars);
+
+    void GetInitialRegionVars(const LArHierarchyHelper::MCMatchesVector &mcMatchesVec, const pandora::MCParticle *const pMCParticle, 
+        const pandora::Pfo *const pPfo, ShowerTreeVars &showerTreeVars);
+
     bool FitShower(const pandora::Pfo *const pPfo, pandora::CartesianVector &showerVertex, 
         pandora::CartesianVector &showerDirection, float &showerLength);
+
+    void GetRecoVertexInfo(const pandora::CartesianVector &recoShrVtx, const pandora::CartesianVector &recoShrDir, const float recoShrLength,
+        const pandora::MCParticle *const pMC, ShowerTreeVars &showerTreeVars);
 
     void GetMoliere(const pandora::Pfo *const pPfo, const pandora::CartesianVector &showerVertex, const pandora::CartesianVector &showerDirection,
         ShowerTreeVars &showerTreeVars);
 
-    void GetTrueLength(const LArHierarchyHelper::MCMatchesVector &mcMatchesVec, const pandora::MCParticle *const pMCParticle,
-        ShowerTreeVars &showerTreeVars);
+    void FillForNullMCDir(ShowerTreeVars &showerTreeVars);
 
-    void GetHitsOfType(const pandora::CaloHitList &inputList, const pandora::HitType hitType, pandora::CaloHitVector &outputVector, float &totalEnergy);
-
-    void GetInitialRegionVars(const LArHierarchyHelper::MCMatchesVector &mcMatchesVec, const pandora::MCParticle *const pMCParticle, 
-        const pandora::Pfo *const pPfo, ShowerTreeVars &showerTreeVars);
+    void FillForFailedPfo(ShowerTreeVars &showerTreeVars);
 
     void FillTree(ShowerTreeVars &showerTreeVars);
 

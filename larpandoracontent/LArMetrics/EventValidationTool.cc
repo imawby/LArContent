@@ -20,8 +20,7 @@ namespace lar_content
 
 EventValidationTool::EventValidationTool() :
     m_nuVertexPass1ListName("NeutrinoVertices3D_Pass1"),
-    m_nuVertexPass2ListName("NeutrinoVertices3D"),
-    m_eventNumber(-1)
+    m_nuVertexPass2ListName("NeutrinoVertices3D")
 {
 }
 
@@ -31,8 +30,6 @@ void EventValidationTool::Run(const Algorithm *const pAlgorithm, const MCParticl
     const LArHierarchyHelper::MCMatchesVector &/*mcMatchesVec*/, const MCParticleVector &targetMC, 
     const PfoVector &/*bestRecoMatch*/)
 {
-    ++m_eventNumber;
-
     if (PandoraContentApi::GetSettings(*pAlgorithm)->ShouldDisplayAlgorithmInfo())
         std::cout << "----> Running Algorithm Tool: " << this->GetInstanceName() << ", " << this->GetType() << std::endl;
 
@@ -45,67 +42,6 @@ void EventValidationTool::Run(const Algorithm *const pAlgorithm, const MCParticl
     this->GetNeutrinoVariables(pAlgorithm, pMCNu, eventTreeVars);
     this->GetInteractionTypeVariables(pMCNu, eventTreeVars);
     this->FillTree(eventTreeVars);
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-
-void EventValidationTool::GetInteractionTypeVariables(const MCParticle *const pMCNu, EventTreeVars &eventTreeVars)
-{
-    eventTreeVars.m_isCC = 0;
-    eventTreeVars.m_nuPDG = pMCNu->GetParticleId();
-    eventTreeVars.m_nuEnergy = pMCNu->GetEnergy(); 
-
-    // Visible energy
-    const LArMCParticle *const pLArMCParticle(dynamic_cast<const LArMCParticle *>(pMCNu));
-    eventTreeVars.m_nuVisEnergy = pLArMCParticle->GetVisibleEnergy();
-
-    if (std::abs(pMCNu->GetParticleId()) == 12)
-    {
-        for (const MCParticle *const pMCParticle : pMCNu->GetDaughterList())
-        {
-            if (std::abs(pMCParticle->GetParticleId()) == 11)
-                eventTreeVars.m_isCC = 1;
-        }
-    }
-    else if (std::abs(pMCNu->GetParticleId()) == 14)
-    {
-        for (const MCParticle *const pMCParticle : pMCNu->GetDaughterList())
-        {
-            if (std::abs(pMCParticle->GetParticleId()) == 13)
-                eventTreeVars.m_isCC = 1;
-        }
-    }
-    else if (std::abs(pMCNu->GetParticleId()) == 16)
-    {
-        for (const MCParticle *const pMCParticle : pMCNu->GetDaughterList())
-        {
-            if (std::abs(pMCParticle->GetParticleId()) == 15)
-                eventTreeVars.m_isCC = 1;
-        }
-    }
-    // const InteractionDescriptor descriptor(LArInteractionTypeHelper::GetInteractionDescriptor(pMCNu->GetDaughterList()));
-    // const int isCC(descriptor.IsCC());
-    // const int isQE(descriptor.IsQE());
-    // const int isRes(descriptor.IsResonant());
-    // const int isDIS(descriptor.IsDIS());
-    // const int isCoh(descriptor.IsCoherent());
-    // const int isOther(!(isCC || isQE || isRes || isDIS));
-    // const int nPiZero(static_cast<int>(descriptor.GetNumPiZero()));
-    // const int nPiPlus(static_cast<int>(descriptor.GetNumPiPlus()));
-    // const int nPiMinus(static_cast<int>(descriptor.GetNumPiMinus()));
-    // const int nPhotons(static_cast<int>(descriptor.GetNumPhotons()));
-    // const int nProtons(static_cast<int>(descriptor.GetNumProtons()));
-    //PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "EventTree", "MCInt_IsCC", isCC));
-    // PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "EventTree", "MCInt_IsQE", isQE));
-    // PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "EventTree", "MCInt_IsRes", isRes));
-    // PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "EventTree", "MCInt_IsDIS", isDIS));
-    // PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "EventTree", "MCInt_IsCoh", isCoh));
-    // PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "EventTree", "MCInt_IsOther", isOther));
-    // PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "EventTree", "MCInt_NPiZero", nPiZero));
-    // PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "EventTree", "MCInt_NPiPlus", nPiPlus));
-    // PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "EventTree", "MCInt_NPiMinus", nPiMinus));
-    // PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "EventTree", "MCInt_NPhotons", nPhotons));
-    // PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "EventTree", "MCInt_NProtons", nProtons));
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -137,12 +73,48 @@ void EventValidationTool::GetNeutrinoVariables(const Algorithm *const pAlgorithm
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
+void EventValidationTool::GetInteractionTypeVariables(const MCParticle *const pMCNu, EventTreeVars &eventTreeVars)
+{
+    eventTreeVars.m_nuPDG = pMCNu->GetParticleId();
+    eventTreeVars.m_nuEnergy = pMCNu->GetEnergy(); 
+    const LArMCParticle *const pLArMCParticle(dynamic_cast<const LArMCParticle *>(pMCNu));
+    eventTreeVars.m_nuVisEnergy = pLArMCParticle->GetVisibleEnergy();
+
+    // CC or NC?
+    eventTreeVars.m_isCC = 0;
+    if (std::abs(pMCNu->GetParticleId()) == 12)
+    {
+        for (const MCParticle *const pMCParticle : pMCNu->GetDaughterList())
+        {
+            if (std::abs(pMCParticle->GetParticleId()) == 11)
+                eventTreeVars.m_isCC = 1;
+        }
+    }
+    else if (std::abs(pMCNu->GetParticleId()) == 14)
+    {
+        for (const MCParticle *const pMCParticle : pMCNu->GetDaughterList())
+        {
+            if (std::abs(pMCParticle->GetParticleId()) == 13)
+                eventTreeVars.m_isCC = 1;
+        }
+    }
+    else if (std::abs(pMCNu->GetParticleId()) == 16)
+    {
+        for (const MCParticle *const pMCParticle : pMCNu->GetDaughterList())
+        {
+            if (std::abs(pMCParticle->GetParticleId()) == 15)
+                eventTreeVars.m_isCC = 1;
+        }
+    }
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
 void EventValidationTool::FillTree(EventTreeVars &eventTreeVars)
 {
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "EventTree", "Run", eventTreeVars.m_run));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "EventTree", "Subrun", eventTreeVars.m_subrun));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "EventTree", "Event", eventTreeVars.m_event));
-    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "EventTree", "EventCount", m_eventNumber));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "EventTree", "MCEvent_NTargets", eventTreeVars.m_nTargets));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "EventTree", "MCNu_PDG", eventTreeVars.m_nuPDG));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "EventTree", "MCNu_Energy", eventTreeVars.m_nuEnergy));

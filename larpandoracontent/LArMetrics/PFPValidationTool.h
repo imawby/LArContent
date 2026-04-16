@@ -99,7 +99,9 @@ struct PFPTreeVars
         const LArHierarchyHelper::MCMatchesVector &mcMatchesVec, const pandora::MCParticleVector &targetMC, 
         const pandora::PfoVector &bestRecoMatch);
 
-    void GetMCParticleInfo(const pandora::MCParticle *const pMCTarget, PFPTreeVars &pfpTreeVars);
+    void GetMCParticleInfo(const pandora::MCParticle *const pMCNu, const pandora::MCParticle *const pMCTarget, PFPTreeVars &pfpTreeVars);
+
+    void GetRecoParticleInfo(const pandora::MCParticle *const pMCTarget, const pandora::Pfo *const pBestMatch, PFPTreeVars &pfpTreeVars);
 
     void GetMatchingInfo(const LArHierarchyHelper::MCMatchesVector &mcMatchesVec,
         const pandora::MCParticle *const pMCTarget, const pandora::Pfo *const pBestMatch, PFPTreeVars &pfpTreeVars);
@@ -110,12 +112,6 @@ struct PFPTreeVars
     void GetAltMetrics(const LArHierarchyHelper::MCHierarchy::Node *const pMCNode, const LArHierarchyHelper::RecoHierarchy::Node *const pRecoNode,
         float &completeness, float &purity);
 
-    void LengthValidation(const pandora::Algorithm *const pAlgorithm, const pandora::MCParticle *const pMCNu, 
-        const pandora::MCParticle *const pTargetMC, const pandora::Pfo *const pBestMatch, PFPTreeVars &pfpTreeVars);
-
-    void PIDValidation(const pandora::Algorithm *const pAlgorithm, const pandora::MCParticle *const pTargetMC, 
-        const pandora::Pfo *const pBestMatch, PFPTreeVars &pfpTreeVars);
-
     void FillTree(PFPTreeVars &pfpTreeVars);
 
 private:
@@ -124,7 +120,7 @@ private:
     const pandora::VertexList *m_pNuVertexList;
 
     std::string m_nuVertexListName;
-    int m_eventNumber;
+    float m_maxMichelSep;
 };
 
 } // namespace lar_content

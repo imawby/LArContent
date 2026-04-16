@@ -30,9 +30,6 @@ public:
 
     ~ValidationAlgorithm();
 
-    std::string GetFileName() const;
-    std::string GetTreeName() const;
-
 private:
     typedef std::vector<BaseValidationTool *> ValidationToolVector;
 
@@ -56,20 +53,6 @@ private:
 
     ValidationToolVector m_validationToolVector;
 };
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-
-inline std::string ValidationAlgorithm::GetFileName() const
-{
-    return m_fileName;
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-
-inline std::string ValidationAlgorithm::GetTreeName() const
-{
-    return m_treeName;
-}
 
 } // namespace lar_content
 

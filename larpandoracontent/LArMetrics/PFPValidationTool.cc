@@ -10,7 +10,6 @@
 
 #include "larpandoracontent/LArHelpers/LArPfoHelper.h"
 #include "larpandoracontent/LArHelpers/LArGeometryHelper.h"
-
 #include "larpandoracontent/LArMetrics/PFPValidationTool.h"
 
 using namespace pandora;
@@ -21,7 +20,7 @@ namespace lar_content
 PFPValidationTool::PFPValidationTool() :
     m_pNuVertexList(nullptr),
     m_nuVertexListName("NeutrinoVertices3D"),
-    m_eventNumber(-1)
+    m_maxMichelSep(3.f)
 {
 }
 
@@ -30,12 +29,10 @@ PFPValidationTool::PFPValidationTool() :
 void PFPValidationTool::Run(const Algorithm *const pAlgorithm, const MCParticle *const pMCNu, const LArHierarchyHelper::MCMatchesVector &mcMatchesVec, 
     const MCParticleVector &targetMC, const PfoVector &bestRecoMatch)
 {
-    ++m_eventNumber;
-
     if (PandoraContentApi::GetSettings(*pAlgorithm)->ShouldDisplayAlgorithmInfo())
         std::cout << "----> Running Algorithm Tool: " << this->GetInstanceName() << ", " << this->GetType() << std::endl;
 
-    // Reco neutrino vertex (we'll handle if not found)
+    // Get reco neutrino vertex (will handle if not found)
     PandoraContentApi::GetList(*pAlgorithm, m_nuVertexListName, m_pNuVertexList);
 
     PFPTreeVars pfpTreeVars;
@@ -48,42 +45,259 @@ void PFPValidationTool::Run(const Algorithm *const pAlgorithm, const MCParticle 
         const MCParticle *const pMC(targetMC.at(i));
         const Pfo *const pBestMatch(bestRecoMatch.at(i));
 
-        // if (pBestMatch)
-        // {
-        //     // W view
-        //     CartesianVector endPos(pMC->GetEndpoint());
-        //     CartesianVector endPosW(LArGeometryHelper::ProjectPosition(this->GetPandora(), endPos, TPC_VIEW_W));
-        //     const LArMCParticle *const pLArMC(dynamic_cast<const LArMCParticle *>(pMC));
-        //     std::vector<float> x(pLArMC->GetX());
-        //     std::vector<float> y(pLArMC->GetY());
-        //     std::vector<float> z(pLArMC->GetZ());
-        //     CartesianVector endDir(pLArMC->GetEndDirection());
-        //     CartesianVector endSeed(endPos + (endDir * 20.f));
-        //     CartesianVector endSeedW(LArGeometryHelper::ProjectPosition(this->GetPandora(), endSeed, TPC_VIEW_W));
-        //     ClusterList clustersVis;
-        //     LArPfoHelper::GetClusters(pBestMatch, TPC_VIEW_W, clustersVis);
-        //     PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &clustersVis, "PFO", BLUE);
-        //     PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &endPosW, "end position", RED, 2);
-        //     PandoraMonitoringApi::AddLineToVisualization(this->GetPandora(), &endPosW, &endSeedW, "end direction", RED, 2, 2);
+        this->GetMCParticleInfo(pMCNu, pMC, pfpTreeVars);
 
-        //     for (unsigned int i = 0; i < x.size(); ++i)
-        //     {
-        //         CartesianVector position(x.at(i), y.at(i), z.at(i));
-        //         CartesianVector positionW(LArGeometryHelper::ProjectPosition(this->GetPandora(), position, TPC_VIEW_W));
-        //         PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &positionW, "traj point", BLACK, 2);
-        //     }
+        if (pBestMatch)
+        {
+            this->GetRecoParticleInfo(pMC, pBestMatch, pfpTreeVars);
+        }
+        else
+        {
+            pfpTreeVars.m_recoVertexX.push_back(-9999.f);
+            pfpTreeVars.m_recoVertexY.push_back(-9999.f);
+            pfpTreeVars.m_recoVertexZ.push_back(-9999.f);
+            pfpTreeVars.m_vertexAcc.push_back(-9999.f);
+            pfpTreeVars.m_recoLength.push_back(-1.f);
+            pfpTreeVars.m_recoDisplacement.push_back(-1.f);
+            pfpTreeVars.m_isTrack.push_back(-1);
+            pfpTreeVars.m_isShower.push_back(-1);
+        }
 
-        //     PandoraMonitoringApi::ViewEvent(this->GetPandora());
-        // }
-
-        this->GetMCParticleInfo(pMC, pfpTreeVars);
         this->GetMatchingInfo(mcMatchesVec, pMC, pBestMatch, pfpTreeVars);
-        this->LengthValidation(pAlgorithm, pMCNu, pMC, pBestMatch, pfpTreeVars);
-        this->PIDValidation(pAlgorithm, pMC, pBestMatch, pfpTreeVars);
         this->GetAltMatchInfo(mcMatchesVec, targetMC, pMC, pBestMatch, pfpTreeVars);
     }
 
     this->FillTree(pfpTreeVars);
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void PFPValidationTool::GetMCParticleInfo(const MCParticle *const pMCNu, const MCParticle *const pMCTarget, PFPTreeVars &pfpTreeVars)
+{
+    // Energy
+    pfpTreeVars.m_trueEnergy.push_back(pMCTarget->GetEnergy());
+    const LArMCParticle *const pLArMCParticle(dynamic_cast<const LArMCParticle *>(pMCTarget));
+    pfpTreeVars.m_trueVisEnergy.push_back(pLArMCParticle->GetVisibleEnergy());
+
+    // Vertex
+    const CartesianVector &trueVertex((pMCTarget->GetParticleId() == 22) ? pMCTarget->GetEndpoint() : pMCTarget->GetVertex());
+    const CartesianVector &trueNuVertex(pMCNu->GetVertex());
+    pfpTreeVars.m_trueVertexX.push_back(trueVertex.GetX());
+    pfpTreeVars.m_trueVertexY.push_back(trueVertex.GetY());
+    pfpTreeVars.m_trueVertexZ.push_back(trueVertex.GetZ());
+    pfpTreeVars.m_trueDisplacement.push_back((trueNuVertex - trueVertex).GetMagnitude());
+
+    // Endpoint
+    const CartesianVector &trueEnd(pMCTarget->GetEndpoint());
+    pfpTreeVars.m_trueEndX.push_back(trueEnd.GetX());
+    pfpTreeVars.m_trueEndY.push_back(trueEnd.GetY());
+    pfpTreeVars.m_trueEndZ.push_back(trueEnd.GetZ());
+
+    // Length
+    pfpTreeVars.m_trueLength.push_back((trueVertex - trueEnd).GetMagnitude());
+
+    // Initial direction
+    const CartesianVector &mcMom(pMCTarget->GetMomentum());
+    const float momMagSq(mcMom.GetMagnitudeSquared());
+    if (momMagSq < std::numeric_limits<float>::epsilon())
+    {
+        pfpTreeVars.m_trueThetaXZ.push_back(-4.f);
+        pfpTreeVars.m_trueThetaYZ.push_back(-4.f);
+        pfpTreeVars.m_trueDirX.push_back(-9999.f);
+        pfpTreeVars.m_trueDirY.push_back(-9999.f);
+        pfpTreeVars.m_trueDirZ.push_back(-9999.f);
+    }
+    else
+    {
+        pfpTreeVars.m_trueThetaXZ.push_back(atan2(mcMom.GetX(), mcMom.GetZ()));
+        pfpTreeVars.m_trueThetaYZ.push_back(asin(mcMom.GetY() / mcMom.GetMagnitude()));
+        const CartesianVector trueDir(mcMom.GetUnitVector());
+        pfpTreeVars.m_trueDirX.push_back(trueDir.GetX());
+        pfpTreeVars.m_trueDirY.push_back(trueDir.GetY());
+        pfpTreeVars.m_trueDirZ.push_back(trueDir.GetZ());
+    }
+
+    // End direction
+    const CartesianVector trueEndDir(pLArMCParticle->GetEndDirection());
+    if (momMagSq < std::numeric_limits<float>::epsilon())
+    {
+        pfpTreeVars.m_trueEndDirX.push_back(-9999.f);
+        pfpTreeVars.m_trueEndDirY.push_back(-9999.f);
+        pfpTreeVars.m_trueEndDirZ.push_back(-9999.f);
+    }
+    else
+    {
+        pfpTreeVars.m_trueEndDirX.push_back(trueEndDir.GetX());
+        pfpTreeVars.m_trueEndDirY.push_back(trueEndDir.GetY());
+        pfpTreeVars.m_trueEndDirZ.push_back(trueEndDir.GetZ());
+    }
+
+    // TruePDG
+    int truePDG(pMCTarget->GetParticleId());
+    if (abs(pMCTarget->GetParticleId()) == 22)     // 111 = photon from pi0
+    {
+        if (pMCTarget->GetParentList().front()->GetParticleId() == 111)
+            truePDG = 111;
+    }
+    else if (std::abs(pMCTarget->GetParticleId()) == 11)    // 777 = michel electron
+    {
+        const MCParticle *const pMCParent(pMCTarget->GetParentList().front());
+
+        if ((abs(pMCParent->GetParticleId()) == 13) || (abs(pMCParent->GetParticleId()) == 211))
+        {
+            if ((pMCParent->GetEndpoint() - pMCTarget->GetVertex()).GetMagnitude() < m_maxMichelSep)
+                truePDG = 777;
+        }
+    }
+    pfpTreeVars.m_truePDG.push_back(truePDG);
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void PFPValidationTool::GetRecoParticleInfo(const MCParticle *const pMCTarget, const Pfo *const pBestMatch, PFPTreeVars &pfpTreeVars)
+{
+    try
+    {
+        const Vertex *const pRecoVertex(LArPfoHelper::GetVertex(pBestMatch));
+        pfpTreeVars.m_recoVertexX.push_back(pRecoVertex->GetPosition().GetX());
+        pfpTreeVars.m_recoVertexY.push_back(pRecoVertex->GetPosition().GetY());
+        pfpTreeVars.m_recoVertexZ.push_back(pRecoVertex->GetPosition().GetZ());
+
+        // Signed vertexAcc
+        const CartesianVector &trueVertex((pMCTarget->GetParticleId() == 22) ? pMCTarget->GetEndpoint() : pMCTarget->GetVertex());
+        const float vertexAcc((pRecoVertex->GetPosition() - trueVertex).GetMagnitude());
+        const float sign((vertexAcc < std::numeric_limits<float>::epsilon() || pMCTarget->GetMomentum().GetMagnitude() < std::numeric_limits<float>::epsilon()) ? 1.f : 
+                             (pRecoVertex->GetPosition() - trueVertex).GetOpeningAngle(pMCTarget->GetMomentum()) < (M_PI * 0.5) ? 1.f : -1.f);
+        pfpTreeVars.m_vertexAcc.push_back(vertexAcc * sign);
+
+        try
+        {
+            pfpTreeVars.m_recoLength.push_back(std::sqrt(LArPfoHelper::GetThreeDLengthSquared(pBestMatch)));
+        }
+        catch(...)
+        {
+            pfpTreeVars.m_recoLength.push_back(-1.f);
+        }
+
+        if (m_pNuVertexList && !m_pNuVertexList->empty())
+        {
+            pfpTreeVars.m_recoDisplacement.push_back((m_pNuVertexList->front()->GetPosition() - pRecoVertex->GetPosition()).GetMagnitude());
+        }
+        else
+        {
+            pfpTreeVars.m_recoDisplacement.push_back(-1.f);
+        }
+    }
+    catch(...)
+    {
+        pfpTreeVars.m_recoVertexX.push_back(-9999.f);
+        pfpTreeVars.m_recoVertexY.push_back(-9999.f);
+        pfpTreeVars.m_recoVertexZ.push_back(-9999.f);
+        pfpTreeVars.m_vertexAcc.push_back(-9999.f);
+        pfpTreeVars.m_recoLength.push_back(-1.f);
+        pfpTreeVars.m_recoDisplacement.push_back(-1.f);
+    }    
+
+    // PID
+    pfpTreeVars.m_isTrack.push_back(LArPfoHelper::IsTrack(pBestMatch));
+    pfpTreeVars.m_isShower.push_back(LArPfoHelper::IsShower(pBestMatch));
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void PFPValidationTool::GetMatchingInfo(const LArHierarchyHelper::MCMatchesVector &mcMatchesVec, 
+    const MCParticle *const pMCTarget, const Pfo *const pBestMatch, PFPTreeVars &pfpTreeVars)
+{
+    // Need to loop over matches to find this match :(
+    for (const LArHierarchyHelper::MCMatches &mcMatches : mcMatchesVec)
+    {
+        if (mcMatches.GetMC()->GetMCParticles().front() != pMCTarget)
+            continue;
+
+        const CaloHitList &mcHits(mcMatches.GetMC()->GetCaloHits());
+        pfpTreeVars.m_nMCHits2D.push_back(mcHits.size());
+        
+        for (const HitType &hitType : {TPC_VIEW_U, TPC_VIEW_V, TPC_VIEW_W})
+        {
+            // Get vectors to fill
+            IntVector &viewNMCHits(hitType == TPC_VIEW_U ? pfpTreeVars.m_nMCHitsU : hitType == TPC_VIEW_V ? pfpTreeVars.m_nMCHitsV : 
+                pfpTreeVars.m_nMCHitsW);
+            IntVector &viewNPfoHits(hitType == TPC_VIEW_U ? pfpTreeVars.m_nPfoHitsU : hitType == TPC_VIEW_V ? pfpTreeVars.m_nPfoHitsV : 
+                pfpTreeVars.m_nPfoHitsW);
+            FloatVector &viewCompleteness(hitType == TPC_VIEW_U ? pfpTreeVars.m_completenessU : hitType == TPC_VIEW_V ? pfpTreeVars.m_completenessV : 
+                pfpTreeVars.m_completenessW);
+            FloatVector &viewCompletenessADC(hitType == TPC_VIEW_U ? pfpTreeVars.m_completenessADCU : hitType == TPC_VIEW_V ? pfpTreeVars.m_completenessADCV : 
+                pfpTreeVars.m_completenessADCW);
+            FloatVector &viewPurity(hitType == TPC_VIEW_U ? pfpTreeVars.m_purityU : hitType == TPC_VIEW_V ? pfpTreeVars.m_purityV : 
+                pfpTreeVars.m_purityW);
+            FloatVector &viewPurityADC(hitType == TPC_VIEW_U ? pfpTreeVars.m_purityADCU : hitType == TPC_VIEW_V ? pfpTreeVars.m_purityADCV : 
+                pfpTreeVars.m_purityADCW);
+
+            // Calculate matching vars
+            float totalEnergy(0.f); // just for function call
+            CaloHitVector viewMCHits;
+            this->GetHitsOfType(mcHits, hitType, viewMCHits, totalEnergy);
+            viewNMCHits.push_back(viewMCHits.size());
+            
+            if (pBestMatch)
+            {
+                CaloHitList viewPfoHits;
+                LArPfoHelper::GetCaloHits(pBestMatch, hitType, viewPfoHits);
+                viewNPfoHits.push_back(viewPfoHits.size());
+
+                // Find the best match
+                const LArHierarchyHelper::RecoHierarchy::Node *pRecoMatchNode(nullptr);
+                for (const auto pRecoNode : mcMatches.GetRecoMatches())
+                {
+                    if (pRecoNode->GetRecoParticles().front() == pBestMatch)
+                        pRecoMatchNode = pRecoNode;
+                }
+
+                viewCompleteness.push_back(mcMatches.GetCompleteness(pRecoMatchNode, hitType, false));
+                viewCompletenessADC.push_back(mcMatches.GetCompleteness(pRecoMatchNode, hitType, true));
+                viewPurity.push_back(mcMatches.GetPurity(pRecoMatchNode, hitType, false));
+                viewPurityADC.push_back(mcMatches.GetPurity(pRecoMatchNode, hitType, true));
+            }
+            else
+            {
+                viewNPfoHits.push_back(0);
+                viewCompleteness.push_back(0);
+                viewCompletenessADC.push_back(0);
+                viewPurity.push_back(0);
+                viewPurityADC.push_back(0);
+            }
+        }
+             
+        if (pBestMatch)
+        {
+            pfpTreeVars.m_hasMatch.push_back(1);
+            pfpTreeVars.m_nPfoHits2D.push_back(LArPfoHelper::GetNumberOfTwoDHits(pBestMatch));
+            pfpTreeVars.m_nPfoHits3D.push_back(LArPfoHelper::GetNumberOfThreeDHits(pBestMatch));
+
+            // Find the best match
+            const LArHierarchyHelper::RecoHierarchy::Node *pRecoMatchNode(nullptr);
+            for (const auto pRecoNode : mcMatches.GetRecoMatches())
+            {
+                if (pRecoNode->GetRecoParticles().front() == pBestMatch)
+                    pRecoMatchNode = pRecoNode;
+            }
+
+            pfpTreeVars.m_completeness.push_back(mcMatches.GetCompleteness(pRecoMatchNode, false));
+            pfpTreeVars.m_completenessADC.push_back(mcMatches.GetCompleteness(pRecoMatchNode, true));
+            pfpTreeVars.m_purity.push_back(mcMatches.GetPurity(pRecoMatchNode, false));
+            pfpTreeVars.m_purityADC.push_back(mcMatches.GetPurity(pRecoMatchNode, true));
+        }
+        else
+        {
+            pfpTreeVars.m_hasMatch.push_back(0);
+            pfpTreeVars.m_nPfoHits2D.push_back(-1);
+            pfpTreeVars.m_nPfoHits3D.push_back(-1);
+            pfpTreeVars.m_completeness.push_back(0.f);
+            pfpTreeVars.m_completenessADC.push_back(0.f);
+            pfpTreeVars.m_purity.push_back(0.f);
+            pfpTreeVars.m_purityADC.push_back(0.f);
+        }
+    }
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -186,272 +400,6 @@ void PFPValidationTool::GetAltMetrics(const LArHierarchyHelper::MCHierarchy::Nod
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void PFPValidationTool::GetMCParticleInfo(const MCParticle *const pMCTarget, PFPTreeVars &pfpTreeVars)
-{
-    pfpTreeVars.m_trueEnergy.push_back(pMCTarget->GetEnergy());
-
-    // visible energy
-    const LArMCParticle *const pLArMCParticle(dynamic_cast<const LArMCParticle *>(pMCTarget));
-    pfpTreeVars.m_trueVisEnergy.push_back(pLArMCParticle->GetVisibleEnergy());
-
-    const CartesianVector &trueEnd(pMCTarget->GetEndpoint());
-    pfpTreeVars.m_trueEndX.push_back(trueEnd.GetX());
-    pfpTreeVars.m_trueEndY.push_back(trueEnd.GetY());
-    pfpTreeVars.m_trueEndZ.push_back(trueEnd.GetZ());
-
-    // Angles
-    const CartesianVector &mcMom(pMCTarget->GetMomentum());
-
-    if (mcMom.GetMagnitudeSquared() < std::numeric_limits<float>::epsilon())
-    {
-        pfpTreeVars.m_trueThetaXZ.push_back(-4.f);
-        pfpTreeVars.m_trueThetaYZ.push_back(-4.f);
-        pfpTreeVars.m_trueDirX.push_back(-9999.f);
-        pfpTreeVars.m_trueDirY.push_back(-9999.f);
-        pfpTreeVars.m_trueDirZ.push_back(-9999.f);
-    }
-    else
-    {
-        pfpTreeVars.m_trueThetaXZ.push_back(atan2(mcMom.GetX(), mcMom.GetZ()));
-        pfpTreeVars.m_trueThetaYZ.push_back(asin(mcMom.GetY() / mcMom.GetMagnitude()));
-        const CartesianVector trueDir(mcMom.GetUnitVector());
-        pfpTreeVars.m_trueDirX.push_back(trueDir.GetX());
-        pfpTreeVars.m_trueDirY.push_back(trueDir.GetY());
-        pfpTreeVars.m_trueDirZ.push_back(trueDir.GetZ());
-    }
-
-    const CartesianVector trueEndDir(pLArMCParticle->GetEndDirection());
-    if (trueEndDir.GetMagnitudeSquared() < std::numeric_limits<float>::epsilon())
-    {
-        pfpTreeVars.m_trueEndDirX.push_back(-9999.f);
-        pfpTreeVars.m_trueEndDirY.push_back(-9999.f);
-        pfpTreeVars.m_trueEndDirZ.push_back(-9999.f);
-    }
-    else
-    {
-        pfpTreeVars.m_trueEndDirX.push_back(trueEndDir.GetX());
-        pfpTreeVars.m_trueEndDirY.push_back(trueEndDir.GetY());
-        pfpTreeVars.m_trueEndDirZ.push_back(trueEndDir.GetZ());
-    }
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-
-void PFPValidationTool::GetMatchingInfo(const LArHierarchyHelper::MCMatchesVector &mcMatchesVec, 
-    const MCParticle *const pMCTarget, const Pfo *const pBestMatch, PFPTreeVars &pfpTreeVars)
-{
-    // Sorry for looping over matches again :( 
-    for (const LArHierarchyHelper::MCMatches &mcMatches : mcMatchesVec)
-    {
-        if (mcMatches.GetMC()->GetMCParticles().front() != pMCTarget)
-            continue;
-
-        const CaloHitList &mcHits(mcMatches.GetMC()->GetCaloHits());
-        pfpTreeVars.m_nMCHits2D.push_back(mcHits.size());
-        
-        for (const HitType &hitType : {TPC_VIEW_U, TPC_VIEW_V, TPC_VIEW_W})
-        {
-            // Get vectors to fill
-            IntVector &viewNMCHits(hitType == TPC_VIEW_U ? pfpTreeVars.m_nMCHitsU : hitType == TPC_VIEW_V ? pfpTreeVars.m_nMCHitsV : 
-                pfpTreeVars.m_nMCHitsW);
-            IntVector &viewNPfoHits(hitType == TPC_VIEW_U ? pfpTreeVars.m_nPfoHitsU : hitType == TPC_VIEW_V ? pfpTreeVars.m_nPfoHitsV : 
-                pfpTreeVars.m_nPfoHitsW);
-            FloatVector &viewCompleteness(hitType == TPC_VIEW_U ? pfpTreeVars.m_completenessU : hitType == TPC_VIEW_V ? pfpTreeVars.m_completenessV : 
-                pfpTreeVars.m_completenessW);
-            FloatVector &viewCompletenessADC(hitType == TPC_VIEW_U ? pfpTreeVars.m_completenessADCU : hitType == TPC_VIEW_V ? pfpTreeVars.m_completenessADCV : 
-                pfpTreeVars.m_completenessADCW);
-            FloatVector &viewPurity(hitType == TPC_VIEW_U ? pfpTreeVars.m_purityU : hitType == TPC_VIEW_V ? pfpTreeVars.m_purityV : 
-                pfpTreeVars.m_purityW);
-            FloatVector &viewPurityADC(hitType == TPC_VIEW_U ? pfpTreeVars.m_purityADCU : hitType == TPC_VIEW_V ? pfpTreeVars.m_purityADCV : 
-                pfpTreeVars.m_purityADCW);
-
-            // Calculate!
-            float totalEnergy(0.f);
-            CaloHitVector viewMCHits;
-            this->GetHitsOfType(mcHits, hitType, viewMCHits, totalEnergy);
-            
-            viewNMCHits.push_back(viewMCHits.size());
-            
-            if (pBestMatch)
-            {
-                CaloHitList viewPfoHits;
-                LArPfoHelper::GetCaloHits(pBestMatch, hitType, viewPfoHits);
-                viewNPfoHits.push_back(viewPfoHits.size());
-
-                // Find the best match
-                const LArHierarchyHelper::RecoHierarchy::Node *pRecoMatchNode(nullptr);
-                for (const auto pRecoNode : mcMatches.GetRecoMatches())
-                {
-                    if (pRecoNode->GetRecoParticles().front() == pBestMatch)
-                        pRecoMatchNode = pRecoNode;
-                }
-
-                viewCompleteness.push_back(mcMatches.GetCompleteness(pRecoMatchNode, hitType, false));
-                viewCompletenessADC.push_back(mcMatches.GetCompleteness(pRecoMatchNode, hitType, true));
-                viewPurity.push_back(mcMatches.GetPurity(pRecoMatchNode, hitType, false));
-                viewPurityADC.push_back(mcMatches.GetPurity(pRecoMatchNode, hitType, true));
-            }
-            else
-            {
-                viewNPfoHits.push_back(0);
-                viewCompleteness.push_back(0);
-                viewCompletenessADC.push_back(0);
-                viewPurity.push_back(0);
-                viewPurityADC.push_back(0);
-            }
-        }
-             
-        if (pBestMatch)
-        {
-            pfpTreeVars.m_hasMatch.push_back(1);
-            pfpTreeVars.m_nPfoHits2D.push_back(LArPfoHelper::GetNumberOfTwoDHits(pBestMatch));
-            pfpTreeVars.m_nPfoHits3D.push_back(LArPfoHelper::GetNumberOfThreeDHits(pBestMatch));
-
-            // Find the best match
-            const LArHierarchyHelper::RecoHierarchy::Node *pRecoMatchNode(nullptr);
-            for (const auto pRecoNode : mcMatches.GetRecoMatches())
-            {
-                if (pRecoNode->GetRecoParticles().front() == pBestMatch)
-                    pRecoMatchNode = pRecoNode;
-            }
-
-            pfpTreeVars.m_completeness.push_back(mcMatches.GetCompleteness(pRecoMatchNode, false));
-            pfpTreeVars.m_completenessADC.push_back(mcMatches.GetCompleteness(pRecoMatchNode, true));
-            pfpTreeVars.m_purity.push_back(mcMatches.GetPurity(pRecoMatchNode, false));
-            pfpTreeVars.m_purityADC.push_back(mcMatches.GetPurity(pRecoMatchNode, true));
-        }
-        else
-        {
-            pfpTreeVars.m_hasMatch.push_back(0);
-            pfpTreeVars.m_nPfoHits2D.push_back(-1);
-            pfpTreeVars.m_nPfoHits3D.push_back(-1);
-            pfpTreeVars.m_completeness.push_back(0.f);
-            pfpTreeVars.m_completenessADC.push_back(0.f);
-            pfpTreeVars.m_purity.push_back(0.f);
-            pfpTreeVars.m_purityADC.push_back(0.f);
-        }
-    }
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-
-void PFPValidationTool::LengthValidation(const Algorithm *const pAlgorithm, const MCParticle *const pMCNu, 
-    const MCParticle *const pMCTarget, const Pfo *const pBestMatch, PFPTreeVars &pfpTreeVars)
-{
-    // True neutrino vertex
-    const CartesianVector &trueNuVertex(pMCNu->GetVertex());
-
-    // Fill
-    const CartesianVector &trueVertex(pMCTarget->GetVertex());
-    pfpTreeVars.m_trueVertexX.push_back(trueVertex.GetX());
-    pfpTreeVars.m_trueVertexY.push_back(trueVertex.GetY());
-    pfpTreeVars.m_trueVertexZ.push_back(trueVertex.GetZ());
-    pfpTreeVars.m_trueLength.push_back((trueVertex - pMCTarget->GetEndpoint()).GetMagnitude());
-    pfpTreeVars.m_trueDisplacement.push_back((trueNuVertex - trueVertex).GetMagnitude());
-
-    if (!pBestMatch)
-    {
-        pfpTreeVars.m_recoVertexX.push_back(-9999.f);
-        pfpTreeVars.m_recoVertexY.push_back(-9999.f);
-        pfpTreeVars.m_recoVertexZ.push_back(-9999.f);
-        pfpTreeVars.m_vertexAcc.push_back(-9999.f);
-        pfpTreeVars.m_recoLength.push_back(-1.f);
-        pfpTreeVars.m_recoDisplacement.push_back(-1.f);
-    }
-    else
-    {
-        const Vertex *pRecoVertex(nullptr);
-
-        try
-        {
-            pRecoVertex = LArPfoHelper::GetVertex(pBestMatch);
-        }
-        catch(...){}
-
-        if (pRecoVertex)
-        {
-            pfpTreeVars.m_recoVertexX.push_back(pRecoVertex->GetPosition().GetX());
-            pfpTreeVars.m_recoVertexY.push_back(pRecoVertex->GetPosition().GetY());
-            pfpTreeVars.m_recoVertexZ.push_back(pRecoVertex->GetPosition().GetZ());
-
-            // Signed vertexAcc
-            const float vertexAcc((pRecoVertex->GetPosition() - trueVertex).GetMagnitude());
-            const float sign((vertexAcc < std::numeric_limits<float>::epsilon() || pMCTarget->GetMomentum().GetMagnitude() < std::numeric_limits<float>::epsilon()) ? 1.f : 
-                             (pRecoVertex->GetPosition() - trueVertex).GetOpeningAngle(pMCTarget->GetMomentum()) < (M_PI * 0.5) ? 1.f : -1.f);
-            pfpTreeVars.m_vertexAcc.push_back(vertexAcc * sign);
-
-            try
-            {
-                pfpTreeVars.m_recoLength.push_back(std::sqrt(LArPfoHelper::GetThreeDLengthSquared(pBestMatch))); // TODO - better fit.
-            }
-            catch(...)
-            {
-                pfpTreeVars.m_recoLength.push_back(-1.f);
-            }
-
-            if (m_pNuVertexList && !m_pNuVertexList->empty())
-            {
-                pfpTreeVars.m_recoDisplacement.push_back((m_pNuVertexList->front()->GetPosition() - pRecoVertex->GetPosition()).GetMagnitude());
-            }
-            else
-            {
-                pfpTreeVars.m_recoDisplacement.push_back(-1.f);
-            }
-        }
-        else
-        {
-            pfpTreeVars.m_recoVertexX.push_back(-9999.f);
-            pfpTreeVars.m_recoVertexY.push_back(-9999.f);
-            pfpTreeVars.m_recoVertexZ.push_back(-9999.f);
-            pfpTreeVars.m_vertexAcc.push_back(-9999.f);
-            pfpTreeVars.m_recoLength.push_back(-1.f);
-            pfpTreeVars.m_recoDisplacement.push_back(-1.f);
-        }    
-    }
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-
-void PFPValidationTool::PIDValidation(const Algorithm *const pAlgorithm, const MCParticle *const pMCTarget, const Pfo *const pBestMatch, 
-    PFPTreeVars &pfpTreeVars)
-{
-    int truePDG(pMCTarget->GetParticleId());
-
-    // Get pi0
-    if (abs(pMCTarget->GetParticleId()) == 22)
-    {
-        if (pMCTarget->GetParentList().front()->GetParticleId() == 111)
-            truePDG = 111;
-    }
-
-    // Find MC michel - from muon
-    if (std::abs(pMCTarget->GetParticleId()) == 11)
-    {
-        const MCParticle *const pMCParent(pMCTarget->GetParentList().front());
-
-        if (abs(pMCParent->GetParticleId()) == 13)
-        {
-            if ((pMCParent->GetEndpoint() - pMCTarget->GetVertex()).GetMagnitude() < 3.f)
-                truePDG = 777;
-        }
-    }
-
-    pfpTreeVars.m_truePDG.push_back(truePDG);
-
-    if (pBestMatch)
-    {
-        pfpTreeVars.m_isTrack.push_back(LArPfoHelper::IsTrack(pBestMatch));
-        pfpTreeVars.m_isShower.push_back(LArPfoHelper::IsShower(pBestMatch));
-    }
-    else
-    {
-        pfpTreeVars.m_isTrack.push_back(-1);
-        pfpTreeVars.m_isShower.push_back(-1);
-    }
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-
 void PFPValidationTool::FillTree(PFPTreeVars &pfpTreeVars)
 {
     IntVector &truePDG = pfpTreeVars.m_truePDG;
@@ -516,7 +464,6 @@ void PFPValidationTool::FillTree(PFPTreeVars &pfpTreeVars)
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "PFPTree", "Run", pfpTreeVars.m_run));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "PFPTree", "Subrun", pfpTreeVars.m_subrun));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "PFPTree", "Event", pfpTreeVars.m_event));
-    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "PFPTree", "EventCount", m_eventNumber));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "PFPTree", "MCP_TruePDG", &truePDG));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "PFPTree", "MCP_TrueEnergy", &trueEnergy));
     PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), "PFPTree", "MCP_TrueVisEnergy", &trueVisEnergy));
@@ -584,6 +531,9 @@ StatusCode PFPValidationTool::ReadSettings(const TiXmlHandle xmlHandle)
 {
     PANDORA_RETURN_RESULT_IF_AND_IF(
         STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "NuVertexListName", m_nuVertexListName));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(
+        STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "MaxMichelSeparation", m_maxMichelSep));
 
     return STATUS_CODE_SUCCESS;
 }

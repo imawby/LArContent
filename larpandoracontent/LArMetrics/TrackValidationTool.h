@@ -78,18 +78,30 @@ public:
         const LArHierarchyHelper::MCMatchesVector &mcMatchesVec, const pandora::MCParticleVector &targetMC, 
         const pandora::PfoVector &bestRecoMatch);
 
-    void MichelValidation(const pandora::Algorithm *const pAlgorithm, const pandora::MCParticleVector &targetMC, 
-        const pandora::PfoVector &bestRecoMatch, TrackTreeVars &trackTreeVars);
-
-    void FillTree(TrackTreeVars &trackTreeVars);
 private:
     pandora::StatusCode ReadSettings(const pandora::TiXmlHandle xmlHandle);
 
-    void GetVertexAndEndpointVars(const pandora::MCParticle *const pMCParticle, const pandora::Pfo *const pPfo, TrackTreeVars &trackTreeVars);
+    void GetTrueVertexAndEndpointVars(const pandora::MCParticle *const pMCParticle, TrackTreeVars &trackTreeVars);
+
+    bool FitTrack(const pandora::Pfo *const pPfo, pandora::CartesianVector &vertex, pandora::CartesianVector &vertexDir, 
+        pandora::CartesianVector &endpoint, pandora::CartesianVector &endpointDir);
+
+    void GetRecoVertexAndEndpointVars(const pandora::MCParticle *const pMCParticle, const pandora::CartesianVector &recoVertex, 
+        const pandora::CartesianVector &recoVertexDir, const pandora::CartesianVector &recoEndpoint, 
+        const pandora::CartesianVector &recoEndpointDir, TrackTreeVars &trackTreeVars);
+
+    void FillForFailedPfo(TrackTreeVars &trackTreeVars);
 
     void GetTrueEndRegionVars(const LArHierarchyHelper::MCMatchesVector &mcMatchesVec, const pandora::MCParticle *const pMCParticle,
         const pandora::Pfo *const pPfo, TrackTreeVars &trackTreeVars);
 
+    void MichelValidation(const pandora::MCParticleVector &targetMC, 
+        const pandora::PfoVector &bestRecoMatch, TrackTreeVars &trackTreeVars);
+
+    void FillTree(TrackTreeVars &trackTreeVars);
+
+    float m_edgeBuffer;
+    int m_slidingFitWindow;
 };
 
 } // namespace lar_content

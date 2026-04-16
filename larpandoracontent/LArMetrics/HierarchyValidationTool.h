@@ -12,18 +12,15 @@
 #include "Pandora/AlgorithmTool.h"
 
 #include "larpandoracontent/LArHelpers/LArHierarchyHelper.h"
-
 #include "larpandoracontent/LArMetrics/BaseValidationTool.h"
 
 namespace lar_content
 {
-
 /**
  *  @brief  HierarchyValidationTool class
  */
 class HierarchyValidationTool : public BaseValidationTool
 {
-
 struct HierarchyTreeVars
 {
     int m_run;
@@ -48,8 +45,6 @@ public:
 private:
     typedef std::map<const pandora::MCParticle*, std::pair<const pandora::MCParticle*, int>> Hierarchy;
 
-    pandora::StatusCode ReadSettings(const pandora::TiXmlHandle xmlHandle);
-
     void BuildVisibleHierarchy(const pandora::MCParticle *const pMCParticle, const pandora::MCParticle *const pMCParent, 
         const pandora::MCParticleVector &targetMC, const int childTier, Hierarchy &hierarchy);
 
@@ -60,6 +55,8 @@ private:
         HierarchyTreeVars &hierarchyTreeVars);
 
     void FillTree(HierarchyTreeVars &hierarchyTreeVars);
+
+    pandora::StatusCode ReadSettings(const pandora::TiXmlHandle xmlHandle);
 };
 
 } // namespace lar_content

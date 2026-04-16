@@ -11,7 +11,6 @@
 #include "larpandoracontent/LArHelpers/LArHierarchyHelper.h"
 #include "larpandoracontent/LArHelpers/LArMCParticleHelper.h"
 #include "larpandoracontent/LArHelpers/LArPfoHelper.h"
-
 #include "larpandoracontent/LArMetrics/HierarchyValidationTool.h"
 
 using namespace pandora;
@@ -37,9 +36,11 @@ void HierarchyValidationTool::Run(const Algorithm *const pAlgorithm, const MCPar
     hierarchyTreeVars.m_subrun = this->GetPandora().GetSubrun();
     hierarchyTreeVars.m_event = this->GetPandora().GetEvent();
 
+    // Build true hierarchy out of 'target' particles
     Hierarchy hierarchy;
     this->BuildVisibleHierarchy(pMCNu, pMCNu, targetMC, 1, hierarchy);
 
+    // Fill tree variables for each particle
     for (unsigned int i = 0; i < targetMC.size(); ++i)
     {
         const MCParticle *const pMC(targetMC.at(i));
@@ -91,11 +92,13 @@ void HierarchyValidationTool::FillTrueVariables(const MCParticle *const pMC, con
     if (hierarchyIter == hierarchy.end())
         throw StatusCodeException(STATUS_CODE_FAILURE);
 
-    hierarchyTreeVars.m_trueTier.push_back(hierarchyIter->second.second);
+    const int trueTier(hierarchyIter->second.second);
+    hierarchyTreeVars.m_trueTier.push_back(trueTier);
 
-    // Handle neutrino children
-    if (hierarchyIter->second.second == 1)
+    // Find index of parent
+    if (trueTier == 1)
     {
+        // Set neutrino index to be -1
         hierarchyTreeVars.m_trueParentIndex.push_back(-1);
     }
     else
@@ -117,9 +120,10 @@ void HierarchyValidationTool::FillRecoVariables(const Pfo *const pBestMatch, con
     const int recoTier(LArPfoHelper::GetHierarchyTier(pBestMatch));
     hierarchyTreeVars.m_recoTier.push_back(recoTier);
 
-    // Handle neutrino children
+    // Find index of parent
     if (recoTier == 1)
     {
+        // Set neutrino index to be -1
         hierarchyTreeVars.m_recoParentIndex.push_back(-1);
     }
     else
@@ -128,7 +132,7 @@ void HierarchyValidationTool::FillRecoVariables(const Pfo *const pBestMatch, con
         const auto bestMatchesIter(std::find(bestMatches.begin(), bestMatches.end(), pParentPfo));
 
         // If reco parent is not in the best-match list, the particle has been split
-        // I don't want this to feed into a hierarchy building 'failure' so mark as -1 and remove from downstream metrics?
+        // I don't want this to feed into a hierarchy building 'failure' so mark as -1 and remove from downstream metrics
         if (bestMatchesIter == bestMatches.end())
         {
             hierarchyTreeVars.m_recoParentIndex.push_back(-1);
