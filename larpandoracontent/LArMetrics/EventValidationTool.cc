@@ -26,7 +26,7 @@ EventValidationTool::EventValidationTool() :
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void EventValidationTool::Run(const Algorithm *const pAlgorithm, const MCParticle *const pMCNu, 
+StatusCode EventValidationTool::Run(const Algorithm *const pAlgorithm, const MCParticle *const pMCNu, 
     const LArHierarchyHelper::MCMatchesVector &/*mcMatchesVec*/, const MCParticleVector &targetMC, 
     const PfoVector &/*bestRecoMatch*/)
 {
@@ -39,14 +39,16 @@ void EventValidationTool::Run(const Algorithm *const pAlgorithm, const MCParticl
     eventTreeVars.m_event = this->GetPandora().GetEvent();
     eventTreeVars.m_nTargets = targetMC.size();
 
-    this->GetNeutrinoVariables(pAlgorithm, pMCNu, eventTreeVars);
+    this->GetVertexVariables(pAlgorithm, pMCNu, eventTreeVars);
     this->GetInteractionTypeVariables(pMCNu, eventTreeVars);
     this->FillTree(eventTreeVars);
+
+    return STATUS_CODE_SUCCESS;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void EventValidationTool::GetNeutrinoVariables(const Algorithm *const pAlgorithm, const MCParticle *const pMCNu, EventTreeVars &eventTreeVars)
+void EventValidationTool::GetVertexVariables(const Algorithm *const pAlgorithm, const MCParticle *const pMCNu, EventTreeVars &eventTreeVars)
 {
     eventTreeVars.m_trueNuVertex = pMCNu->GetVertex();
     eventTreeVars.m_recoNuVertexPass1 = CartesianVector(-9999.f, -9999.f, -9999.f);

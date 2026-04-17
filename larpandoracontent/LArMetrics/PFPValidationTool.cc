@@ -26,13 +26,14 @@ PFPValidationTool::PFPValidationTool() :
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void PFPValidationTool::Run(const Algorithm *const pAlgorithm, const MCParticle *const pMCNu, const LArHierarchyHelper::MCMatchesVector &mcMatchesVec, 
+StatusCode PFPValidationTool::Run(const Algorithm *const pAlgorithm, const MCParticle *const pMCNu, const LArHierarchyHelper::MCMatchesVector &mcMatchesVec, 
     const MCParticleVector &targetMC, const PfoVector &bestRecoMatch)
 {
     if (PandoraContentApi::GetSettings(*pAlgorithm)->ShouldDisplayAlgorithmInfo())
         std::cout << "----> Running Algorithm Tool: " << this->GetInstanceName() << ", " << this->GetType() << std::endl;
 
     // Get reco neutrino vertex (will handle if not found)
+    m_pNuVertexList = nullptr;
     PandoraContentApi::GetList(*pAlgorithm, m_nuVertexListName, m_pNuVertexList);
 
     PFPTreeVars pfpTreeVars;
@@ -68,6 +69,8 @@ void PFPValidationTool::Run(const Algorithm *const pAlgorithm, const MCParticle 
     }
 
     this->FillTree(pfpTreeVars);
+
+    return STATUS_CODE_SUCCESS;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------

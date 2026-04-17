@@ -24,7 +24,7 @@ HierarchyValidationTool::HierarchyValidationTool()
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void HierarchyValidationTool::Run(const Algorithm *const pAlgorithm, const MCParticle *const pMCNu, 
+StatusCode HierarchyValidationTool::Run(const Algorithm *const pAlgorithm, const MCParticle *const pMCNu, 
     const LArHierarchyHelper::MCMatchesVector &/*mcMatchesVec*/, const MCParticleVector &targetMC, 
     const PfoVector &bestRecoMatch)
 {
@@ -60,6 +60,8 @@ void HierarchyValidationTool::Run(const Algorithm *const pAlgorithm, const MCPar
     }
 
     this->FillTree(hierarchyTreeVars);
+
+    return STATUS_CODE_SUCCESS;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------

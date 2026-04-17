@@ -27,7 +27,7 @@ ShowerValidationTool::ShowerValidationTool() :
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void ShowerValidationTool::Run(const Algorithm *const pAlgorithm, const MCParticle *const /*pMCNu*/, 
+StatusCode ShowerValidationTool::Run(const Algorithm *const pAlgorithm, const MCParticle *const /*pMCNu*/, 
     const LArHierarchyHelper::MCMatchesVector &mcMatchesVec, const MCParticleVector &targetMC, 
     const PfoVector &bestRecoMatch)
 {
@@ -73,6 +73,8 @@ void ShowerValidationTool::Run(const Algorithm *const pAlgorithm, const MCPartic
     }
 
     this->FillTree(showerTreeVars);
+
+    return STATUS_CODE_SUCCESS;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -139,7 +141,11 @@ void ShowerValidationTool::GetTrueLength(const LArHierarchyHelper::MCMatchesVect
         if (endpointL > -9990.f)
         {
             const CartesianVector showerEndpoint2D(trueShrVtx2D + (trueShrDir2D * endpointL));
-            const float scale3D((showerEndpoint2D.GetX() - trueShrVtx2D.GetX()) / trueShrDir.GetX());
+            const float scale3D(trueShrDir.GetX() > std::numeric_limits<float>::epsilon() ?
+                                (showerEndpoint2D.GetX() - trueShrVtx2D.GetX()) / trueShrDir.GetX() :
+                                trueShrDir.GetY() > std::numeric_limits<float>::epsilon() ?
+                                (showerEndpoint2D.GetY() - trueShrVtx2D.GetY()) / trueShrDir.GetY() :
+                                (showerEndpoint2D.GetZ() - trueShrVtx2D.GetZ));
             trueLength.push_back(scale3D);
         }
         else
@@ -147,7 +153,9 @@ void ShowerValidationTool::GetTrueLength(const LArHierarchyHelper::MCMatchesVect
             trueLength.push_back(-1.f);
         }
     }
-}//------------------------------------------------------------------------------------------------------------------------------------------
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
 
 void ShowerValidationTool::GetInitialRegionVars(const LArHierarchyHelper::MCMatchesVector &mcMatchesVec, const MCParticle *const pMCParticle, 
     const Pfo *const pPfo, ShowerTreeVars &showerTreeVars)
@@ -221,8 +229,8 @@ void ShowerValidationTool::GetInitialRegionVars(const LArHierarchyHelper::MCMatc
         FloatVector &viewPurity(hitType == TPC_VIEW_U ? showerTreeVars.m_initialPurityU : 
             hitType == TPC_VIEW_V ? showerTreeVars.m_initialPurityV : showerTreeVars.m_initialPurityW);
 
-        const float thisCompleteness(initialMCHits.size() == 0 ? 0 : static_cast<float>(nSharedHits) / initialMCHits.size());
-        const float thisPurity(nInitialPfoHits == 0 ? 0 : static_cast<float>(nSharedHits) / nInitialPfoHits);
+        const float thisCompleteness(initialMCHits.size() == 0 ? -1.f : static_cast<float>(nSharedHits) / initialMCHits.size());
+        const float thisPurity(nInitialPfoHits == 0 ? -1.f : static_cast<float>(nSharedHits) / nInitialPfoHits);
         viewNInitialMCHits.push_back(initialMCHits.size());
         viewNInitialPfoHits.push_back(nInitialPfoHits);
         viewCompleteness.push_back(thisCompleteness);
@@ -247,37 +255,33 @@ bool ShowerValidationTool::FitShower(const Pfo *const pPfo, CartesianVector &sho
     LArPfoHelper::GetCoordinateVector(pPfo, TPC_3D, positions3D);
     if (positions3D.empty()){return false;}
 
-    const Vertex *pRecoVertex(nullptr);
     try
     {
-        pRecoVertex = LArPfoHelper::GetVertex(pPfo);
+        const Vertex *const pRecoVertex(LArPfoHelper::GetVertex(pPfo));
+        const CartesianVector vertexPosition(pRecoVertex->GetPosition());
+        const LArShowerPCA initialLArShowerPCA(LArPfoHelper::GetPrincipalComponents(positions3D, vertexPosition)); 
+        const CartesianVector& centroid(initialLArShowerPCA.GetCentroid());
+        const CartesianVector& primaryAxis(initialLArShowerPCA.GetPrimaryAxis());
+        const CartesianVector& secondaryAxis(initialLArShowerPCA.GetSecondaryAxis());
+        const CartesianVector& tertiaryAxis(initialLArShowerPCA.GetTertiaryAxis());
+        const CartesianVector& eigenvalues(initialLArShowerPCA.GetEigenValues());
+
+        // Project the PFParticle vertex onto the PCA axis
+        const CartesianVector projectedVertexPosition(centroid -
+            primaryAxis.GetUnitVector() * (centroid - vertexPosition).GetDotProduct(primaryAxis));
+
+        // By convention, principal axis should always point away from vertex
+        const float testProjection(primaryAxis.GetDotProduct(projectedVertexPosition - centroid));
+        const float directionScaleFactor((testProjection > std::numeric_limits<float>::epsilon()) ? -1.f : 1.f);
+
+        const LArShowerPCA larShowerPCA(centroid, primaryAxis * directionScaleFactor, secondaryAxis * directionScaleFactor,
+            tertiaryAxis * directionScaleFactor, eigenvalues);
+
+        showerVertex = projectedVertexPosition;
+        showerDirection = larShowerPCA.GetPrimaryAxis();
+        showerLength = larShowerPCA.GetAxisLengths().GetX();    
     }
     catch(...){ return false;}
-
-    const CartesianVector vertexPosition(pRecoVertex->GetPosition());
-    const LArShowerPCA initialLArShowerPCA(LArPfoHelper::GetPrincipalComponents(positions3D, vertexPosition)); 
-
-    // Ensure successful creation of all structures before placing results in output containers, remaking LArShowerPCA with updated vertex
-    const CartesianVector& centroid(initialLArShowerPCA.GetCentroid());
-    const CartesianVector& primaryAxis(initialLArShowerPCA.GetPrimaryAxis());
-    const CartesianVector& secondaryAxis(initialLArShowerPCA.GetSecondaryAxis());
-    const CartesianVector& tertiaryAxis(initialLArShowerPCA.GetTertiaryAxis());
-    const CartesianVector& eigenvalues(initialLArShowerPCA.GetEigenValues());
-
-    // Project the PFParticle vertex onto the PCA axis
-    const CartesianVector projectedVertexPosition(centroid -
-          primaryAxis.GetUnitVector() * (centroid - vertexPosition).GetDotProduct(primaryAxis));
-
-    // By convention, principal axis should always point away from vertex
-    const float testProjection(primaryAxis.GetDotProduct(projectedVertexPosition - centroid));
-    const float directionScaleFactor((testProjection > std::numeric_limits<float>::epsilon()) ? -1.f : 1.f);
-
-    const LArShowerPCA larShowerPCA(centroid, primaryAxis * directionScaleFactor, secondaryAxis * directionScaleFactor,
-        tertiaryAxis * directionScaleFactor, eigenvalues);
-
-    showerVertex = projectedVertexPosition;
-    showerDirection = larShowerPCA.GetPrimaryAxis();
-    showerLength = larShowerPCA.GetAxisLengths().GetX();
 
     return true;
 }
@@ -398,14 +402,14 @@ void ShowerValidationTool::FillForNullMCDir(ShowerTreeVars &showerTreeVars)
     showerTreeVars.m_coreTrueLengthFromU.push_back(-1.f);
     showerTreeVars.m_coreTrueLengthFromV.push_back(-1.f);
     showerTreeVars.m_coreTrueLengthFromW.push_back(-1.f);
-    showerTreeVars.m_nInitialMCHits.push_back(-1.f);
-    showerTreeVars.m_nInitialMCHitsU.push_back(-1.f);
-    showerTreeVars.m_nInitialMCHitsV.push_back(-1.f);
-    showerTreeVars.m_nInitialMCHitsW.push_back(-1.f);
-    showerTreeVars.m_nInitialPfoHits.push_back(-1.f);
-    showerTreeVars.m_nInitialPfoHitsU.push_back(-1.f);
-    showerTreeVars.m_nInitialPfoHitsV.push_back(-1.f);
-    showerTreeVars.m_nInitialPfoHitsW.push_back(-1.f);
+    showerTreeVars.m_nInitialMCHits.push_back(-1);
+    showerTreeVars.m_nInitialMCHitsU.push_back(-1);
+    showerTreeVars.m_nInitialMCHitsV.push_back(-1);
+    showerTreeVars.m_nInitialMCHitsW.push_back(-1);
+    showerTreeVars.m_nInitialPfoHits.push_back(-1);
+    showerTreeVars.m_nInitialPfoHitsU.push_back(-1);
+    showerTreeVars.m_nInitialPfoHitsV.push_back(-1);
+    showerTreeVars.m_nInitialPfoHitsW.push_back(-1);
     showerTreeVars.m_initialCompleteness.push_back(-1.f);
     showerTreeVars.m_initialCompletenessU.push_back(-1.f);
     showerTreeVars.m_initialCompletenessV.push_back(-1.f);

@@ -24,13 +24,14 @@ namespace lar_content
 
 TrackValidationTool::TrackValidationTool() :
     m_edgeBuffer(5.f),
-    m_slidingFitWindow(20)
+    m_slidingFitWindow(20),
+    m_endRegion(5.f)
 {
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void TrackValidationTool::Run(const Algorithm *const pAlgorithm, const MCParticle *const /*pMCNu*/, 
+StatusCode TrackValidationTool::Run(const Algorithm *const pAlgorithm, const MCParticle *const /*pMCNu*/, 
     const LArHierarchyHelper::MCMatchesVector &mcMatchesVec, const MCParticleVector &targetMC, 
     const PfoVector &bestRecoMatch)
 {
@@ -67,6 +68,8 @@ void TrackValidationTool::Run(const Algorithm *const pAlgorithm, const MCParticl
 
     this->MichelValidation(targetMC, bestRecoMatch, trackTreeVars);
     this->FillTree(trackTreeVars);
+
+    return STATUS_CODE_SUCCESS;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -214,7 +217,7 @@ void TrackValidationTool::GetTrueEndRegionVars(const LArHierarchyHelper::MCMatch
     const LArMCParticle *const pLArMC(dynamic_cast<const LArMCParticle *>(pMCParticle));
     CartesianVector endDirection3D(pLArMC->GetEndDirection());
 
-    // First, return if MCParticle has no energy/direction - IDK why this happens to our targets
+    // First, return if MCParticle has no energy/direction
     if (endDirection3D.GetMagnitudeSquared() < std::numeric_limits<float>::epsilon())
     {
         trackTreeVars.m_nEndpointMCHits.push_back(-1.f);
@@ -236,7 +239,7 @@ void TrackValidationTool::GetTrueEndRegionVars(const LArHierarchyHelper::MCMatch
         return;
     }
 
-    // Sorry for looping over matches again :( 
+    // Need to loop over matches to find this match :(
     CaloHitList mcHits;
     for (const LArHierarchyHelper::MCMatches &mcMatches : mcMatchesVec)
     {
@@ -246,7 +249,7 @@ void TrackValidationTool::GetTrueEndRegionVars(const LArHierarchyHelper::MCMatch
 
     // Get 3D positions/directions
     const CartesianVector trueEndpoint3D(pMCParticle->GetEndpoint());
-    const CartesianVector endRegionStart3D(trueEndpoint3D - (endDirection3D * 5.f));
+    const CartesianVector endRegionStart3D(trueEndpoint3D - (endDirection3D * m_endRegion));
 
     int nTotalEndMCHits(0), nTotalEndPfoHits(0), nTotalEndSharedHits(0);
     for (const HitType &hitType : {TPC_VIEW_U, TPC_VIEW_V, TPC_VIEW_W})
@@ -264,7 +267,7 @@ void TrackValidationTool::GetTrueEndRegionVars(const LArHierarchyHelper::MCMatch
         {
             const float l(endDirection2D.GetDotProduct(pCaloHit->GetPositionVector() - endRegionStart2D));
 
-            if ((l > 0.f) & (l < endRegionL))
+            if ((l > 0.f) && (l < endRegionL))
                 endMCHits.push_back(pCaloHit);
         }
         nTotalEndMCHits += endMCHits.size();
@@ -513,6 +516,9 @@ StatusCode TrackValidationTool::ReadSettings(const TiXmlHandle xmlHandle)
     PANDORA_RETURN_RESULT_IF_AND_IF(
         STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "SlidingFitWindow", m_slidingFitWindow));
 
+    PANDORA_RETURN_RESULT_IF_AND_IF(
+        STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "EndRegion", m_endRegion));
+    
     return STATUS_CODE_SUCCESS;
 }
 

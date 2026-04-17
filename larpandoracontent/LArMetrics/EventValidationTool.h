@@ -16,49 +16,75 @@
 
 namespace lar_content
 {
+
 /**
  *  @brief  EventValidationTool class
  */
 class EventValidationTool : public BaseValidationTool
 {
 public:
-
+/**
+ *  @brief  EventTreeVars struct
+ */
 struct EventTreeVars
 {
+    /**
+     *  @brief  Default constructor
+     */
     EventTreeVars();
 
-    int m_run;
-    int m_subrun;
-    int m_event;
-    int m_nTargets;
-    int m_nuPDG;
-    float m_nuEnergy;
-    float m_nuVisEnergy;
-    int m_isCC;
-    pandora::CartesianVector m_trueNuVertex;
-    pandora::CartesianVector m_recoNuVertexPass1;
-    pandora::CartesianVector m_recoNuVertexPass2;
-    float m_recoNuVertexAccPass1;
-    float m_recoNuVertexAccPass2;
+    int m_run;           ///< run number
+    int m_subrun;        ///< subrun number
+    int m_event;         ///< event number
+    int m_nTargets;      ///< number of 'reconstructable' MCParticles
+    int m_nuPDG;         ///< nu PDG
+    float m_nuEnergy;    ///< true nu energy [GeV]
+    float m_nuVisEnergy; ///< true nu visible energy [GeV]
+    int m_isCC;          ///< whether CC interaction 
+    pandora::CartesianVector m_trueNuVertex;      ///< true neutrino vertex
+    pandora::CartesianVector m_recoNuVertexPass1; ///< pass 1 reco neutrino vertex 
+    pandora::CartesianVector m_recoNuVertexPass2; ///< pass 2 reco neutrino vertex 
+    float m_recoNuVertexAccPass1; ///< accuracy of the pass 1 reco neutrino vertex
+    float m_recoNuVertexAccPass2; ///< accuracy of the pass 1 reco neutrino vertex
 };
     /**
      *  @brief  Default constructor
      */
     EventValidationTool();
 
-    void Run(const pandora::Algorithm *const pAlgorithm, const pandora::MCParticle *const pMCNu, 
+    pandora::StatusCode Run(const pandora::Algorithm *const pAlgorithm, const pandora::MCParticle *const pMCNu, 
         const LArHierarchyHelper::MCMatchesVector &mcMatchesVec, const pandora::MCParticleVector &targetMC, 
         const pandora::PfoVector &bestRecoMatch);
 
 private:
     pandora::StatusCode ReadSettings(const pandora::TiXmlHandle xmlHandle);
 
-    void GetNeutrinoVariables(const pandora::Algorithm *const pAlgorithm, const pandora::MCParticle *const pMCNu, EventTreeVars &eventTreeVars);
+    /**
+     *  @brief  Fill neutrino vertex variables
+     *
+     *  @param  pAlgorithm a pointer to the parent algorithm 
+     *  @param  pMCNu a pointer to the neutrino MCParticle
+     *  @param  eventTreeVars the event tree variables to fill
+     */
+    void GetVertexVariables(const pandora::Algorithm *const pAlgorithm, const pandora::MCParticle *const pMCNu, EventTreeVars &eventTreeVars);
+
+    /**
+     *  @brief  Fill neutrino interaction variables
+     *
+     *  @param  pMCNu a pointer to the neutrino MCParticle
+     *  @param  eventTreeVars the event tree variables to fill
+     */
     void GetInteractionTypeVariables(const pandora::MCParticle *const pMCNu, EventTreeVars &eventTreeVars);
+
+    /**
+     *  @brief  Fill the event tree
+     *
+     *  @param  eventTreeVars the event tree variables to fill
+     */
     void FillTree(EventTreeVars &eventTreeVars);
 
-    std::string m_nuVertexPass1ListName;
-    std::string m_nuVertexPass2ListName;
+    std::string m_nuVertexPass1ListName; ///< name of the pass 1 neutrino vertex list
+    std::string m_nuVertexPass2ListName; ///< name of the pass 2 neutrino vertex list
 };
 
 //------------------------------------------------------------------------------------------------------------------------------------------
