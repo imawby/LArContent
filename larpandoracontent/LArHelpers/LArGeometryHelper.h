@@ -295,6 +295,8 @@ public:
      */
     static DetectorBoundaries GetDetectorBoundaries(const pandora::Pandora &pandora);
 
+    static void GetDetectorXGaps(const pandora::Pandora &pandora, std::set<float> &detXGaps);
+
     /**
      *  @brief  Return whether an input point is within the bounds of the detector
      *

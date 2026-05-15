@@ -29,7 +29,11 @@ class LArCaloHitParameters : public object_creation::CaloHit::Parameters
 public:
     pandora::InputUInt m_larTPCVolumeId;   ///< The lar tpc volume id
     pandora::InputUInt m_daughterVolumeId; ///< The daughter volume id
-
+    uint64_t m_wireHash;
+    uint64_t m_overlapMin1;
+    uint64_t m_overlapMax1;
+    uint64_t m_overlapMin2;
+    uint64_t m_overlapMax2;
     pandora::FloatVector m_hitScores;       ///< Hit scores
     pandora::StringVector m_hitScoreLabels; ///< Labels for the hit scores
 };
@@ -63,6 +67,12 @@ public:
      */
     unsigned int GetDaughterVolumeId() const;
 
+    uint64_t GetWireHash() const;
+    uint64_t GetOverlapMin1() const;
+    uint64_t GetOverlapMax1() const;
+    uint64_t GetOverlapMin2() const;
+    uint64_t GetOverlapMax2() const;
+    
     /**
      *  @brief  Fill the parameters associated with this calo hit
      *
@@ -115,6 +125,11 @@ public:
 private:
     unsigned int m_larTPCVolumeId;          ///< The lar tpc volume id
     unsigned int m_daughterVolumeId;        ///< The daughter volume id
+    uint64_t m_wireHash;
+    uint64_t m_overlapMin1;
+    uint64_t m_overlapMax1;
+    uint64_t m_overlapMin2;
+    uint64_t m_overlapMax2;    
     pandora::FloatVector m_hitScores;       ///< Hit scores
     pandora::StringVector m_hitScoreLabels; ///< Labels for the hit scores
     pandora::InputFloat m_pTrack;           ///< The probability that the hit is track-like
@@ -178,6 +193,11 @@ inline LArCaloHit::LArCaloHit(const LArCaloHitParameters &parameters) :
     object_creation::CaloHit::Object(parameters),
     m_larTPCVolumeId(parameters.m_larTPCVolumeId.Get()),
     m_daughterVolumeId(parameters.m_daughterVolumeId.IsInitialized() ? parameters.m_daughterVolumeId.Get() : 0),
+    m_wireHash(parameters.m_wireHash),
+    m_overlapMin1(parameters.m_overlapMin1),
+    m_overlapMax1(parameters.m_overlapMax1),
+    m_overlapMin2(parameters.m_overlapMin2),
+    m_overlapMax2(parameters.m_overlapMax2),    
     m_hitScores(parameters.m_hitScores),
     m_hitScoreLabels(parameters.m_hitScoreLabels)
 {
@@ -195,6 +215,41 @@ inline unsigned int LArCaloHit::GetLArTPCVolumeId() const
 inline unsigned int LArCaloHit::GetDaughterVolumeId() const
 {
     return m_daughterVolumeId;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+inline uint64_t LArCaloHit::GetWireHash() const
+{
+    return m_wireHash;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+inline uint64_t LArCaloHit::GetOverlapMin1() const
+{
+    return m_overlapMin1;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+inline uint64_t LArCaloHit::GetOverlapMax1() const
+{
+    return m_overlapMax1;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+inline uint64_t LArCaloHit::GetOverlapMin2() const
+{
+    return m_overlapMin2;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+inline uint64_t LArCaloHit::GetOverlapMax2() const
+{
+    return m_overlapMax2;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -238,6 +293,11 @@ inline void LArCaloHit::FillParameters(LArCaloHitParameters &parameters) const
     parameters.m_pParentAddress = static_cast<const void *>(this);
     parameters.m_larTPCVolumeId = this->GetLArTPCVolumeId();
     parameters.m_daughterVolumeId = this->GetDaughterVolumeId();
+    parameters.m_wireHash = this->GetWireHash();
+    parameters.m_overlapMin1 = this->GetOverlapMin1();
+    parameters.m_overlapMax1 = this->GetOverlapMax1();
+    parameters.m_overlapMin2 = this->GetOverlapMin2();
+    parameters.m_overlapMax2 = this->GetOverlapMax2();    
     parameters.m_hitScores = this->GetHitScores();
     parameters.m_hitScoreLabels = this->GetHitScoreLabels();
 }
