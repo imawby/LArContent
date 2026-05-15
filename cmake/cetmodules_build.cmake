@@ -126,6 +126,7 @@ if(PANDORA_LIBTORCH)
     larpandoradlcontent/LArSignalId
     larpandoradlcontent/LArThreeDReco
     larpandoradlcontent/LArThreeDReco/LArEventBuilding
+    larpandoradlcontent/LArThreeDReco/LArShowerMatching    
     larpandoradlcontent/LArTrackShowerId
     larpandoradlcontent/LArTwoDReco
     larpandoradlcontent/LArVertex
