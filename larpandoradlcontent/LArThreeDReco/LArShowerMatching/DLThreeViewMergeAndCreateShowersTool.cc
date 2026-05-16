@@ -62,7 +62,6 @@ bool DLThreeViewMergeAndCreateShowersTool::CreateAmbiguousShower(DLMultiViewMatc
     this->MergeClusters(pAlgorithm, clusterGroup, globalSimMatrix, pSeedU, pSeedV, pSeedW);
 
     // Create pfo
-    std::cout << "matching tool: make three view amb shower!" << std::endl;    
     ClusterList pfoClusters({pSeedU});
     pfoClusters.push_back(pSeedV);
     pfoClusters.push_back(pSeedW);          
@@ -137,7 +136,6 @@ void DLThreeViewMergeAndCreateShowersTool::MergeClusters(DLMultiViewMatchingAlgo
             if (iter2 == iter1->second.end()) { continue; }
             if (iter2->second < m_matchThreshold) { continue; }
 
-            std::cout << "merge in " << clusterListName << std::endl;
             pAlgorithm->DeleteCluster(pClusterToMerge);            
 
             PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::MergeAndDeleteClusters(

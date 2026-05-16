@@ -28,10 +28,8 @@ bool DLTwoViewClearShowersTool::Run(DLMultiViewMatchingAlgorithm *const pAlgorit
         std::cout << "----> Running Algorithm Tool: " << this->GetInstanceName() << ", " << this->GetType() << std::endl;
 
     // Get connected clusters
-    std::cout << "aaaaa" << std::endl;
     DLMultiViewMatchingAlgorithm::ClusterGroupVector clusterGroupVector;
     pAlgorithm->GetConnectedGroups(clusterGroupVector);    
-    std::cout << "bbbbbb" << std::endl;
 
     // Loop over connected groups
     bool madeParticles(false);
@@ -61,22 +59,13 @@ bool DLTwoViewClearShowersTool::Run(DLMultiViewMatchingAlgorithm *const pAlgorit
 
 void DLTwoViewClearShowersTool::CreateClearShowers(DLMultiViewMatchingAlgorithm *const pAlgorithm, const DLMultiViewMatchingAlgorithm::ClusterGroup &clusterGroup)
 {
-    std::cout << "matching tool: make two view clear shower!" << std::endl;
-    
     ClusterList pfoClusters;
 
     for (const ClusterList &clusterList : {clusterGroup.m_clustersU, clusterGroup.m_clustersV, clusterGroup.m_clustersW})
-    {
         if (clusterList.size() == 1)
-        {
-            std::cout << "is available: " << clusterList.front()->IsAvailable() << std::endl;
             pfoClusters.push_back(clusterList.front());
-        }
-    }
 
-    std::cout << "pfoclusters.size(): " << pfoClusters.size() << std::endl;
     pAlgorithm->CreatePfo(pfoClusters);
-    std::cout << "DONE" << std::endl;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------

@@ -52,8 +52,6 @@ bool DLThreeViewClearShowersTool::Run(DLMultiViewMatchingAlgorithm *const pAlgor
 
 void DLThreeViewClearShowersTool::CreateClearShowers(DLMultiViewMatchingAlgorithm *const pAlgorithm, const DLMultiViewMatchingAlgorithm::ClusterGroup &clusterGroup)
 {
-    std::cout << "matching tool: make three view clear shower!" << std::endl;
-    
     ClusterList pfoClusters({clusterGroup.m_clustersU.front()});
     pfoClusters.push_back(clusterGroup.m_clustersV.front());
     pfoClusters.push_back(clusterGroup.m_clustersW.front());
