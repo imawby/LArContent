@@ -1,7 +1,7 @@
 /**
  *  @file   larpandoradlcontent/LArHelpers/LArDLShowerHelper.h
  *
- *  @brief  Header file for the lar deep learning helper helper class.
+ *  @brief  Header file for the DL shower helper class.
  *
  *  $Log: $
  */
@@ -39,10 +39,12 @@ public:
 
     /**
      *  @brief Calculate all properties of a hit relevant for constructing the hit feature vector.
+     *         for use in the DLShowerGrowing and DLShowerMatching algorithm networks
      *
      *  @param pCaloHit the input hit
+     *  @param detXGaps the boundaries of the 'line gaps' within the detector i.e. those that span the drift coordinate
      *  @param vtxPos the position of the 2D neutrino vertex associated with the hit
-     *  @param hitFeatures struct to store calculated hit properties
+     *  @param hitFeatures[out] struct to store calculated hit properties
      */
     static void CalculateHitFeatures(const pandora::CaloHit *const pCaloHit, const std::set<float> &detXGaps,
         pandora::CartesianVector vtxPos, HitFeatures &hitFeatures);

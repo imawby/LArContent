@@ -40,7 +40,6 @@ void LArDLShowerHelper::CalculateHitFeatures(const CaloHit *const pCaloHit, cons
     const double xRel{x - static_cast<double>(vtxPos.GetX())};
     const double z{static_cast<double>(pCaloHit->GetPositionVector().GetZ())};
     const double zRel{z - static_cast<double>(vtxPos.GetZ())};
-
     const double rRel{std::sqrt(pow(xRel, 2.) + pow(zRel, 2.))};
     const double cosThetaRel{rRel != 0. ? xRel / rRel : 0.};
     const double sinThetaRel{rRel != 0. ? zRel / rRel : 0.};
@@ -64,10 +63,5 @@ void LArDLShowerHelper::CalculateHitFeatures(const CaloHit *const pCaloHit, cons
     hitFeatures.m_xWidth = pCaloHit->GetCellSize1();
     hitFeatures.m_energy = pCaloHit->GetMipEquivalentEnergy();
 }
-
-
-    
-
-
 
 } // namespace lar_dl_content
