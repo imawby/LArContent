@@ -62,6 +62,12 @@ public:
     void GetConnectedGroups(ClusterGroupVector &clusterGroupVector);
 
     /**
+     *  @brief  TODO
+     */
+    void GetConnectedGroup(const pandora::Cluster *const pCluster, ClusterGroup &clusterGroup, pandora::ClusterList &usedU, pandora::ClusterList &usedV, pandora::ClusterList &usedW);    
+
+    
+    /**
      *  @brief  Create a pfo from a list of input clusters
      *
      *  @param[in] clusters the input list of clusters
