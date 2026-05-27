@@ -1,7 +1,7 @@
 /**
  *  @file   larpandoradlcontent/LArThreeDReco/LArShowerMatching/DLThreeViewClearShowersTool.cc
  *
- *  @brief  Implementation of the clear showers tool class.
+ *  @brief  Implementation of the three view clear showers tool class.
  *
  *  $Log: $
  */

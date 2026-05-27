@@ -59,18 +59,6 @@ DLMultiViewMatchingAlgorithm::~DLMultiViewMatchingAlgorithm()
     
 //------------------------------------------------------------------------------------------------------------------------------------------    
 
-DLMultiViewMatchingAlgorithm::WireID DLMultiViewMatchingAlgorithm::DecodeWireHash(const uint64_t id)
-{
-    int cryo(static_cast<unsigned int>((id >> 48) & 0xFFFF));
-    int tpc(static_cast<unsigned int>((id >> 32) & 0xFFFF));
-    int plane(static_cast<unsigned int>((id >> 16) & 0xFFFF));
-    int wire(static_cast<unsigned int>(id & 0xFFFF));
-
-    return WireID(cryo, tpc, plane, wire);
-}    
-
-//------------------------------------------------------------------------------------------------------------------------------------------    
-
 StatusCode DLMultiViewMatchingAlgorithm::Run()
 {
     // Get lists
@@ -237,6 +225,11 @@ bool DLMultiViewMatchingAlgorithm::DoClustersOverlapInWire(const Cluster *const 
     const int nSamplingPoints2(filteredCaloHitList2.size());    
     for (const CaloHit *const pCaloHit1 : caloHitList1)
     {
+        const LArCaloHit *const pLArHit1(dynamic_cast<const LArCaloHit *>(pCaloHit1));
+
+        if (!pLArHit1)
+            continue;
+        
         if ((pCaloHit1->GetPositionVector().GetX() < minX) || (pCaloHit1->GetPositionVector().GetX() > maxX))
             continue;
 
@@ -244,22 +237,27 @@ bool DLMultiViewMatchingAlgorithm::DoClustersOverlapInWire(const Cluster *const 
         
         for (const CaloHit *const pCaloHit2 : caloHitList2)
         {
-            const LArCaloHit *const pLArHit1(dynamic_cast<const LArCaloHit *>(pCaloHit1));
-            const WireID wireID1(this->DecodeWireHash(pLArHit1->GetWireHash()));            
-            const WireID overlapMin11(this->DecodeWireHash(pLArHit1->GetOverlapMin1())); //plane 1
-            const WireID overlapMax11(this->DecodeWireHash(pLArHit1->GetOverlapMax1()));
-            const WireID overlapMin12(this->DecodeWireHash(pLArHit1->GetOverlapMin2())); //plane 2
-            const WireID overlapMax12(this->DecodeWireHash(pLArHit1->GetOverlapMax2()));           
-            const LArCaloHit *const pLArHit2(dynamic_cast<const LArCaloHit *>(pCaloHit2));            
-            const WireID wireID2(this->DecodeWireHash(pLArHit2->GetWireHash()));
+            const LArCaloHit *const pLArHit2(dynamic_cast<const LArCaloHit *>(pCaloHit2));
 
-            // tpc should be the same
-            if ((wireID1.m_cryostat != wireID2.m_cryostat) || (wireID1.m_tpc != wireID2.m_tpc))
+            if (!pLArHit2)
                 continue;
-
-            if (wireID2.m_plane == overlapMin11.m_plane)
+            
+            // tpc & child volume should be the same
+            if ((pLArHit1->GetLArTPCVolumeId() != pLArHit2->GetLArTPCVolumeId()) ||
+                (pLArHit1->GetDaughterVolumeId() != pLArHit2->GetDaughterVolumeId()))
             {
-                if ((overlapMin11.m_wire <= wireID2.m_wire) && (overlapMax11.m_wire >= wireID2.m_wire))
+                continue;
+            }
+
+            const unsigned int wireId2(pLArHit2->GetWireId());
+            
+            // make sure wire intersects with proj planes
+            if (pLArHit2->GetPlane() == pLArHit1->GetPlane1())
+            {
+                const unsigned int minWireIntersect(pLArHit1->GetMinIntersectWire1());
+                const unsigned int maxWireIntersect(pLArHit1->GetMaxIntersectWire1());
+                
+                if ((minWireIntersect <= wireId2) && (maxWireIntersect >= wireId2))
                 {
                     overlapCount++;
                     break;
@@ -267,7 +265,10 @@ bool DLMultiViewMatchingAlgorithm::DoClustersOverlapInWire(const Cluster *const 
             }
             else
             {
-                if ((overlapMin12.m_wire <= wireID2.m_wire) && (overlapMax12.m_wire >= wireID2.m_wire))
+                const unsigned int minWireIntersect(pLArHit1->GetMinIntersectWire2());
+                const unsigned int maxWireIntersect(pLArHit1->GetMaxIntersectWire2());
+                
+                if ((minWireIntersect <= wireId2) && (maxWireIntersect >= wireId2))
                 {
                     overlapCount++;
                     break;

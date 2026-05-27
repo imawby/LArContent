@@ -1,7 +1,7 @@
 /**
  *  @file   larpandoracontent/LArThreeDReco/LArShowerMatching/DLThreeViewClearShowersTool.h
  *
- *  @brief  Header file for the clear showers tool class.
+ *  @brief  Header file for the three view clear showers tool class.
  *
  *  $Log: $
  */
@@ -29,7 +29,12 @@ public:
 private:
     pandora::StatusCode ReadSettings(const pandora::TiXmlHandle xmlHandle);
 
-
+    /**
+     *  @brief Create a shower-like particle from a 1:1:1 matched cluster group
+     *
+     *  @param pAlgorithm the calling algorithm
+     *  @param clusterGroup the input connected cluster group
+     */     
     void CreateClearShowers(DLMultiViewMatchingAlgorithm *const pAlgorithm, const DLMultiViewMatchingAlgorithm::ClusterGroup &clusterGroup);
 };
 

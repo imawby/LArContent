@@ -130,7 +130,7 @@ void DLTwoViewMergeAndCreateShowersTool::MergeClusters(DLMultiViewMatchingAlgori
     {
         const HitType hitType(LArClusterHelper::GetClusterHitType(pSeed));            
         const ClusterList &clusterList(hitType == TPC_VIEW_U ? clusterGroup.m_clustersU : hitType == TPC_VIEW_V ? clusterGroup.m_clustersV : clusterGroup.m_clustersW);
-        const std::string clusterListName(hitType == TPC_VIEW_U ? "ClustersU" : hitType == TPC_VIEW_V ? "ClustersV" : "ClustersW");
+        const std::string clusterListName(hitType == TPC_VIEW_U ? m_clusterListNameU : hitType == TPC_VIEW_V ? m_clusterListNameV :m_clusterListNameW);
         
         for (const Cluster *const pClusterToMerge : clusterList)
         {
@@ -156,6 +156,19 @@ void DLTwoViewMergeAndCreateShowersTool::MergeClusters(DLMultiViewMatchingAlgori
 
 StatusCode DLTwoViewMergeAndCreateShowersTool::ReadSettings(const TiXmlHandle xmlHandle)
 {
+    PANDORA_RETURN_RESULT_IF_AND_IF(
+        STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "ClusterListNameU", m_clusterListNameU));
+    if (m_clusterListNameU.empty())
+        m_clusterListNameU = "ClustersU";
+    PANDORA_RETURN_RESULT_IF_AND_IF(
+        STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "ClusterListNameV", m_clusterListNameV));
+    if (m_clusterListNameV.empty())
+        m_clusterListNameV = "ClustersV";
+    PANDORA_RETURN_RESULT_IF_AND_IF(
+        STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "ClusterListNameW", m_clusterListNameW));
+    if (m_clusterListNameW.empty())
+        m_clusterListNameW = "ClustersW";
+    
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "MatchThreshold", m_matchThreshold));
 
     return STATUS_CODE_SUCCESS;

@@ -1,7 +1,7 @@
 /**
  *  @file   larpandoradlcontent/LArThreeDReco/LArShowerMatching/DLTwoViewClearShowersTool.cc
  *
- *  @brief  Implementation of the clear showers tool class.
+ *  @brief  Implementation of the two view clear showers tool class.
  *
  *  $Log: $
  */
@@ -9,7 +9,6 @@
 #include "Pandora/AlgorithmHeaders.h"
 
 #include "larpandoradlcontent/LArThreeDReco/LArShowerMatching/DLTwoViewClearShowersTool.h"
-
 
 using namespace pandora;
 
