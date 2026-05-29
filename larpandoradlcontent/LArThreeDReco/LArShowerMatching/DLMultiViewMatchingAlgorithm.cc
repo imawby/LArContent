@@ -90,7 +90,7 @@ StatusCode DLMultiViewMatchingAlgorithm::Run()
         // Calculate global sim matrix
         SimilarityMatrix globalSimMatrix;
         this->FillGlobalSimMatrix(clusterGroupVector, globalSimMatrix);
-
+        
         // Update connected cluster groups
         this->UpdateNavigationMaps(globalSimMatrix);
     
@@ -99,12 +99,31 @@ StatusCode DLMultiViewMatchingAlgorithm::Run()
         unsigned int repeatCounter(0);
         while (repeat && (repeatCounter < m_nMaxRepeats))
         {
+            ///////////////////////////////
+            ClusterGroupVector jam;
+            this->GetConnectedGroups(jam);
+         
+            for (const DLMultiViewMatchingAlgorithm::ClusterGroup &clusterGroup : jam)
+            {
+                int nU(clusterGroup.m_clustersU.size()), nV(clusterGroup.m_clustersV.size()), nW(clusterGroup.m_clustersW.size());
+                std::cout << "Cluster group with " << nU << " U clusters, " << nV << " V clusters, " << nW << " W clusters." << std::endl;
+                ClusterList clusterListU(clusterGroup.m_clustersU);
+                ClusterList clusterListV(clusterGroup.m_clustersV);
+                ClusterList clusterListW(clusterGroup.m_clustersW);
+                PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &clusterListU, "ClusterGroup_U", BLUE);
+                PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &clusterListV, "ClusterGroup_V", GREEN);
+                PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &clusterListW, "ClusterGroup_W", RED);
+                PandoraMonitoringApi::ViewEvent(this->GetPandora());
+            }
+            //////////////////////////////
+                
             repeat = false;
             ++repeatCounter;            
             for (const auto &matchingTool : m_matchingToolVector)
             {
                 const bool particlesMade(matchingTool->Run(this, globalSimMatrix));
-                repeat = repeat ? repeat : particlesMade;
+
+                repeat = repeat ? repeat : particlesMade;               
             }
         }
     }
@@ -713,7 +732,7 @@ StatusCode DLMultiViewMatchingAlgorithm::ReadSettings([[maybe_unused]] const TiX
     PANDORA_RETURN_RESULT_IF_AND_IF(
         STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "OutputPfoListName", m_outputPfoListName));
     if (m_outputPfoListName.empty())
-        m_outputPfoListName = "OutputPfoListName";
+        m_outputPfoListName = "ShowerParticles3D";
 
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
         XmlHelper::ReadValue(xmlHandle, "TrainingMode", m_trainingMode));
