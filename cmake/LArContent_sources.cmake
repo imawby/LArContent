@@ -249,6 +249,7 @@ set(LAR_CONTENT_SRCS
     larpandoracontent/LArTwoDReco/LArClusterSplitting/TwoDSlidingFitSplittingAndSplicingAlgorithm.cc
     larpandoracontent/LArTwoDReco/LArClusterSplitting/TwoDSlidingFitSplittingAndSwitchingAlgorithm.cc
     larpandoracontent/LArTwoDReco/LArClusterSplitting/VertexSplittingAlgorithm.cc
+    larpandoracontent/LArTwoDReco/LArClusterSplitting/WireSplittingAlgorithm.cc
     larpandoracontent/LArTwoDReco/LArCosmicRay/CosmicRayExtensionAlgorithm.cc
     larpandoracontent/LArTwoDReco/LArCosmicRay/CosmicRaySplittingAlgorithm.cc
     larpandoracontent/LArTwoDReco/LArCosmicRay/DeltaRayExtensionAlgorithm.cc
