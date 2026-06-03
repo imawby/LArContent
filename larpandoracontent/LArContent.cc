@@ -176,6 +176,7 @@
 #include "larpandoracontent/LArVertex/RPhiFeatureTool.h"
 #include "larpandoracontent/LArVertex/ShowerAsymmetryFeatureTool.h"
 
+#include "larpandoracontent/LArTrackShowerId/ChallengeTrackShowerIdAlgorithm.h"
 #include "larpandoracontent/LArTrackShowerId/CutClusterCharacterisationAlgorithm.h"
 #include "larpandoracontent/LArTrackShowerId/CutPfoCharacterisationAlgorithm.h"
 #include "larpandoracontent/LArTrackShowerId/MvaPfoCharacterisationAlgorithm.h"
@@ -307,6 +308,7 @@
     d("LArThreeDTrackFragments",                ThreeViewTrackFragmentsAlgorithm)                                               \
     d("LArThreeDTransverseTracks",              ThreeViewTransverseTracksAlgorithm)                                             \
     d("LArTwoViewTransverseTracks",             TwoViewTransverseTracksAlgorithm)                                               \
+    d("LArChallengeTrackShowerId",              ChallengeTrackShowerIdAlgorithm)                                                \
     d("LArCutClusterCharacterisation",          CutClusterCharacterisationAlgorithm)                                            \
     d("LArCutPfoCharacterisation",              CutPfoCharacterisationAlgorithm)                                                \
     d("LArShowerGrowing",                       ShowerGrowingAlgorithm)                                                         \

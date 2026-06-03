@@ -28,7 +28,7 @@ DLMultiViewMatchingAlgorithm::DLMultiViewMatchingAlgorithm() :
     m_trainingFileName("ShowerMatchingTraining.root"),
     m_trainingTreeName("trainingTree"),
     m_minNClusterHits(5),    
-    m_nMaxRepeats(2),
+    m_nMaxRepeats(10),
     m_minWireOverlapFraction(0.8f),
     m_hitFeatureDim(14),
     m_polarRScaleFactor{1.f},
@@ -100,21 +100,21 @@ StatusCode DLMultiViewMatchingAlgorithm::Run()
         while (repeat && (repeatCounter < m_nMaxRepeats))
         {
             ///////////////////////////////
-            ClusterGroupVector jam;
-            this->GetConnectedGroups(jam);
+            // ClusterGroupVector jam;
+            // this->GetConnectedGroups(jam);
          
-            for (const DLMultiViewMatchingAlgorithm::ClusterGroup &clusterGroup : jam)
-            {
-                int nU(clusterGroup.m_clustersU.size()), nV(clusterGroup.m_clustersV.size()), nW(clusterGroup.m_clustersW.size());
-                std::cout << "Cluster group with " << nU << " U clusters, " << nV << " V clusters, " << nW << " W clusters." << std::endl;
-                ClusterList clusterListU(clusterGroup.m_clustersU);
-                ClusterList clusterListV(clusterGroup.m_clustersV);
-                ClusterList clusterListW(clusterGroup.m_clustersW);
-                PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &clusterListU, "ClusterGroup_U", BLUE);
-                PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &clusterListV, "ClusterGroup_V", GREEN);
-                PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &clusterListW, "ClusterGroup_W", RED);
-                PandoraMonitoringApi::ViewEvent(this->GetPandora());
-            }
+            // for (const DLMultiViewMatchingAlgorithm::ClusterGroup &clusterGroup : jam)
+            // {
+            //     int nU(clusterGroup.m_clustersU.size()), nV(clusterGroup.m_clustersV.size()), nW(clusterGroup.m_clustersW.size());
+            //     std::cout << "Cluster group with " << nU << " U clusters, " << nV << " V clusters, " << nW << " W clusters." << std::endl;
+            //     ClusterList clusterListU(clusterGroup.m_clustersU);
+            //     ClusterList clusterListV(clusterGroup.m_clustersV);
+            //     ClusterList clusterListW(clusterGroup.m_clustersW);
+            //     PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &clusterListU, "ClusterGroup_U", BLUE);
+            //     PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &clusterListV, "ClusterGroup_V", GREEN);
+            //     PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &clusterListW, "ClusterGroup_W", RED);
+            //     PandoraMonitoringApi::ViewEvent(this->GetPandora());
+            // }
             //////////////////////////////
                 
             repeat = false;
@@ -123,7 +123,10 @@ StatusCode DLMultiViewMatchingAlgorithm::Run()
             {
                 const bool particlesMade(matchingTool->Run(this, globalSimMatrix));
 
-                repeat = repeat ? repeat : particlesMade;               
+                repeat = repeat ? repeat : particlesMade;
+
+                if (particlesMade)
+                    break;
             }
         }
     }

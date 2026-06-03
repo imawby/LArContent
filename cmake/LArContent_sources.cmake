@@ -203,6 +203,7 @@ set(LAR_CONTENT_SRCS
     larpandoracontent/LArThreeDReco/LArTwoViewMatching/TwoViewThreeDKinkTool.cc
     larpandoracontent/LArThreeDReco/LArTwoViewMatching/TwoViewTransverseTracksAlgorithm.cc
     larpandoracontent/LArTrackShowerId/BranchGrowingAlgorithm.cc
+    larpandoracontent/LArTrackShowerId/ChallengeTrackShowerIdAlgorithm.cc    
     larpandoracontent/LArTrackShowerId/ClusterCharacterisationBaseAlgorithm.cc
     larpandoracontent/LArTrackShowerId/CutClusterCharacterisationAlgorithm.cc
     larpandoracontent/LArTrackShowerId/CutPfoCharacterisationAlgorithm.cc
