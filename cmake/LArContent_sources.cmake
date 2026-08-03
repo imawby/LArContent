@@ -117,6 +117,7 @@ set(LAR_CONTENT_SRCS
     larpandoracontent/LArShowerRefinement/ProtoShowerMatchingTool.cc
     larpandoracontent/LArShowerRefinement/ShowerSpineFinderTool.cc
     larpandoracontent/LArShowerRefinement/ShowerStartFinderTool.cc
+    larpandoracontent/LArThreeDReco/ThirdViewRecoveryAlgorithm.cc
     larpandoracontent/LArThreeDReco/LArCosmicRay/AmbiguousDeltaRayTool.cc
     larpandoracontent/LArThreeDReco/LArCosmicRay/CosmicRayBaseMatchingAlgorithm.cc
     larpandoracontent/LArThreeDReco/LArCosmicRay/CosmicRayRemovalTool.cc

@@ -94,7 +94,16 @@ public:
      *  @param  clusterList the output list of clusters
      */
     static void GetClusters(const pandora::ParticleFlowObject *const pPfo, const pandora::HitType &hitType, pandora::ClusterList &clusterList);
-
+    
+    /**
+     *  @brief  Get the number of views in which a given pfo has a cluster
+     *
+     *  @param  pPfo the input Pfo
+     *
+     *  @return the number of 2D views
+     */
+    static int GetNViews(const pandora::ParticleFlowObject *const pPfo);
+    
     /**
      * @brief Get the number of 2D hits of a PFO
      *

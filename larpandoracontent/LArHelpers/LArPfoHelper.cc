@@ -104,6 +104,24 @@ void LArPfoHelper::GetClusters(const ParticleFlowObject *const pPfo, const HitTy
     }
 }
 
+//------------------------------------------------------------------------------------------------------------------------------------------    
+
+int LArPfoHelper::GetNViews(const ParticleFlowObject *const pPfo)
+{
+    int nViews(0);
+    
+    for (const HitType hitType : {TPC_VIEW_U, TPC_VIEW_V, TPC_VIEW_W})
+    {
+        ClusterList clusters;        
+        LArPfoHelper::GetClusters(pPfo, hitType, clusters);
+
+        if (!clusters.empty())
+            ++nViews;
+    }
+
+    return nViews;
+}
+    
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 unsigned int LArPfoHelper::GetNumberOfTwoDHits(const ParticleFlowObject *const pPfo)

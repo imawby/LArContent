@@ -88,6 +88,7 @@
 #include "larpandoracontent/LArShowerRefinement/ShowerSpineFinderTool.h"
 #include "larpandoracontent/LArShowerRefinement/ShowerStartFinderTool.h"
 
+#include "larpandoracontent/LArThreeDReco/ThirdViewRecoveryAlgorithm.h"
 #include "larpandoracontent/LArThreeDReco/LArCosmicRay/AmbiguousDeltaRayTool.h"
 #include "larpandoracontent/LArThreeDReco/LArCosmicRay/CosmicRayRemovalTool.h"
 #include "larpandoracontent/LArThreeDReco/LArCosmicRay/CosmicRayShowerMatchingAlgorithm.h"
@@ -281,6 +282,7 @@
     d("LArNeutrinoHierarchy",                   NeutrinoHierarchyAlgorithm)                                                     \
     d("LArNeutrinoProperties",                  NeutrinoPropertiesAlgorithm)                                                    \
     d("LArTestBeamParticleCreation",            TestBeamParticleCreationAlgorithm)                                              \
+    d("LArThirdViewRecovery",                   ThirdViewRecoveryAlgorithm)                                                     \
     d("LArCosmicRayShowerMatching",             CosmicRayShowerMatchingAlgorithm)                                               \
     d("LArCosmicRayTrackMatching",              CosmicRayTrackMatchingAlgorithm)                                                \
     d("LArCosmicRayTrackRecovery",              CosmicRayTrackRecoveryAlgorithm)                                                \
