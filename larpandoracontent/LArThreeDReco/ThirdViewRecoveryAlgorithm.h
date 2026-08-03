@@ -57,12 +57,15 @@ private:
     void ProcessThreeView(const pandora::Cluster *const pMatchedCluster, const pandora::CartesianPointVector &projection,
         const std::vector<pandora::HitType> &hitTypes, const float minX, const float maxX, pandora::CaloHitList &collectedHits);
 
-    
-
     void GetProjectionInRange(const pandora::CaloHitList &caloHitList1, const pandora::CaloHitList &caloHitList2, pandora::CartesianPointVector &projections);
     
+    void GetMatchedHitsFromView(const pandora::CartesianPointVector &projections, const pandora::CaloHitList *const allCaloHitList,
+        float &minX, float &maxX, pandora::CaloHitList &collectedHits);
 
 
+
+
+    
 
     void ProcessTwoView(const pandora::Cluster *const pMatchedCluster, const pandora::CartesianPointVector &projection,
         const std::vector<pandora::HitType> &hitTypes, const float minX, const float maxX, pandora::CaloHitList &collectedHits);    

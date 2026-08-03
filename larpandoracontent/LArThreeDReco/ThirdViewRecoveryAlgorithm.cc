@@ -491,42 +491,15 @@ void ThirdViewRecoveryAlgorithm::ProcessTwoView(const Cluster *const pMatchedClu
     CartesianPointVector matchedProjections;
     this->GetProjectionInRange(collectedHits, otherCaloHits, matchedProjections);
 
-    // Now find the hits that we map onto
-    const CaloHitList *pMatchedCaloHits3(nullptr);
-    std::string thirdViewCaloHitListName(matchedHitTypes.at(2) == TPC_VIEW_U ? "CaloHitListU" : (matchedHitTypes.at(2) == TPC_VIEW_V ? "CaloHitListV" : "CaloHitListW"));
-    PandoraContentApi::GetList(*this, thirdViewCaloHitListName, pMatchedCaloHits3);
-    CaloHitVector matchedThirdViewHits(pMatchedCaloHits3->begin(), pMatchedCaloHits3->end());
-    
-    std::sort(matchedThirdViewHits.begin(), matchedThirdViewHits.end(), LArClusterHelper::SortHitsByPositionInX);
-    CaloHitVector collectedThirdViewHits;
-    float matchedMinX(std::numeric_limits<float>::max());
-    float matchedMaxX(std::numeric_limits<float>::lowest());
-    for (const CartesianVector &matchedProj : matchedProjections)
-    {
-        float x0 = matchedProj.GetX();
-        
-        // lower bound: first element >= x0 - m_matchedXRange
-        auto lower = std::lower_bound(matchedThirdViewHits.begin(), matchedThirdViewHits.end(), x0 - m_matchedXRange,
-        [](const auto &caloHit, float value)
-        {
-            return caloHit->GetPositionVector().GetX() < value;
-        });
-        
-        // scan until we exceed x0 + m_matchedXRange
-        for (auto it = lower; it != matchedThirdViewHits.end(); ++it)
-        {
-            if ((*it)->GetPositionVector().GetX() > x0 + m_matchedXRange) break;
-            const CaloHit* matchedHit = (*it);
+    // Now find the hits in the view that we map onto
+    const CaloHitList *pAllCaloHitsMatched3(nullptr);
+    std::string matchedCaloHitListName3(matchedHitTypes.at(2) == TPC_VIEW_U ?
+        m_caloHitListNameU : (matchedHitTypes.at(2) == TPC_VIEW_V ? m_caloHitListNameV : m_caloHitListNameW));
+    PandoraContentApi::GetList(*this, matchedCaloHitListName3, pAllCaloHitsMatched3);
 
-            if (fabs(matchedHit->GetPositionVector().GetZ() - matchedProj.GetZ()) < m_matchedXRange)
-            {
-                collectedThirdViewHits.emplace_back(matchedHit);                
-                float x = matchedHit->GetPositionVector().GetX();
-                matchedMinX = std::min(matchedMinX, x);
-                matchedMaxX = std::max(matchedMaxX, x);
-            }
-        }
-    }
+    CaloHitList collectedThirdViewHits;
+    float matchedMinX(std::numeric_limits<float>::max()), matchedMaxX(std::numeric_limits<float>::lowest());
+    this->GetMatchedHitsFromView(matchedProjections, pAllCaloHitsMatched3, matchedMinX, matchedMaxX, collectedThirdViewHits);
 
     ///////////////////////////////////////////////
     // // Visualise two view cluster
@@ -627,35 +600,67 @@ void ThirdViewRecoveryAlgorithm::ProcessTwoView(const Cluster *const pMatchedClu
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void ThirdViewRecoveryAlgorithm::GetProjectionInRange(const CaloHitList &caloHitList1, const CaloHitList &caloHitList2, CartesianPointVector &projections)
+void ThirdViewRecoveryAlgorithm::GetProjectionInRange(const CaloHitList &smallCaloHitList, const CaloHitList &bigCaloHitList, CartesianPointVector &projections)
 {
-    std::vector<std::pair<float, const CaloHit*>> secondCaloHitsX;
-    secondCaloHitsX.reserve(caloHitList2.size());
+    std::vector<std::pair<float, const CaloHit*>> bigCaloHitsX;
+    bigCaloHitsX.reserve(bigCaloHitList.size());
     
-    for (const auto* hit : caloHitList2)
-        secondCaloHitsX.emplace_back(hit->GetPositionVector().GetX(), hit);
-    std::sort(secondCaloHitsX.begin(), secondCaloHitsX.end(), [](auto &a, auto &b) { return a.first < b.first; });
+    for (const auto* hit : bigCaloHitList)
+        bigCaloHitsX.emplace_back(hit->GetPositionVector().GetX(), hit);
+    std::sort(bigCaloHitsX.begin(), bigCaloHitsX.end(), [](auto &a, auto &b) { return a.first < b.first; });
 
-    for (const CaloHit *const pHit1 : caloHitList1)
+    for (const CaloHit *const pSmallHit : smallCaloHitList)
     {
-        const float x1(pHit1->GetPositionVector().GetX());
-
         // lower bound: first element >= x1 - m_matchedXRange
-        auto lower = std::lower_bound(secondCaloHitsX.begin(), secondCaloHitsX.end(), x1 - m_matchedXRange,
+        auto lower = std::lower_bound(bigCaloHitsX.begin(), bigCaloHitsX.end(), pSmallHit->GetPositionVector().GetX() - m_matchedXRange,
         [](const auto &pair, float value)
         {
             return pair.first < value;
         });
 
         // scan until we exceed x1 + m_matchedXRange
-        for (auto it = lower; it != secondCaloHitsX.end(); ++it)
-        {
-            if (it->first > x1 + m_matchedXRange) break;
+        for (auto it = lower; it != bigCaloHitsX.end(); ++it)
+        {            
+            if (it->first > pSmallHit->GetPositionVector().GetX() + m_matchedXRange) break;
 
-            const float z(LArGeometryHelper::MergeTwoPositions(this->GetPandora(), pHit1->GetHitType(), it->second->GetHitType(),
-                pHit1->GetPositionVector().GetZ(), it->second->GetPositionVector().GetZ()));
+            const CaloHit *const pBigHit(it->second);
+            const float z(LArGeometryHelper::MergeTwoPositions(this->GetPandora(), pSmallHit->GetHitType(), pBigHit->GetHitType(),
+                pSmallHit->GetPositionVector().GetZ(), pBigHit->GetPositionVector().GetZ()));
             
-            projections.emplace_back(CartesianVector((it->second->GetPositionVector().GetX() + x1)* 0.5, 0.f, z));
+            projections.emplace_back((pBigHit->GetPositionVector().GetX() + pSmallHit->GetPositionVector().GetX()) * 0.5, 0.f, z);
+        }
+    }
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+void ThirdViewRecoveryAlgorithm::GetMatchedHitsFromView(const CartesianPointVector &projections, const CaloHitList *const allCaloHitList,
+    float &minX, float &maxX, CaloHitList &collectedHits)
+{
+    CaloHitVector allCaloHits(allCaloHitList->begin(), allCaloHitList->end());
+    std::sort(allCaloHits.begin(), allCaloHits.end(), LArClusterHelper::SortHitsByPositionInX);
+    
+    for (const CartesianVector &projection : projections)
+    {
+        // lower bound: first element >= x - m_matchedXRange
+        auto lower = std::lower_bound(allCaloHits.begin(), allCaloHits.end(), projection.GetX() - m_matchedXRange,
+        [](const auto &caloHit, float value)
+        {
+            return caloHit->GetPositionVector().GetX() < value;
+        });
+        
+        // scan until we exceed x + m_matchedXRange
+        for (auto it = lower; it != allCaloHits.end(); ++it)
+        {
+            if ((*it)->GetPositionVector().GetX() > projection.GetX() + m_matchedXRange) break;
+            const CaloHit* hit = (*it);
+
+            if (std::fabs(hit->GetPositionVector().GetZ() - projection.GetZ()) < m_matchedXRange)
+            {
+                collectedHits.emplace_back(hit);                
+                minX = std::min(minX, hit->GetPositionVector().GetX());
+                maxX = std::max(maxX, hit->GetPositionVector().GetX());
+            }
         }
     }
 }
