@@ -28,64 +28,75 @@ public:
 
 private:
     typedef std::vector<pandora::HitType> HitTypes;
+
+
+struct MatchCandidate
+{
+    const pandora::Pfo *pMatchedPfo;
+    const pandora::Cluster *pMatchedCluster;
+
+    pandora::HitType matchedView;
+    pandora::HitType otherView;
+    pandora::HitType missingView;
+
+    float overlapMinX;
+    float overlapMaxX;
+
+    pandora::CartesianPointVector projection;
+};
+
+
     
     pandora::StatusCode Run();
     pandora::StatusCode ReadSettings(const pandora::TiXmlHandle xmlHandle);
 
-    void Proccess(const pandora::Pfo *const pPfo);
+    void RecoverThirdView(const pandora::Pfo *const pPfo);
 
     pandora::StatusCode GetThirdViewProjection(const pandora::Cluster *const pCluster1, const pandora::Cluster *const pCluster2,
         float &minX, float &maxX, pandora::CartesianPointVector &projection);
 
-    void GetThirdViewProjection(const pandora::CaloHitList &caloHitList, const TwoDSlidingFitResult &slidingFit1,
-        const TwoDSlidingFitResult &slidingFit2, const float &xMin, const float &xMax, pandora::CartesianPointVector &projection);
-
+    void ProjectHitsToThirdViewWithFits(const pandora::CaloHitList &caloHitList, const TwoDSlidingFitResult &slidingFit1,
+        const TwoDSlidingFitResult &slidingFit2, const float xMin, const float xMax, pandora::CartesianPointVector &projection);
+    
     void GetMatchedCluster(const pandora::CartesianPointVector &projection, const std::vector<pandora::HitType> &hitTypes,
         const pandora::Cluster *&pClosestCluster);
     
-    bool PassQualityCuts(const pandora::CartesianPointVector &projections, const pandora::Cluster *const pMatchedCluster);
+    bool DoesClusterMatchProjections(const pandora::CartesianPointVector &projections, const pandora::Cluster *const pMatchedCluster);
     
-    void ProcessAvailable(const pandora::Cluster *const pMatchedCluster, const pandora::CartesianPointVector &projection,
+    void RecoverHitsFromAvailable(const pandora::Cluster *const pMatchedCluster, const pandora::CartesianPointVector &projection,
         const float minX, const float maxX, pandora::CaloHitList &collectedHits);
 
     void RecoverHitsWithoutMatchedClusterFit(const pandora::Cluster *const pMatchedCluster, const pandora::CartesianPointVector &projections,
         const float minX, const float maxX, pandora::CaloHitList &foundCaloHitList);
+
+    void GetParentPfo(const pandora::Cluster *const pMatchedCluster, const pandora::Pfo *&pMatchedPfo);    
+
+    void RecoverHitsFromThreeView(const pandora::Pfo *const pMatchedPfo, const pandora::Cluster *const pMatchedCluster, const pandora::CartesianPointVector &projection,
+        const std::vector<pandora::HitType> &hitTypes, const float minX, const float maxX, pandora::CaloHitList &collectedHits);
     
     void RecoverHitsWithMatchedClusterFit(const pandora::Cluster *const pMatchedCluster, const pandora::CartesianPointVector &matchedProjections,
         const pandora::CartesianPointVector &projections, const float minX, const float maxX, pandora::CaloHitList &foundCaloHitList);
 
-    void ProcessThreeView(const pandora::Cluster *const pMatchedCluster, const pandora::CartesianPointVector &projection,
-        const std::vector<pandora::HitType> &hitTypes, const float minX, const float maxX, pandora::CaloHitList &collectedHits);
+    void RecoverHitsFromTwoView(const pandora::Pfo *const pMatchedPfo, const pandora::Cluster *const pMatchedCluster, const pandora::CartesianPointVector &projection,
+        const float minX, const float maxX, pandora::CaloHitList &collectedHits);    
 
-    void GetProjectionInRange(const pandora::CaloHitList &caloHitList1, const pandora::CaloHitList &caloHitList2, pandora::CartesianPointVector &projections);
     
-    void GetMatchedHitsFromView(const pandora::CartesianPointVector &projections, const pandora::CaloHitList *const allCaloHitList,
+    void ProjectHitsToThirdViewWithHits(const pandora::CaloHitList &caloHitList1, const pandora::CaloHitList &caloHitList2, pandora::CartesianPointVector &projections);
+    
+    void GetMatchedHitsFromView(const pandora::CartesianPointVector &projections, const pandora::HitType targetView,
         float &minX, float &maxX, pandora::CaloHitList &collectedHits);
 
-
-
-
+    float CalculateThreeViewMatchFraction(const pandora::Cluster *const pMatchedCluster, const pandora::Cluster *const pOtherMatchedCluster,
+        const std::vector<pandora::HitType> &hitTypes, const pandora::CaloHitList &matchedCollectedHits, const float overlapMin, const float overlapMax);
     
-
-    void ProcessTwoView(const pandora::Cluster *const pMatchedCluster, const pandora::CartesianPointVector &projection,
-        const std::vector<pandora::HitType> &hitTypes, const float minX, const float maxX, pandora::CaloHitList &collectedHits);    
-
-    const pandora::Cluster* Get2DCluster(const pandora::Pfo *const pPfo, const pandora::HitType &hitType);
-
-
-
-    void SplitIntoHitsAndIsolated(const pandora::Cluster *const pMatchedCluster, pandora::CaloHitList &collectedHits, pandora::CaloHitList &isolatedCollectedHits);
-
-    void GetParentPfo(const pandora::Cluster *const pMatchedCluster, const pandora::Pfo *&pMatchedPfo);
-
-
-
     void ReassignHits(const pandora::Pfo *const pPfoToRecover, const pandora::CaloHitList &collectedHits,
         const pandora::Cluster *const pMatchedCluster);
 
-    void ProcessRemnant(const pandora::Pfo *const pMatchedPfo, const pandora::Cluster *const pMatchedCluster);
+    void SplitIntoHitsAndIsolated(const pandora::Cluster *const pMatchedCluster, pandora::CaloHitList &collectedHits, pandora::CaloHitList &isolatedCollectedHits);    
     
     std::vector<pandora::HitType> GetViews(const pandora::Pfo *const pPfo);
+
+    const pandora::Cluster* Get2DCluster(const pandora::Pfo *const pPfo, const pandora::HitType &hitType);    
 
 
     std::string m_trackPfoListName; ///< The name of the input track pfo list
@@ -104,10 +115,19 @@ private:
     int m_slidingFitWindow;
     float m_matchedClusterMaxSep;
     float m_gapTolerance;
+    float m_maxMatchedHitSep;
     float m_minMatchedFrac;
+    int m_maxRecoveryIterations;
     float m_recoveryMaxTransSep;
     float m_keepMaxTransSep;
     float m_matchedXRange;
+    float m_thresholdOverlapFracForCompatibility;
+    float m_thresholdMatchedFracForCompatibility;
+
+
+    float m_stepSize(0.5f);
+    float m_maxChi2ForMatch(1.f);
+    
     
 };
 

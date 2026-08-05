@@ -25,10 +25,16 @@ ThirdViewRecoveryAlgorithm::ThirdViewRecoveryAlgorithm() :
     m_slidingFitWindow(20),
     m_matchedClusterMaxSep(1.f),
     m_gapTolerance(0.f),
+    m_maxMatchedHitSep(1.f),    
     m_minMatchedFrac(0.8f),
+    m_maxRecoveryIterations(5),
     m_recoveryMaxTransSep(1.f),
     m_keepMaxTransSep(2.f),
-    m_matchedXRange(0.5f)
+    m_matchedXRange(0.5f),
+    m_thresholdOverlapFracForCompatibility(0.8f),
+    m_thresholdMatchedFracForCompatibility(0.8f),
+    m_stepSize(0.5f),
+    m_maxChi2ForMatch(1.f)
 {
 }
 
@@ -47,7 +53,7 @@ StatusCode ThirdViewRecoveryAlgorithm::Run()
         if (LArPfoHelper::GetNViews(pPfo) != 2)
             continue;
             
-        this->Proccess(pPfo);
+        this->RecoverThirdView(pPfo);
     }
 
     return STATUS_CODE_SUCCESS;
@@ -55,7 +61,7 @@ StatusCode ThirdViewRecoveryAlgorithm::Run()
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void ThirdViewRecoveryAlgorithm::Proccess(const Pfo *const pPfo)
+void ThirdViewRecoveryAlgorithm::RecoverThirdView(const Pfo *const pPfo)
 {
     std::vector<HitType> hitTypes(this->GetViews(pPfo));
     const Cluster *const pCluster1(this->Get2DCluster(pPfo, hitTypes.at(0)));
@@ -64,7 +70,7 @@ void ThirdViewRecoveryAlgorithm::Proccess(const Pfo *const pPfo)
     if ((pCluster1->GetNCaloHits() < m_minNCaloHits) || (pCluster2->GetNCaloHits() < m_minNCaloHits))
         return;
     
-    // Project clusters into third view
+    // Project clusters into third/missing view
     float minX(0.f), maxX(0.f);
     CartesianPointVector projection;
     if (this->GetThirdViewProjection(pCluster1, pCluster2, minX, maxX, projection) != STATUS_CODE_SUCCESS)
@@ -76,11 +82,11 @@ void ThirdViewRecoveryAlgorithm::Proccess(const Pfo *const pPfo)
     // Find closest cluster...
     const Cluster *pMatchedCluster(nullptr);
     this->GetMatchedCluster(projection, hitTypes, pMatchedCluster);
-    
-    if (!pMatchedCluster)
+
+    if (!pMatchedCluster || (pMatchedCluster->GetNCaloHits() < m_minNCaloHits))
         return;
 
-    if (!this->PassQualityCuts(projection, pMatchedCluster))
+    if (!this->DoesClusterMatchProjections(projection, pMatchedCluster))
         return;
     
     // Look for hits to steal
@@ -89,7 +95,7 @@ void ThirdViewRecoveryAlgorithm::Proccess(const Pfo *const pPfo)
     
     if (pMatchedCluster->IsAvailable())
     {
-        this->ProcessAvailable(pMatchedCluster, projection, minX, maxX, collectedHits);
+        this->RecoverHitsFromAvailable(pMatchedCluster, projection, minX, maxX, collectedHits);
     }
     else
     {
@@ -99,11 +105,11 @@ void ThirdViewRecoveryAlgorithm::Proccess(const Pfo *const pPfo)
 
         if (nViews == 3)
         {
-            this->ProcessThreeView(pMatchedCluster, projection, hitTypes, minX, maxX, collectedHits);
+            this->RecoverHitsFromThreeView(pMatchedPfo, pMatchedCluster, projection, hitTypes, minX, maxX, collectedHits);
         }
         else
         {
-            this->ProcessTwoView(pMatchedCluster, projection, hitTypes, minX, maxX, collectedHits);
+            this->RecoverHitsFromTwoView(pMatchedPfo, pMatchedCluster, projection, minX, maxX, collectedHits);
         }
     }
 
@@ -114,6 +120,7 @@ void ThirdViewRecoveryAlgorithm::Proccess(const Pfo *const pPfo)
     this->ReassignHits(pPfo, collectedHits, pMatchedCluster);
 }
 
+
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 StatusCode ThirdViewRecoveryAlgorithm::GetThirdViewProjection(const Cluster *const pCluster1, const Cluster *const pCluster2,
@@ -123,6 +130,7 @@ StatusCode ThirdViewRecoveryAlgorithm::GetThirdViewProjection(const Cluster *con
     LArClusterHelper::GetAllHits(pCluster1, caloHitList1);
     LArClusterHelper::GetAllHits(pCluster2, caloHitList2);    
     HitType hitType1(LArClusterHelper::GetClusterHitType(pCluster1)), hitType2(LArClusterHelper::GetClusterHitType(pCluster2));
+    projection.reserve(caloHitList1.size() + caloHitList2.size());
     
     try
     {
@@ -137,10 +145,10 @@ StatusCode ThirdViewRecoveryAlgorithm::GetThirdViewProjection(const Cluster *con
         xMin = std::max(xMin1, xMin2);
         xMax = std::min(xMax1, xMax2);
 
-        // Get projections from one..
-        this->GetThirdViewProjection(caloHitList1, slidingFit1, slidingFit2, xMin, xMax, projection);
-        // Get projections from other..
-        this->GetThirdViewProjection(caloHitList2, slidingFit1, slidingFit2, xMin, xMax, projection);        
+        // Add projections from first cluster
+        this->ProjectHitsToThirdViewWithFits(caloHitList1, slidingFit1, slidingFit2, xMin, xMax, projection);
+        // Add projections from second cluster
+        this->ProjectHitsToThirdViewWithFits(caloHitList2, slidingFit1, slidingFit2, xMin, xMax, projection);        
     }
     catch (...)
     {
@@ -152,9 +160,12 @@ StatusCode ThirdViewRecoveryAlgorithm::GetThirdViewProjection(const Cluster *con
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void ThirdViewRecoveryAlgorithm::GetThirdViewProjection(const CaloHitList &caloHitList, const TwoDSlidingFitResult &slidingFit1,
-    const TwoDSlidingFitResult &slidingFit2, const float &xMin, const float &xMax, CartesianPointVector &projection)
+void ThirdViewRecoveryAlgorithm::ProjectHitsToThirdViewWithFits(const CaloHitList &caloHitList, const TwoDSlidingFitResult &slidingFit1,
+    const TwoDSlidingFitResult &slidingFit2, const float xMin, const float xMax, CartesianPointVector &projection)
 {
+    const HitType hitType1(LArClusterHelper::GetClusterHitType(slidingFit1.GetCluster()));
+    const HitType hitType2(LArClusterHelper::GetClusterHitType(slidingFit2.GetCluster()));
+    
     for (const CaloHit *const pCaloHit : caloHitList)
     {
         const float thisX(pCaloHit->GetPositionVector().GetX());
@@ -170,8 +181,6 @@ void ThirdViewRecoveryAlgorithm::GetThirdViewProjection(const CaloHitList &caloH
         if (STATUS_CODE_SUCCESS != slidingFit2.GetGlobalFitPositionAtX(thisX, pos2))
             continue;
 
-        const HitType hitType1(LArClusterHelper::GetClusterHitType(slidingFit1.GetCluster()));
-        const HitType hitType2(LArClusterHelper::GetClusterHitType(slidingFit2.GetCluster()));
         const float z(LArGeometryHelper::MergeTwoPositions(this->GetPandora(), hitType1, hitType2, pos1.GetZ(), pos2.GetZ()));
         projection.emplace_back(thisX, 0.f, z);
     }
@@ -183,7 +192,7 @@ void ThirdViewRecoveryAlgorithm::GetThirdViewProjection(const CaloHitList &caloH
 void ThirdViewRecoveryAlgorithm::GetMatchedCluster(const CartesianPointVector &projection, const std::vector<HitType> &hitTypes, const Cluster *&pClosestCluster)
 {
     const ClusterList *pClusterList3(nullptr);
-    std::string clusterListName3(hitTypes.at(2) == TPC_VIEW_U ? m_clusterListNameU : (hitTypes.at(2) == TPC_VIEW_V ? m_clusterListNameU : m_clusterListNameU));
+    const std::string clusterListName3(hitTypes.at(2) == TPC_VIEW_U ? m_clusterListNameU : (hitTypes.at(2) == TPC_VIEW_V ? m_clusterListNameV : m_clusterListNameW));
 
     if (PandoraContentApi::GetList(*this, clusterListName3, pClusterList3) != STATUS_CODE_SUCCESS) { return; }
     if (!pClusterList3) { return;}
@@ -198,30 +207,28 @@ void ThirdViewRecoveryAlgorithm::GetMatchedCluster(const CartesianPointVector &p
             
             if (distance < m_matchedClusterMaxSep)
                 ++nMatched;
+        }
 
-            if (nMatched > bestNMatched)
-            {
-                bestNMatched = nMatched;
-                pClosestCluster = pCluster;
-            }
+        if (nMatched > bestNMatched)
+        {
+            bestNMatched = nMatched;
+            pClosestCluster = pCluster;
         }
     }
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-bool ThirdViewRecoveryAlgorithm::PassQualityCuts(const CartesianPointVector &projections, const Cluster *const pMatchedCluster)
+bool ThirdViewRecoveryAlgorithm::DoesClusterMatchProjections(const CartesianPointVector &projections, const Cluster *const pMatchedCluster)
 {
-    if (pMatchedCluster->GetNCaloHits() < m_minNCaloHits)
-        return false;
-    
     CaloHitList matchedHitList;
     pMatchedCluster->GetOrderedCaloHitList().FillCaloHitList(matchedHitList);
-        
+    HitType matchedHitType(LArClusterHelper::GetClusterHitType(pMatchedCluster));
+    
     int nGoodProjPos(0), nInGap(0);
     for (const CartesianVector &projPos : projections)
     {
-        if (LArGeometryHelper::IsInGap(this->GetPandora(), projPos, LArClusterHelper::GetClusterHitType(pMatchedCluster), m_gapTolerance))
+        if (LArGeometryHelper::IsInGap(this->GetPandora(), projPos, matchedHitType, m_gapTolerance))
         {
             ++nInGap;
             continue;
@@ -229,53 +236,20 @@ bool ThirdViewRecoveryAlgorithm::PassQualityCuts(const CartesianPointVector &pro
         
         const float closestDist(LArClusterHelper::GetClosestDistance(projPos, matchedHitList));
 
-        if (closestDist < 1.f)
+        if (closestDist < m_maxMatchedHitSep)
             ++nGoodProjPos;
     }
 
-    const float matchedFrac(float(nGoodProjPos) / float(projections.size() - nInGap));
+    const int nValidProj(projections.size() - nInGap);
+    if (nValidProj == 0) { return false; }
+    const float matchedFrac(float(nGoodProjPos) / float(nValidProj));
     
     return (matchedFrac > m_minMatchedFrac);
 }
 
-//------------------------------------------------------------------------------------------------------------------------------------------    
-
-void ThirdViewRecoveryAlgorithm::GetParentPfo(const Cluster *const pMatchedCluster, const Pfo *&pMatchedPfo)
-{
-    const PfoList *pTrackPfos(nullptr), *pShowerPfos(nullptr);
-    PandoraContentApi::GetList(*this, m_trackPfoListName, pTrackPfos);
-    PandoraContentApi::GetList(*this, m_showerPfoListName, pShowerPfos);
-    const HitType hitType3(LArClusterHelper::GetClusterHitType(pMatchedCluster));    
-
-    bool found(false);     
-    for (const PfoList *const pPfoList : {pTrackPfos, pShowerPfos})
-    {
-        if (!pPfoList || pPfoList->empty())
-            continue;
-
-        for (const ParticleFlowObject *const pPfo : *pPfoList)
-        {
-            ClusterList clusters;
-            LArPfoHelper::GetClusters(pPfo, hitType3, clusters);
-
-            if (clusters.empty())
-                continue;
-            
-            if (clusters.front() == pMatchedCluster)
-            {
-                pMatchedPfo = pPfo;
-                found = true;
-                break;
-            }
-        }
-
-        if (found) { break; }
-    }   
-}
-
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void ThirdViewRecoveryAlgorithm::ProcessAvailable(const Cluster *const pMatchedCluster, const CartesianPointVector &projection,
+void ThirdViewRecoveryAlgorithm::RecoverHitsFromAvailable(const Cluster *const pMatchedCluster, const CartesianPointVector &projection,
     const float minX, const float maxX, CaloHitList &collectedHits)
 {
     this->RecoverHitsWithoutMatchedClusterFit(pMatchedCluster, projection, minX, maxX, collectedHits);
@@ -331,27 +305,56 @@ void ThirdViewRecoveryAlgorithm::RecoverHitsWithoutMatchedClusterFit(const Clust
     }
 }
 
+//------------------------------------------------------------------------------------------------------------------------------------------    
+
+void ThirdViewRecoveryAlgorithm::GetParentPfo(const Cluster *const pMatchedCluster, const Pfo *&pMatchedPfo)
+{
+    const PfoList *pTrackPfos(nullptr), *pShowerPfos(nullptr);
+    PandoraContentApi::GetList(*this, m_trackPfoListName, pTrackPfos);
+    PandoraContentApi::GetList(*this, m_showerPfoListName, pShowerPfos);
+    const HitType hitType3(LArClusterHelper::GetClusterHitType(pMatchedCluster));    
+
+    bool found(false);     
+    for (const PfoList *const pPfoList : {pTrackPfos, pShowerPfos})
+    {
+        if (!pPfoList || pPfoList->empty())
+            continue;
+
+        for (const ParticleFlowObject *const pPfo : *pPfoList)
+        {
+            ClusterList clusters;
+            LArPfoHelper::GetClusters(pPfo, hitType3, clusters);
+
+            if (clusters.empty())
+                continue;
+            
+            if (clusters.front() == pMatchedCluster)
+            {
+                pMatchedPfo = pPfo;
+                found = true;
+                break;
+            }
+        }
+
+        if (found) { break; }
+    }   
+}
+
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void ThirdViewRecoveryAlgorithm::ProcessThreeView(const Cluster *const pMatchedCluster, const CartesianPointVector &projection,
+void ThirdViewRecoveryAlgorithm::RecoverHitsFromThreeView(const Pfo *const pMatchedPfo, const Cluster *const pMatchedCluster, const CartesianPointVector &projection,
     const std::vector<HitType> &hitTypes, const float minX, const float maxX, CaloHitList &collectedHits)
 {
-    // Get clusters of the matched pfo in all views
-    const Pfo *pMatchedPfo(nullptr);
-    this->GetParentPfo(pMatchedCluster, pMatchedPfo);    
+    // Get clusters of the matched pfo in the views of the pfo to recover   
     ClusterList matchedClusters1, matchedClusters2;
     LArPfoHelper::GetClusters(pMatchedPfo, hitTypes.at(0), matchedClusters1);
     LArPfoHelper::GetClusters(pMatchedPfo, hitTypes.at(1), matchedClusters2);
-
-    if (matchedClusters1.empty() || matchedClusters2.empty())
-        return;
-    
+    if (matchedClusters1.empty() || matchedClusters2.empty()) { return; }
     const Cluster *const pMatched1(matchedClusters1.front()), *const pMatched2(matchedClusters2.front());
 
     // Get matched projections for matched pfo
     float matchedMinX(0.f), matchedMaxX(0.f);
     CartesianPointVector matchedProjection;
-    
     if (this->GetThirdViewProjection(pMatched1, pMatched2, matchedMinX, matchedMaxX, matchedProjection) != STATUS_CODE_SUCCESS)
         return;
 
@@ -381,8 +384,10 @@ void ThirdViewRecoveryAlgorithm::RecoverHitsWithMatchedClusterFit(const Cluster 
     const float matchedMinL(matchedSlidingFitResult.GetL(matchedSlidingFitResult.GetMinLayer()));
     const float matchedMaxL(matchedSlidingFitResult.GetL(matchedSlidingFitResult.GetMaxLayer()));    
 
+    int iteration(0);
     bool found(true);
-    while(found)
+    
+    while(found && (iteration++ < m_maxRecoveryIterations))
     {
         found = false;
         
@@ -404,7 +409,7 @@ void ThirdViewRecoveryAlgorithm::RecoverHitsWithMatchedClusterFit(const Cluster 
 
                 float matchedL(0.f), matchedT(0.f);
                 matchedSlidingFitResult.GetLocalPosition(pCaloHit->GetPositionVector(), matchedL, matchedT);                
-
+                
                 // Does hit fit recovery pfo fit better than matched pfo fit?
                 if ((std::fabs(t) > m_recoveryMaxTransSep) && (matchedL > matchedMinL) && (matchedL < matchedMaxL) && (std::fabs(matchedT) < m_keepMaxTransSep))
                     continue;
@@ -421,178 +426,50 @@ void ThirdViewRecoveryAlgorithm::RecoverHitsWithMatchedClusterFit(const Cluster 
     }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
-
-    
-
-
-
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void ThirdViewRecoveryAlgorithm::ProcessTwoView(const Cluster *const pMatchedCluster, const CartesianPointVector &projection,
-    [[maybe_unused]] const std::vector<HitType> &hitTypes, const float minX, const float maxX, CaloHitList &collectedHits)
+void ThirdViewRecoveryAlgorithm::RecoverHitsFromTwoView(const Pfo *const pMatchedPfo, const Cluster *const pMatchedCluster, const CartesianPointVector &projection,
+    const float minX, const float maxX, CaloHitList &collectedHits)
 {
     this->RecoverHitsWithoutMatchedClusterFit(pMatchedCluster, projection, minX, maxX, collectedHits);
 
     // We can likely steal these hits, but we need to rule out that the track & track/shower genuinley overlap in this view
     // We only have two views for each cluster, so we are going to:
-    // 1. Identify the 'other' view of the matched pfo i.e. not the view of the matched cluster
-    // 2. Project the 'recovered' hits with the other view of the matched pfo, and 
-    // 3. See if they form something sensible in the third view (yes=leave, no=continue with hit recovery)
-    
-    // 1. 
-    const Pfo *pMatchedPfo(nullptr);
-    this->GetParentPfo(pMatchedCluster, pMatchedPfo);
+    // 1. Identify the 'other' view of the matched two-view pfo and project into third view
     std::vector<HitType> matchedHitTypes(this->GetViews(pMatchedPfo));
+    const Cluster *pOtherMatchedCluster(this->Get2DCluster(pMatchedPfo, matchedHitTypes.at(0)) == pMatchedCluster ?
+        this->Get2DCluster(pMatchedPfo, matchedHitTypes.at(1)) : this->Get2DCluster(pMatchedPfo, matchedHitTypes.at(0)));
     
-    const Cluster *pOtherMatchedCluster(nullptr);
-    for (HitType hitType : {matchedHitTypes.at(0), matchedHitTypes.at(1)})
-    {
-        if (hitType == LArClusterHelper::GetClusterHitType(pMatchedCluster))
-            continue;
-
-        ClusterList matchedClusters;
-        LArPfoHelper::GetClusters(pMatchedPfo, hitType, matchedClusters);
-        pOtherMatchedCluster = matchedClusters.front();
-        break;
-    }
-
-    // 2.+ 3.
-    CaloHitList otherCaloHits;
-    LArClusterHelper::GetAllHits(pOtherMatchedCluster, otherCaloHits);
-
+    // 2. Project the 'recovered' hits with the other view of the matched pfo
     CartesianPointVector matchedProjections;
-    this->GetProjectionInRange(collectedHits, otherCaloHits, matchedProjections);
+    CaloHitList matchedOtherHits;
+    LArClusterHelper::GetAllHits(pOtherMatchedCluster, matchedOtherHits);    
+    this->ProjectHitsToThirdViewWithHits(matchedOtherHits, collectedHits, matchedProjections);
 
-    // Now find the hits in the view that we map onto
-    const CaloHitList *pAllCaloHitsMatched3(nullptr);
-    std::string matchedCaloHitListName3(matchedHitTypes.at(2) == TPC_VIEW_U ?
-        m_caloHitListNameU : (matchedHitTypes.at(2) == TPC_VIEW_V ? m_caloHitListNameV : m_caloHitListNameW));
-    PandoraContentApi::GetList(*this, matchedCaloHitListName3, pAllCaloHitsMatched3);
+    // 3. Collect any third view hits
+    CaloHitList matchedCollectedHits;
+    float matchedMinX(std::numeric_limits<float>::max());
+    float matchedMaxX(std::numeric_limits<float>::lowest());
+    this->GetMatchedHitsFromView(matchedProjections, matchedHitTypes.at(2), matchedMinX, matchedMaxX, matchedCollectedHits);
 
-    CaloHitList collectedThirdViewHits;
-    float matchedMinX(std::numeric_limits<float>::max()), matchedMaxX(std::numeric_limits<float>::lowest());
-    this->GetMatchedHitsFromView(matchedProjections, pAllCaloHitsMatched3, matchedMinX, matchedMaxX, collectedThirdViewHits);
-
-    ///////////////////////////////////////////////
-    // // Visualise two view cluster
-    // ClusterList visjam({pMatchedCluster});
-    // PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &visjam, "Alg cluster", BLACK);
-    // for (const CaloHit *const pCaloHit : collectedHits)
-    // {
-    //     CartesianVector fitPos(pCaloHit->GetPositionVector());
-    //     PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &fitPos, "collected hit", BLACK, 2);
-    // }
-    // // visualise matched clusters projections
-    // for (CartesianVector &matchedProj : matchedProjections)
-    // {
-    //     PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &matchedProj, "projected from other hit", VIOLET, 2);
-    // }
-    // for (const CaloHit *const pCaloHit : collectedThirdViewHits)
-    // {
-    //     CartesianVector fitPos(pCaloHit->GetPositionVector());
-    //     PandoraMonitoringApi::AddMarkerToVisualization(this->GetPandora(), &fitPos, "collected third view hit", GREEN, 2);
-    // }
-    // ClusterList mvis({pOtherMatchedCluster});  
-    // PandoraMonitoringApi::VisualizeClusters(this->GetPandora(), &mvis, "OtherMatch", VIOLET);
-    // PandoraMonitoringApi::ViewEvent(this->GetPandora());
-    ////////////////////////////////
-
-    // No matched hits? Leave with collected hits!
-    if (collectedThirdViewHits.empty())
+    // 4. Investigate collected hits to check validity of match for genuine overlap
+    // If we map on to nothing, then great!
+    if (matchedCollectedHits.empty())
         return;
-    
-    // Now assess matched hits, if they looks good clear collected hit list and bail
-    // std::cout << "matchedMinX: " << matchedMinX << std::endl;
-    // std::cout << "matchedMaxX: " << matchedMaxX << std::endl;
-    // std::cout << "minX: " << minX << std::endl;
-    // std::cout << "maxX: " << maxX << std::endl;                
-    float overlapMin(std::max(matchedMinX, minX));
-    float overlapMax(std::min(matchedMaxX, maxX));
-    float overlap(overlapMax - overlapMin);
-    float overlapFrac(overlap / (maxX - minX));
-    //std::cout << "overlapFrac: " << overlapFrac << std::endl;
 
     // Bad span? Leave with collected hits!
-    if (overlapFrac < 0.8)
-        return;
+    const float overlapMin(std::max(matchedMinX, minX));
+    const float overlapMax(std::min(matchedMaxX, maxX));
+    const float overlap(overlapMax - overlapMin);
+    const float overlapFrac(overlap / (maxX - minX));
+
+    if (overlapFrac < m_thresholdOverlapFracForCompatibility) { return; }
 
     // If good  overlap, test projection...
-    HitType hitType1(LArClusterHelper::GetClusterHitType(pMatchedCluster)), hitType2(LArClusterHelper::GetClusterHitType(pOtherMatchedCluster)), hitType3(matchedHitTypes.at(2));
-    const float slidingFitPitch1(LArGeometryHelper::GetWirePitch(this->GetPandora(), hitType1));
-    const TwoDSlidingFitResult slidingFitResult1(pMatchedCluster, 20, slidingFitPitch1);
-    const float slidingFitPitch2(LArGeometryHelper::GetWirePitch(this->GetPandora(), hitType2));
-    const TwoDSlidingFitResult slidingFitResult2(pOtherMatchedCluster, 20, slidingFitPitch2);
-    CartesianPointVector collectedThirdViewPositions;
-    for (const CaloHit *const pCaloHit : collectedThirdViewHits)
-        collectedThirdViewPositions.push_back(pCaloHit->GetPositionVector());
-    const float slidingFitPitch3(LArGeometryHelper::GetWirePitch(this->GetPandora(), hitType3));
-    const TwoDSlidingFitResult slidingFitResult3(&collectedThirdViewPositions, 20, slidingFitPitch3);  
-    
-    float step(0.5);
-    int nSamplingPoints(std::floor(overlap / step));
-    int matchedSamplingPoints(0);
-
-    for (int i=0; i < nSamplingPoints; ++i)
-    {
-        float thisX(overlapMin + (float(i) * step));
-        
-        CartesianVector pos1(0.f, 0.f, 0.f), pos2(0.f, 0.f, 0.f), pos3(0.f, 0.f, 0.f);
-        
-        if (STATUS_CODE_SUCCESS != slidingFitResult1.GetGlobalFitPositionAtX(thisX, pos1))
-            continue;
-            
-        if (STATUS_CODE_SUCCESS != slidingFitResult2.GetGlobalFitPositionAtX(thisX, pos2))
-            continue;
-        
-        if (STATUS_CODE_SUCCESS != slidingFitResult3.GetGlobalFitPositionAtX(thisX, pos3))
-            continue;        
-        
-        const float z_12(LArGeometryHelper::MergeTwoPositions(this->GetPandora(), hitType1, hitType2, pos1.GetZ(), pos2.GetZ()));
-        const float dZ_12(fabs(z_12 - pos3.GetZ()));        
-        const float z_13(LArGeometryHelper::MergeTwoPositions(this->GetPandora(), hitType1, hitType3, pos1.GetZ(), pos3.GetZ()));
-        const float dZ_13(fabs(z_13 - pos2.GetZ()));        
-        const float z_23(LArGeometryHelper::MergeTwoPositions(this->GetPandora(), hitType2, hitType3, pos2.GetZ(), pos3.GetZ()));
-        const float dZ_23(fabs(z_23 - pos1.GetZ()));
-        const float chi2((dZ_12 + dZ_13 + dZ_23) / 3.f);
-        
-        
-        if (chi2 < 1.f)
-            ++matchedSamplingPoints;
-    }
-    
-    std::cout << "good sample point fraction: " << (float(matchedSamplingPoints) / float(nSamplingPoints)) << std::endl;
+    const float matchedFraction(this->CalculateThreeViewMatchFraction(pMatchedCluster, pOtherMatchedCluster, matchedHitTypes, matchedCollectedHits, overlapMin, overlapMax));
     
     // Bad match? Leave with collected hits!
-    if ((float(matchedSamplingPoints) / float(nSamplingPoints)) < 0.8)
-        return;
+    if (matchedFraction < m_thresholdMatchedFracForCompatibility) { return; }
     
     // Seems to be good match.. lets leave the hits in this pfo
     collectedHits.clear();
@@ -600,7 +477,7 @@ void ThirdViewRecoveryAlgorithm::ProcessTwoView(const Cluster *const pMatchedClu
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void ThirdViewRecoveryAlgorithm::GetProjectionInRange(const CaloHitList &smallCaloHitList, const CaloHitList &bigCaloHitList, CartesianPointVector &projections)
+void ThirdViewRecoveryAlgorithm::ProjectHitsToThirdViewWithHits(const CaloHitList &smallCaloHitList, const CaloHitList &bigCaloHitList, CartesianPointVector &projections)
 {
     std::vector<std::pair<float, const CaloHit*>> bigCaloHitsX;
     bigCaloHitsX.reserve(bigCaloHitList.size());
@@ -634,23 +511,27 @@ void ThirdViewRecoveryAlgorithm::GetProjectionInRange(const CaloHitList &smallCa
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void ThirdViewRecoveryAlgorithm::GetMatchedHitsFromView(const CartesianPointVector &projections, const CaloHitList *const allCaloHitList,
+void ThirdViewRecoveryAlgorithm::GetMatchedHitsFromView(const CartesianPointVector &projections, const HitType targetView,
     float &minX, float &maxX, CaloHitList &collectedHits)
 {
-    CaloHitVector allCaloHits(allCaloHitList->begin(), allCaloHitList->end());
-    std::sort(allCaloHits.begin(), allCaloHits.end(), LArClusterHelper::SortHitsByPositionInX);
+    const CaloHitList *pEventViewHits(nullptr);
+    std::string viewCaloHitListName(targetView == TPC_VIEW_U ? m_caloHitListNameU : (targetView == TPC_VIEW_V ? m_caloHitListNameV : m_caloHitListNameW));
+    PandoraContentApi::GetList(*this, viewCaloHitListName, pEventViewHits);
+    if (!pEventViewHits) { return; }
+    CaloHitVector eventHitVec(pEventViewHits->begin(), pEventViewHits->end());
+    std::sort(eventHitVec.begin(), eventHitVec.end(), LArClusterHelper::SortHitsByPositionInX);
     
     for (const CartesianVector &projection : projections)
     {
         // lower bound: first element >= x - m_matchedXRange
-        auto lower = std::lower_bound(allCaloHits.begin(), allCaloHits.end(), projection.GetX() - m_matchedXRange,
+        auto lower = std::lower_bound(eventHitVec.begin(), eventHitVec.end(), projection.GetX() - m_matchedXRange,
         [](const auto &caloHit, float value)
         {
             return caloHit->GetPositionVector().GetX() < value;
         });
         
         // scan until we exceed x + m_matchedXRange
-        for (auto it = lower; it != allCaloHits.end(); ++it)
+        for (auto it = lower; it != eventHitVec.end(); ++it)
         {
             if ((*it)->GetPositionVector().GetX() > projection.GetX() + m_matchedXRange) break;
             const CaloHit* hit = (*it);
@@ -664,49 +545,63 @@ void ThirdViewRecoveryAlgorithm::GetMatchedHitsFromView(const CartesianPointVect
         }
     }
 }
+    
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-void ThirdViewRecoveryAlgorithm::ProcessRemnant(const Pfo *const pMatchedPfo, const Cluster *const pMatchedCluster)
+float ThirdViewRecoveryAlgorithm::CalculateThreeViewMatchFraction(const Cluster *const pMatchedCluster, const Cluster *const pOtherMatchedCluster,
+    const std::vector<HitType> &matchedHitTypes, const CaloHitList &matchedCollectedHits, const float overlapMin, const float overlapMax)
 {
-    // Just check the xspan is still pretty consistent
-    float matchedMinX(0.f), matchedMaxX(0.f);
-    pMatchedCluster->GetClusterSpanX(matchedMinX, matchedMaxX);
-
-    std::cout << "matchedSpan: (" << matchedMinX <<  ", " << matchedMaxX << ")" << std::endl;
+    HitType hitType1(LArClusterHelper::GetClusterHitType(pMatchedCluster)), hitType2(LArClusterHelper::GetClusterHitType(pOtherMatchedCluster)), hitType3(matchedHitTypes.at(2));
+    const float slidingFitPitch1(LArGeometryHelper::GetWirePitch(this->GetPandora(), hitType1));
+    const TwoDSlidingFitResult slidingFitResult1(pMatchedCluster, m_slidingFitWindow, slidingFitPitch1);
+    const float slidingFitPitch2(LArGeometryHelper::GetWirePitch(this->GetPandora(), hitType2));
+    const TwoDSlidingFitResult slidingFitResult2(pOtherMatchedCluster, m_slidingFitWindow, slidingFitPitch2);
+    CartesianPointVector matchedCollectedPositions;
+    for (const CaloHit *const pCaloHit : matchedCollectedHits)
+        matchedCollectedPositions.push_back(pCaloHit->GetPositionVector());
+    const float slidingFitPitch3(LArGeometryHelper::GetWirePitch(this->GetPandora(), hitType3));
+    const TwoDSlidingFitResult slidingFitResult3(&matchedCollectedPositions, m_slidingFitWindow, slidingFitPitch3);  
     
-    // Need a different approach for each view
-    for (HitType hitType : {TPC_VIEW_U, TPC_VIEW_V, TPC_VIEW_W})
+    const float overlap(overlapMax - overlapMin);
+    int nSamplingPoints(std::floor(overlap / m_stepSize));
+    int matchedSamplingPoints(0);
+
+    for (int i=0; i < nSamplingPoints; ++i)
     {
-        if (hitType == LArClusterHelper::GetClusterHitType(pMatchedCluster))
+        float thisX(overlapMin + (float(i) * m_stepSize));
+        
+        CartesianVector pos1(0.f, 0.f, 0.f), pos2(0.f, 0.f, 0.f), pos3(0.f, 0.f, 0.f);
+        
+        if (STATUS_CODE_SUCCESS != slidingFitResult1.GetGlobalFitPositionAtX(thisX, pos1))
+            continue;
+            
+        if (STATUS_CODE_SUCCESS != slidingFitResult2.GetGlobalFitPositionAtX(thisX, pos2))
             continue;
         
-        ClusterList clusters;
-        LArPfoHelper::GetClusters(pMatchedPfo, hitType, clusters);
-
-        if (clusters.size() == 0)
-            continue;
-
-        float thisMinX(0.f), thisMaxX(0.f);
-        clusters.front()->GetClusterSpanX(thisMinX, thisMaxX);
-
-        std::cout << "thisSpan: (" << thisMinX << ", " << thisMaxX << ")" << std::endl; 
+        if (STATUS_CODE_SUCCESS != slidingFitResult3.GetGlobalFitPositionAtX(thisX, pos3))
+            continue;        
+        
+        const float z_12(LArGeometryHelper::MergeTwoPositions(this->GetPandora(), hitType1, hitType2, pos1.GetZ(), pos2.GetZ()));
+        const float dZ_12(fabs(z_12 - pos3.GetZ()));        
+        const float z_13(LArGeometryHelper::MergeTwoPositions(this->GetPandora(), hitType1, hitType3, pos1.GetZ(), pos3.GetZ()));
+        const float dZ_13(fabs(z_13 - pos2.GetZ()));        
+        const float z_23(LArGeometryHelper::MergeTwoPositions(this->GetPandora(), hitType2, hitType3, pos2.GetZ(), pos3.GetZ()));
+        const float dZ_23(fabs(z_23 - pos1.GetZ()));
+        const float chi2((dZ_12 + dZ_13 + dZ_23) / 3.f);
+        
+        
+        if (chi2 < m_maxChi2ForMatch)
+            ++matchedSamplingPoints;
     }
+    
+    return (float(matchedSamplingPoints) / float(nSamplingPoints));
 }
-   
 
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-
-    //this->CollectHits(pMatchedCluster, matchedProjection, projection, minX, maxX, collectedHits);
-    
-    
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 void ThirdViewRecoveryAlgorithm::ReassignHits(const Pfo *const pPfoToRecover, const CaloHitList &collectedHits, const Cluster *const pMatchedCluster)
 {
-    std::cout << "HERE" << std::endl;
-    
     CaloHitList matchedCaloHitList;
     pMatchedCluster->GetOrderedCaloHitList().FillCaloHitList(matchedCaloHitList);
 
@@ -729,7 +624,7 @@ void ThirdViewRecoveryAlgorithm::ReassignHits(const Pfo *const pPfoToRecover, co
     else
     {
         const HitType hitType(LArClusterHelper::GetClusterHitType(pMatchedCluster));
-        std::string clusterListName(hitType == TPC_VIEW_U ? "ClustersU" : (hitType == TPC_VIEW_V ? "ClustersV" : "ClustersW"));
+        std::string clusterListName(hitType == TPC_VIEW_U ? m_clusterListNameU : (hitType == TPC_VIEW_V ? m_clusterListNameV : m_clusterListNameW));
         PANDORA_THROW_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::ReplaceCurrentList<Cluster>(*this, clusterListName));
 
         const Cluster *pNewCluster(nullptr);
@@ -769,7 +664,23 @@ void ThirdViewRecoveryAlgorithm::ReassignHits(const Pfo *const pPfoToRecover, co
     }
 }
 
+//------------------------------------------------------------------------------------------------------------------------------------------
 
+void ThirdViewRecoveryAlgorithm::SplitIntoHitsAndIsolated(const Cluster *const pMatchedCluster, CaloHitList &collectedHits, CaloHitList &isolatedCollectedHits)
+{
+    const CaloHitList &isolatedHits(pMatchedCluster->GetIsolatedCaloHitList());
+    
+    CaloHitList temp(collectedHits);
+    collectedHits.clear();
+
+    for (const CaloHit *const pCaloHit : temp)
+    {
+        if (std::find(isolatedHits.begin(), isolatedHits.end(), pCaloHit) != isolatedHits.end())
+            isolatedCollectedHits.emplace_back(pCaloHit);
+        else
+            collectedHits.emplace_back(pCaloHit);
+    }
+}
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -808,30 +719,6 @@ std::vector<HitType> ThirdViewRecoveryAlgorithm::GetViews(const Pfo *const pPfo)
     }
     
     return std::vector<HitType>({hitType1, hitType2, hitType3});
-}
-
-
-
-
-
-//------------------------------------------------------------------------------------------------------------------------------------------
-
-void ThirdViewRecoveryAlgorithm::SplitIntoHitsAndIsolated(const Cluster *const pMatchedCluster, CaloHitList &collectedHits, CaloHitList &isolatedCollectedHits)
-{
-    // Get isolated
-    const CaloHitList &isolatedHits(pMatchedCluster->GetIsolatedCaloHitList());
-    
-    // Now split
-    CaloHitList temp(collectedHits);
-    collectedHits.clear();
-
-    for (const CaloHit *const pCaloHit : temp)
-    {
-        if (std::find(isolatedHits.begin(), isolatedHits.end(), pCaloHit) != isolatedHits.end())
-            isolatedCollectedHits.emplace_back(pCaloHit);
-        else
-            collectedHits.emplace_back(pCaloHit);
-    }
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -873,11 +760,20 @@ StatusCode ThirdViewRecoveryAlgorithm::ReadSettings(const TiXmlHandle xmlHandle)
 
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "GapTolerance", m_gapTolerance));
 
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "MaxMatchedHitSep", m_maxMatchedHitSep));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "MaxRecoveryIterations", m_maxRecoveryIterations));
+    
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "RecoveryMaxTransSep", m_recoveryMaxTransSep));
 
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "KeepMaxTransSep", m_keepMaxTransSep));    
 
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "MatchedXRange", m_matchedXRange));
+
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "ThresholdOverlapFracForCompatibility", m_thresholdOverlapFracForCompatibility));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "ThresholdMatchedFracForCompatibility", m_thresholdMatchedFracForCompatibility));
 
     
     return STATUS_CODE_SUCCESS;
