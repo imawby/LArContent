@@ -17,6 +17,7 @@
 #include "larpandoracontent/LArHelpers/LArGeometryHelper.h"
 #include "larpandoracontent/LArHelpers/LArMCParticleHelper.h"
 #include "larpandoracontent/LArHelpers/LArPcaHelper.h"
+#include "larpandoracontent/LArObjects/LArCaloHit.h"
 
 #include <chrono>
 #include <cmath>
@@ -67,32 +68,25 @@ StatusCode DlHitTrackShowerIdAlgorithm::Run()
 
 StatusCode DlHitTrackShowerIdAlgorithm::PrepareTrainingSample()
 {
-    static int event{-1};
-    ++event;
-    PANDORA_MONITORING_API(SetEveDisplayParameters(this->GetPandora(), false, DETECTOR_VIEW_XZ, -1, 1, 1));
+    // Get hits
     const CaloHitList *pCaloHitList(nullptr);
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, PandoraContentApi::GetList(*this, m_caloHitListName, pCaloHitList));
     if (!pCaloHitList || pCaloHitList->empty())
         return STATUS_CODE_SUCCESS;
 
-    LArGeometryHelper::DetectorBoundaries detBounds{LArGeometryHelper::GetDetectorBoundaries(this->GetPandora())};
-    const float detSpanX{detBounds.m_xBoundaries.second - detBounds.m_xBoundaries.first};
-    const float detSpanZ{detBounds.m_zBoundaries.second - detBounds.m_zBoundaries.first};
-    const LArTPC *const pLArTPC(this->GetPandora().GetGeometry()->GetLArTPCMap().begin()->second);
+    std::cout << "nHits before: " << pCaloHitList->size() << std::endl;
 
-    float vx{0.f};
-    float vz{0.f};
-    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, != , this->GetVertexPlanarCoordinates(pCaloHitList->front()->GetHitType(), vx, vz));
-
+    
+    // Map truth information for hits
+    // mcToHitsMap (to OG hits) leadingToHitsMap (fold up showers) instanceToHitsMap (reassign collinear hits)
+    // Simultaneously work out how close hits are to vertex
     LArMCParticleHelper::MCContributionMap mcToHitsMap;
     LArMCParticleHelper::GetMCToHitsMap(*pCaloHitList, mcToHitsMap, false);
     MCFoldingMap mcFoldingMap;
-    Bounds bounds;
     for (const auto &[pMC, caloHitList] : mcToHitsMap)
     {
         const MCParticle *const pLeading{LArMCParticleHelper::GetLeadingEMParticle(pMC)};
         mcFoldingMap[pMC] = pLeading ? pLeading : pMC;
-        this->GetCoordinateExtrema(caloHitList, vx, vz, bounds);
     }
 
     LArMCParticleHelper::MCContributionMap leadingToHitsMap;
@@ -100,21 +94,7 @@ StatusCode DlHitTrackShowerIdAlgorithm::PrepareTrainingSample()
     LArMCParticleHelper::MCContributionMap instanceToHitsMap;
     this->ConsolidateInstances(leadingToHitsMap, instanceToHitsMap);
 
-/*    for (const auto &[pMC, caloHitList] : instanceToHitsMap)
-    {
-        const int pdg{std::abs(pMC->GetParticleId())};
-        if (pdg != E_MINUS && pdg != PHOTON)
-            continue;
-        const LArMCParticle *const pLArMC{dynamic_cast<const LArMCParticle *>(pMC)};
-        if (!pLArMC)
-            continue;
-        MCProcess process{pLArMC->GetProcess()};
-        std::cout << "PDG: " << pdg << " Proc: " << process << " Hits: " << caloHitList.size() << std::endl;
-        this->TraverseChildren(pMC, mcToHitsMap, "");
-        PANDORA_MONITORING_API(VisualizeCaloHits(this->GetPandora(), &caloHitList, "Hits", RED));
-        PANDORA_MONITORING_API(ViewEvent(this->GetPandora()));
-    }*/
-
+    // Now assign each MCParticle and instance label (ID)
     int inst{1};
     std::unordered_map<const MCParticle *, int> mcToInstanceMap;
     for (const auto &[pMC, dummy] : instanceToHitsMap)
@@ -123,303 +103,125 @@ StatusCode DlHitTrackShowerIdAlgorithm::PrepareTrainingSample()
         ++inst;
     }
 
-    std::unordered_map<Category, CaloHitList> categoryToHitsMap;
-    std::unordered_map<const CaloHit *, std::vector<Category>> hitToCategoriesMap;
-    std::unordered_map<const CaloHit *, int> hitToInstanceMap;
+    // Now assign mcparticles/hits to categories
+    std::unordered_map<const CaloHit *, const MCParticle *> hitToMCParticle;
     std::unordered_map<const MCParticle *, Category> mcToCategoryMap;
+     
     for (const auto &[pMC, caloHitList] : instanceToHitsMap)
     {
         const LArMCParticle *const pLArMC{dynamic_cast<const LArMCParticle *>(pMC)};
-        if (pLArMC)
+
+        if (!pLArMC)
+            continue;
+
+        for (const CaloHit *const pCaloHit : caloHitList)
+            hitToMCParticle[pCaloHit] = pMC;
+                
+        if (this->IsHip(pLArMC))
         {
-            for (const CaloHit *const pCaloHit : caloHitList)
-                hitToInstanceMap[pCaloHit] = mcToInstanceMap.at(pMC);
-            if (this->IsHip(pLArMC))
-            {
-                categoryToHitsMap[HIP].insert(categoryToHitsMap[HIP].end(), caloHitList.begin(), caloHitList.end());
-                for (const CaloHit *const pCaloHit : caloHitList)
-                    hitToCategoriesMap[pCaloHit].emplace_back(HIP);
-                mcToCategoryMap[pMC] = HIP;
-            }
-            else if (this->IsMip(pLArMC))
-            {
-                categoryToHitsMap[MIP].insert(categoryToHitsMap[MIP].end(), caloHitList.begin(), caloHitList.end());
-                for (const CaloHit *const pCaloHit : caloHitList)
-                    hitToCategoriesMap[pCaloHit].emplace_back(MIP);
-                mcToCategoryMap[pMC] = MIP;
-            }
-            else if (caloHitList.size() == 1 || this->IsDiffuse(pLArMC, mcToHitsMap))
-            {
-                categoryToHitsMap[DIFFUSE].insert(categoryToHitsMap[DIFFUSE].end(), caloHitList.begin(), caloHitList.end());
-                for (const CaloHit *const pCaloHit : caloHitList)
-                    hitToCategoriesMap[pCaloHit].emplace_back(DIFFUSE);
-                mcToCategoryMap[pMC] = DIFFUSE;
-            }
-            else if (this->IsShowerLikeEM(pLArMC, mcToHitsMap))
-            {
-                categoryToHitsMap[EM_SHOWER].insert(categoryToHitsMap[EM_SHOWER].end(), caloHitList.begin(), caloHitList.end());
-                for (const CaloHit *const pCaloHit : caloHitList)
-                    hitToCategoriesMap[pCaloHit].emplace_back(EM_SHOWER);
-                mcToCategoryMap[pMC] = EM_SHOWER;
-            }
-            else if (this->IsTrackLikeEM(pLArMC))
-            {
-                categoryToHitsMap[EM_TRACK].insert(categoryToHitsMap[EM_TRACK].end(), caloHitList.begin(), caloHitList.end());
-                for (const CaloHit *const pCaloHit : caloHitList)
-                    hitToCategoriesMap[pCaloHit].emplace_back(EM_TRACK);
-                mcToCategoryMap[pMC] = EM_TRACK;
-            }
-            else
-            {
-                std::cout << "Warning: Found unclassifiable particle, default to MIP" << std::endl;
-                std::cout << "  " << pLArMC->GetParticleId() << " " << pLArMC->GetProcess() << ": " << caloHitList.size() << " hits" << std::endl;
-                std::cout << "  Parent PDG code: " << (pLArMC->GetParentList().empty() ? 0 : pLArMC->GetParentList().front()->GetParticleId()) << std::endl;
-                categoryToHitsMap[MIP].insert(categoryToHitsMap[MIP].end(), caloHitList.begin(), caloHitList.end());
-                for (const CaloHit *const pCaloHit : caloHitList)
-                    hitToCategoriesMap[pCaloHit].emplace_back(MIP);
-                mcToCategoryMap[pMC] = UNINITIALISED;
-            }
+            mcToCategoryMap[pMC] = HIP;
         }
-    }
-
-    for (const auto &[key, hits] : categoryToHitsMap)
-    {
-        std::string categoryName;
-        switch (key)
+        else if (this->IsMip(pLArMC))
         {
-            case MIP:
-                categoryName = "MIP";
-                break;
-            case HIP:
-                categoryName = "HIP";
-                break;
-            case EM_TRACK:
-                categoryName = "EM_TRACK";
-                break;
-            case EM_SHOWER:
-                categoryName = "EM_SHOWER";
-                break;
-            case DIFFUSE:
-                categoryName = "DIFFUSE";
-                break;
-            default:
-                categoryName = "UNINITIALISED";
-                break;
+           mcToCategoryMap[pMC] = MIP;
         }
-        std::cout << categoryName << ": " << hits.size() << " hits" << std::endl;
-    }
-
-    for (const auto &[pMC, hits] : instanceToHitsMap)
-    {
-        auto key = mcToCategoryMap.at(pMC);
-        auto color = RED;
-        std::string categoryName;
-        switch (key)
+        else if (caloHitList.size() == 1 || this->IsDiffuse(pLArMC, mcToHitsMap))
         {
-            case MIP:
-                categoryName = "MIP";
-                color = BLUE;
-                break;
-            case HIP:
-                categoryName = "HIP";
-                color = BLACK;
-                break;
-            case EM_TRACK:
-                categoryName = "EM_TRACK";
-                color = GREEN;
-                break;
-            case EM_SHOWER:
-                categoryName = "EM_SHOWER";
-                color = RED;
-                break;
-            case DIFFUSE:
-                categoryName = "DIFFUSE";
-                color = MAGENTA;
-                break;
-            default:
-                categoryName = "UNINITIALISED";
-                color = GRAY;
-                break;
+            mcToCategoryMap[pMC] = DIFFUSE;
         }
-        PANDORA_MONITORING_API(VisualizeCaloHits(this->GetPandora(), &hits, categoryName, color));
-    }
-
-    PANDORA_MONITORING_API(ViewEvent(this->GetPandora()));
-
-    /*
-    for (const auto &[cat, caloHitList] : categoryToHitsMap)
-    {
-        std::string categoryName;
-        switch (cat)
+        else if (this->IsShowerLikeEM(pLArMC, mcToHitsMap))
         {
-            case MIP:
-                categoryName = "MIP";
-                break;
-            case HIP:
-                categoryName = "HIP";
-                break;
-            case SHOWER:
-                categoryName = "SHOWER";
-                break;
-            case LOW_E:
-                categoryName = "LOW_E";
-                break;
-            default:
-                categoryName = "UNINITIALISED";
-                break;
+            mcToCategoryMap[pMC] = EM_SHOWER;
         }
-
-        PANDORA_MONITORING_API(VisualizeCaloHits(this->GetPandora(), &caloHitList, categoryName, AUTOITER));
-    }
-
-    PANDORA_MONITORING_API(ViewEvent(this->GetPandora()));*/
-    /*
-
-    for (const auto &[pMC, caloHitList] : instanceToHitsMap)
-    {
-        const MCParticleList &parentList{pMC->GetParentList()};
-        const std::string str{parentList.empty() ? "" : std::to_string(std::abs(parentList.front()->GetParticleId())) + " -> "};
-        PANDORA_MONITORING_API(VisualizeCaloHits(this->GetPandora(), &caloHitList, str + std::to_string(pMC->GetParticleId()), AUTOITER));
-    }
-
-    PANDORA_MONITORING_API(ViewEvent(this->GetPandora()));
-    */
-    categoryToHitsMap.clear();
-
-    // Collect hits and respective categories into feature vectors for training
-    FloatVector x_rel, z_rel, x_abs, z_abs;
-    FloatVector rr, cosTheta, sinTheta;
-    FloatVector wirePitch, wireAngle;
-    x_rel.resize(hitToCategoriesMap.size(), 0);
-    z_rel.resize(hitToCategoriesMap.size(), 0);
-    x_abs.resize(hitToCategoriesMap.size(), 0);
-    z_abs.resize(hitToCategoriesMap.size(), 0);
-    rr.resize(hitToCategoriesMap.size(), 0);
-    cosTheta.resize(hitToCategoriesMap.size(), 0);
-    sinTheta.resize(hitToCategoriesMap.size(), 0);
-    wirePitch.resize(hitToCategoriesMap.size(), 0);
-    wireAngle.resize(hitToCategoriesMap.size(), 0);
-    FloatVector adc(hitToCategoriesMap.size(), 0), width(hitToCategoriesMap.size(), 0);
-    IntVector semanticLabel(hitToCategoriesMap.size(), UNINITIALISED);
-    IntVector instanceLabel(hitToCategoriesMap.size(), UNINITIALISED);
-
-    size_t i{0};
-    for (const auto &[pCaloHit, categories] : hitToCategoriesMap)
-    {
-        const float x{pCaloHit->GetPositionVector().GetX()};
-        const float z{pCaloHit->GetPositionVector().GetZ()};
-        const HitType view{pCaloHit->GetHitType()};
-        switch (view)
+        else if (this->IsTrackLikeEM(pLArMC))
         {
-            case TPC_VIEW_U:
-                wirePitch[i] = pLArTPC->GetWirePitchU();
-                wireAngle[i] = pLArTPC->GetWireAngleU();
-                break;
-            case TPC_VIEW_V:
-                wirePitch[i] = pLArTPC->GetWirePitchV();
-                wireAngle[i] = pLArTPC->GetWireAngleV();
-                break;
-            case TPC_VIEW_W:
-                wirePitch[i] = pLArTPC->GetWirePitchW();
-                wireAngle[i] = pLArTPC->GetWireAngleW();
-                break;
-            default:
-                return STATUS_CODE_NOT_FOUND;
-        }
-        const float dx{x - vx};
-        const float dz{z - vz};
-        x_rel[i] = dx / bounds.rMax;
-        z_rel[i] = dz / bounds.rMax;
-        x_abs[i] = x / detSpanX;
-        z_abs[i] = z / detSpanZ;
- 
-        const float r{std::sqrt(dx * dx + dz * dz)};
-        if (r > 0.f)
-        {
-            rr[i] = r / bounds.rMax;
-            // Scale to [0,1] to aid training
-            cosTheta[i] = dx / (r + std::numeric_limits<float>::epsilon());
-            sinTheta[i] = dz / (r + std::numeric_limits<float>::epsilon());
+            mcToCategoryMap[pMC] = EM_TRACK;
         }
         else
         {
-            rr[i] = 0.f;
-            cosTheta[i] = 0;
-            sinTheta[i] = 0;
+            std::cout << "Warning: Found unclassifiable particle, default to MIP" << std::endl;
+            std::cout << "  " << pLArMC->GetParticleId() << " " << pLArMC->GetProcess() << ": " << caloHitList.size() << " hits" << std::endl;
+            std::cout << "  Parent PDG code: " << (pLArMC->GetParentList().empty() ? 0 : pLArMC->GetParentList().front()->GetParticleId()) << std::endl;
+            mcToCategoryMap[pMC] = MIP;
         }
-
-        adc[i] = std::log(1.f + pCaloHit->GetInputEnergy()) * 0.1f; // Log scale and normalization to keep expected values [0,1]
-        width[i] = pCaloHit->GetCellSize1() / detSpanX;
-        for (const auto &category : categories)
-            semanticLabel[i] = static_cast<int>(category);
-        instanceLabel[i] = hitToInstanceMap.at(pCaloHit);
-        ++i;
     }
 
-    if (!adc.empty())
+    if (hitToMCParticle.empty())
+        return STATUS_CODE_SUCCESS;
+
+    std::cout << "nHits after: " << hitToMCParticle.size() << std::endl;
+
+    
+    // Prepare input feature vectors
+    CaloHitList trainingHitList;    
+    for (const auto &[pCaloHit, dummy] : hitToMCParticle)
+        trainingHitList.emplace_back(pCaloHit);
+
+    // Get vertex2D
+    float vx{0.f}, vz{0.f};
+    PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, != , this->GetVertexPlanarCoordinates(trainingHitList.front()->GetHitType(), vx, vz));    
+
+    // Get bounds
+    Bounds bounds;
+    this->GetCoordinateExtrema(trainingHitList, vx, vz, bounds);
+
+    // Get input vectors
+    CaloHitVector orderedTrainingHitVector;
+    FloatVector x_rel, z_rel, x_abs, z_abs, rr, cosTheta, sinTheta, wirePitch, wireAngle, adc, width;
+    this->PopulateInputVectors(trainingHitList, bounds, vx, vz, x_rel, z_rel, x_abs, z_abs, rr, cosTheta, sinTheta, wirePitch, wireAngle, adc, width, orderedTrainingHitVector);
+    
+    // Get training
+    // Collect hits and respective categories into feature vectors for training
+    size_t nHits(trainingHitList.size());
+    IntVector semanticLabel(nHits, UNINITIALISED);
+    IntVector instanceLabel(nHits, UNINITIALISED);
+
+    for (size_t i = 0; i < nHits; ++i)
     {
-        PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_rootTreeName, "event", event));
-        // Sort the vectors by r
-        std::vector<size_t> indices(adc.size());
-        std::iota(indices.begin(), indices.end(), 0);
-        std::sort(indices.begin(), indices.end(), [&rr](size_t a, size_t b) { return rr[a] < rr[b]; });
+        const CaloHit *const pHit = orderedTrainingHitVector[i];
+        const MCParticle *const pMC = hitToMCParticle.at(pHit);
 
-        auto reorder = [&](auto &vec)
-        {
-            using VecType = std::decay_t<decltype(vec)>;
-            VecType sorted(vec.size());
-            for (size_t a = 0; a < indices.size(); ++a)
-                sorted[a] = vec[indices[a]];
-            vec.swap(sorted);
-        };
+        semanticLabel[i] = mcToCategoryMap.at(pMC);
+        instanceLabel[i] = mcToInstanceMap.at(pMC);    
+    }
+    
+    // Now save...
+    const int event(this->GetPandora().GetEvent()), subrun(this->GetPandora().GetSubrun()), run(this->GetPandora().GetRun());       
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_rootTreeName, "run", run));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_rootTreeName, "subrun", subrun));
+    PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_rootTreeName, "event", event));
 
-        reorder(x_rel);
-        reorder(z_rel);
-        reorder(x_abs);
-        reorder(z_abs);
-        reorder(wirePitch);
-        reorder(wireAngle);
-        reorder(rr);
-        reorder(cosTheta);
-        reorder(sinTheta);
-        reorder(adc);
-        reorder(width);
-        reorder(semanticLabel);
-        reorder(instanceLabel);
+    for (size_t s = 0; s < nHits; s += m_maxSeqLen)
+    {
+        size_t end{std::min(s + m_maxSeqLen, nHits)};
+        FloatVector xRelChunk(x_rel.begin() + s, x_rel.begin() + end);
+        FloatVector zRelChunk(z_rel.begin() + s, z_rel.begin() + end);
+        FloatVector xAbsChunk(x_abs.begin() + s, x_abs.begin() + end);
+        FloatVector zAbsChunk(z_abs.begin() + s, z_abs.begin() + end);
+        FloatVector wpChunk(wirePitch.begin() + s, wirePitch.begin() + end);
+        FloatVector waChunk(wireAngle.begin() + s, wireAngle.begin() + end);
+        FloatVector rrChunk(rr.begin() + s, rr.begin() + end);
+        FloatVector cosThetaChunk(cosTheta.begin() + s, cosTheta.begin() + end);
+        FloatVector sinThetaChunk(sinTheta.begin() + s, sinTheta.begin() + end);
+        FloatVector adcChunk(adc.begin() + s, adc.begin() + end);
+        FloatVector widthChunk(width.begin() + s, width.begin() + end);
+        IntVector semanticLabelChunk(semanticLabel.begin() + s, semanticLabel.begin() + end);
+        IntVector instanceLabelChunk(instanceLabel.begin() + s, instanceLabel.begin() + end);
 
-        size_t totalSize{rr.size()};
-        for (size_t s = 0; s < totalSize; s += m_maxSeqLen)
-        {
-            size_t end{std::min(s + m_maxSeqLen, totalSize)};
-            FloatVector xRelChunk(x_rel.begin() + s, x_rel.begin() + end);
-            FloatVector zRelChunk(z_rel.begin() + s, z_rel.begin() + end);
-            FloatVector xAbsChunk(x_abs.begin() + s, x_abs.begin() + end);
-            FloatVector zAbsChunk(z_abs.begin() + s, z_abs.begin() + end);
-            FloatVector wpChunk(wirePitch.begin() + s, wirePitch.begin() + end);
-            FloatVector waChunk(wireAngle.begin() + s, wireAngle.begin() + end);
-            FloatVector rrChunk(rr.begin() + s, rr.begin() + end);
-            FloatVector cosThetaChunk(cosTheta.begin() + s, cosTheta.begin() + end);
-            FloatVector sinThetaChunk(sinTheta.begin() + s, sinTheta.begin() + end);
-            FloatVector adcChunk(adc.begin() + s, adc.begin() + end);
-            FloatVector widthChunk(width.begin() + s, width.begin() + end);
-            IntVector semanticLabelChunk(semanticLabel.begin() + s, semanticLabel.begin() + end);
-            IntVector instanceLabelChunk(instanceLabel.begin() + s, instanceLabel.begin() + end);
-
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_rootTreeName, "wire_pitch", &wpChunk));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_rootTreeName, "wire_angle", &waChunk));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_rootTreeName, "x_rel", &xRelChunk));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_rootTreeName, "z_rel", &zRelChunk));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_rootTreeName, "x_abs", &xAbsChunk));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_rootTreeName, "z_abs", &zAbsChunk));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_rootTreeName, "r", &rrChunk));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_rootTreeName, "cos_theta", &cosThetaChunk));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_rootTreeName, "sin_theta", &sinThetaChunk));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_rootTreeName, "adc", &adcChunk));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_rootTreeName, "width", &widthChunk));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_rootTreeName, "semantic_label", &semanticLabelChunk));
-            PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_rootTreeName, "instance_label", &instanceLabelChunk));
-            PANDORA_MONITORING_API(FillTree(this->GetPandora(), m_rootTreeName));
-        }
+        PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_rootTreeName, "wire_pitch", &wpChunk));
+        PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_rootTreeName, "wire_angle", &waChunk));
+        PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_rootTreeName, "x_rel", &xRelChunk));
+        PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_rootTreeName, "z_rel", &zRelChunk));
+        PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_rootTreeName, "x_abs", &xAbsChunk));
+        PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_rootTreeName, "z_abs", &zAbsChunk));
+        PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_rootTreeName, "r", &rrChunk));
+        PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_rootTreeName, "cos_theta", &cosThetaChunk));
+        PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_rootTreeName, "sin_theta", &sinThetaChunk));
+        PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_rootTreeName, "adc", &adcChunk));
+        PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_rootTreeName, "width", &widthChunk));
+        PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_rootTreeName, "semantic_label", &semanticLabelChunk));
+        PANDORA_MONITORING_API(SetTreeVariable(this->GetPandora(), m_rootTreeName, "instance_label", &instanceLabelChunk));
+        PANDORA_MONITORING_API(FillTree(this->GetPandora(), m_rootTreeName));
     }
 
     return STATUS_CODE_SUCCESS;
@@ -435,8 +237,7 @@ StatusCode DlHitTrackShowerIdAlgorithm::Infer()
         return STATUS_CODE_SUCCESS;
 
     // Get projected vertex coordinates if needed
-    float vx{0.f};
-    float vz{0.f};
+    float vx{0.f}, vz{0.f};
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, != , this->GetVertexPlanarCoordinates(pCaloHitList->front()->GetHitType(), vx, vz));
 
     // Get coordinate minima and maxima
@@ -448,131 +249,138 @@ StatusCode DlHitTrackShowerIdAlgorithm::Infer()
     FloatVector x_rel, z_rel, x_abs, z_abs, rr, cosTheta, sinTheta, wirePitch, wireAngle, adc, width;
     this->PopulateInputVectors(*pCaloHitList, bounds, vx, vz, x_rel, z_rel, x_abs, z_abs, rr, cosTheta, sinTheta, wirePitch, wireAngle, adc, width, caloHitVector);
 
-    PANDORA_MONITORING_API(SetEveDisplayParameters(this->GetPandora(), false, DETECTOR_VIEW_XZ, -1, 1, 1));
+    //PANDORA_MONITORING_API(SetEveDisplayParameters(this->GetPandora(), false, DETECTOR_VIEW_XZ, -1, 1, 1));
+
     // Ensure each run conforms to the maximum sequence length
     size_t totalSize{rr.size()};
     for (size_t s = 0; s < totalSize; s += m_maxSeqLen)
     {
-        size_t end{std::min(s + m_maxSeqLen, totalSize)};
-        FloatVector xRelBatch(x_rel.begin() + s, x_rel.begin() + end);
-        FloatVector zRelBatch(z_rel.begin() + s, z_rel.begin() + end);
-        FloatVector xAbsBatch(x_abs.begin() + s, x_abs.begin() + end);
-        FloatVector zAbsBatch(z_abs.begin() + s, z_abs.begin() + end);
-        FloatVector wpBatch(wirePitch.begin() + s, wirePitch.begin() + end);
-        FloatVector waBatch(wireAngle.begin() + s, wireAngle.begin() + end);
-        FloatVector rrBatch(rr.begin() + s, rr.begin() + end);
-        FloatVector cosBatch(cosTheta.begin() + s, cosTheta.begin() + end);
-        FloatVector sinBatch(sinTheta.begin() + s, sinTheta.begin() + end);
-        FloatVector adcBatch(adc.begin() + s, adc.begin() + end);
-        FloatVector widthBatch(width.begin() + s, width.begin() + end);
+        FloatVector xRelBatch(m_maxSeqLen, -999.f), zRelBatch(m_maxSeqLen, -999.f), xAbsBatch(m_maxSeqLen, -999.f);
+        FloatVector zAbsBatch(m_maxSeqLen, -999.f), wpBatch(m_maxSeqLen, -999.f), waBatch(m_maxSeqLen, -999.f);
+        FloatVector rrBatch(m_maxSeqLen, -999.f), cosBatch(m_maxSeqLen, -999.f), sinBatch(m_maxSeqLen, -999.f);
+        FloatVector adcBatch(m_maxSeqLen, -999.f), widthBatch(m_maxSeqLen, -999.f);
+        IntVector maskBatch(m_maxSeqLen, 0);    
 
-        long batchSize = static_cast<long>(rrBatch.size());
+        for (int i = 0; i < m_maxSeqLen; ++i)
+        {
+            size_t iInput(s + i);
+
+            if (iInput < totalSize)
+            {
+                xRelBatch[i] = x_rel[iInput];
+                zRelBatch[i] = z_rel[iInput];
+                xAbsBatch[i] = x_abs[iInput];
+                zAbsBatch[i] = z_abs[iInput];
+                wpBatch[i] = wirePitch[iInput];
+                waBatch[i] = wireAngle[iInput];
+                rrBatch[i] = rr[iInput];
+                cosBatch[i] = cosTheta[iInput];
+                sinBatch[i] = sinTheta[iInput];
+                adcBatch[i] = adc[iInput];
+                widthBatch[i] = width[iInput];
+                maskBatch[i] = 1;
+            }
+        }
+
+        //long batchSize = static_cast<long>(rrBatch.size());
         std::vector<LArDLHelper::TorchInput> tensors{
-            torch::from_blob(xRelBatch.data(), {batchSize}),
-            torch::from_blob(zRelBatch.data(), {batchSize}),
-            torch::from_blob(xAbsBatch.data(), {batchSize}),
-            torch::from_blob(zAbsBatch.data(), {batchSize}),
-            torch::from_blob(wpBatch.data(), {batchSize}),
-            torch::from_blob(waBatch.data(), {batchSize}),
-            torch::from_blob(rrBatch.data(), {batchSize}),
-            torch::from_blob(cosBatch.data(), {batchSize}),
-            torch::from_blob(sinBatch.data(), {batchSize}),
-            torch::from_blob(widthBatch.data(), {batchSize}),
-            torch::from_blob(adcBatch.data(), {batchSize})
+            torch::from_blob(xRelBatch.data(), {m_maxSeqLen}),
+            torch::from_blob(zRelBatch.data(), {m_maxSeqLen}),
+            torch::from_blob(xAbsBatch.data(), {m_maxSeqLen}),
+            torch::from_blob(zAbsBatch.data(), {m_maxSeqLen}),
+            torch::from_blob(widthBatch.data(), {m_maxSeqLen}),
+            torch::from_blob(adcBatch.data(), {m_maxSeqLen}),
+            torch::from_blob(rrBatch.data(), {m_maxSeqLen}),
+            torch::from_blob(cosBatch.data(), {m_maxSeqLen}),
+            torch::from_blob(sinBatch.data(), {m_maxSeqLen}),            
+            torch::from_blob(wpBatch.data(), {m_maxSeqLen}),
+            torch::from_blob(waBatch.data(), {m_maxSeqLen})        
         };
-
-        // Run the input through the trained model
+        
+        // Collate input
         LArDLHelper::TorchInputVector inputs;
         LArDLHelper::TorchInput input{torch::stack(tensors, 1)};
         input = input.unsqueeze(0); // Add batch dimension
-        std::cout << "Input size: " << input.sizes() << std::endl;
-        inputs.push_back(input);
-        LArDLHelper::TorchDict output{LArDLHelper::CreateOutputDict()};
+        inputs.emplace_back(input);
+        
+        // Form input mask
+        LArDLHelper::TorchInput inputMask = torch::from_blob(maskBatch.data(), {m_maxSeqLen}).to(torch::kBool);
+        inputMask = inputMask.unsqueeze(0); // Add batch dimension
+        inputs.emplace_back(inputMask);
 
-        auto mem_func = []()
-        {
-            std::ifstream statm("/proc/self/statm");
-            size_t size, resident;
-            statm >> size >> resident;
-            return resident * sysconf(_SC_PAGESIZE) / (1024 * 1024);
-        };
-        size_t before{mem_func()};
-        auto t0{std::chrono::high_resolution_clock::now()};
+        // Define output
+        LArDLHelper::TorchOutput output;
+        
+        // Run the input through the trained model
         LArDLHelper::Forward(m_model, inputs, output);
-        auto t1{std::chrono::high_resolution_clock::now()};
-        size_t after{mem_func()};
-        std::cout << "Memory usage: " << (after - before) << " MB with peak: " << after << " MB" << std::endl;
-        double duration{std::chrono::duration<double, std::milli>(t1 - t0).count()};
-        std::cout << "DL inference time: " << duration << " ms for " << batchSize << " hits" << std::endl;
-
+        
         // Get the outputs as tensors - we're assuming batch size of 1, hence squeeze(0) for convenience
-        LArDLHelper::TorchOutput betaLogits{output.at("beta").toTensor().squeeze(0)}; // [N, 1]
-        LArDLHelper::TorchOutput embed{output.at("embed").toTensor().squeeze(0)}; // [N, D]
-        LArDLHelper::TorchOutput classLogits{output.at("class_logits").toTensor().squeeze(0)}; // [N, num_classes]
-        std::cout << "Output beta size: " << betaLogits.sizes() << std::endl;
-
-        // Convert logits to probabilities
-        LArDLHelper::TorchOutput classProbs{torch::softmax(classLogits, 1)};
-        // Combine classes 0 and 1 into a single class, in place, representing track-like hits
-        classProbs.index({torch::indexing::Slice(), 0}) += classProbs.index({torch::indexing::Slice(), 1});
-        classProbs.index({torch::indexing::Slice(), 1}) = 0;
+        LArDLHelper::TorchOutput classLogits{output.squeeze(0)}; // [N, num_classes]
+        LArDLHelper::TorchOutput classProbs{torch::softmax(classLogits, 1)};        
+        
+        // Now change to classes
         LArDLHelper::TorchOutput classes{classProbs.argmax(1)}; // [num_cps]
-        // If argmax is 3, then check which is large of 0 and 2, and switch to that
-        for (long i = 0; i < classes.size(0); ++i)
-        {
-            if (classes[i].item<int>() == 3)
-            {
-                const float trackProb{classProbs[i][0].item<float>()};
-                const float showerProb{classProbs[i][2].item<float>()};
-                if (trackProb > showerProb)
-                    classes[i] = 0;
-                else
-                    classes[i] = 2;
-            }
-        }
-
         std::map<int, CaloHitList> classHitsMap{{MIP, CaloHitList()}, {HIP, CaloHitList()}, {EM_TRACK, CaloHitList()},
             {EM_SHOWER, CaloHitList()}, {DIFFUSE, CaloHitList()}};
+        std::vector<std::string> classLabels({"MIPScore", "HIPScore", "EMTrackScore", "EMShowerScore", "Diffuse"});
+ 
         for (long i = 0; i < classes.size(0); ++i)
         {
+            if ((s + i) >= totalSize)
+                continue;
+            
             const int predictedClass{classes[i].item<int>()};
             const CaloHit *const pCaloHit{caloHitVector[s + i]};
             classHitsMap[predictedClass].push_back(pCaloHit);
+
+            LArCaloHit *const pLArCaloHit{const_cast<LArCaloHit *>(dynamic_cast<const LArCaloHit *>(pCaloHit))};
+            [[maybe_unused]] const int classIndex(classes[i].item<int>());
+            [[maybe_unused]] const float classScore(classProbs[i][classIndex].item<float>());
+            [[maybe_unused]] const std::string classLabel(classLabels.at(classIndex));
+
+            
+            pLArCaloHit->AddHitScore(classScore, classLabel);
         }
 
-        for (const auto &[predictedClass, caloHitList] : classHitsMap)
-        {
-            std::string categoryName;
-            switch (predictedClass + 1)
-            {
-                case MIP:
-                    categoryName = "MIP";
-                    break;
-                case HIP:
-                    categoryName = "HIP";
-                    break;
-                case EM_TRACK:
-                    categoryName = "EM_TRACK";
-                    break;
-                case EM_SHOWER:
-                    categoryName = "EM_SHOWER";
-                    break;
-                case DIFFUSE:
-                    categoryName = "DIFFUSE";
-                    break;
-                default:
-                    break;
-            }
-            // Visualise calo hits for class
-            if (!caloHitList.empty())
-            {
-                PANDORA_MONITORING_API(VisualizeCaloHits(this->GetPandora(), &caloHitList, categoryName,
-                    predictedClass + 1 == MIP ? BLUE : RED));
-            }
-        }
-        PANDORA_MONITORING_API(ViewEvent(this->GetPandora()));
+        // for (const auto &[predictedClass, caloHitList] : classHitsMap)
+        // {
+        //     std::cout << "predictedClass: " << predictedClass << std::endl;
+        //     std::cout << "n hits: " << caloHitList.size() << std::endl;
+            
+        //     std::string categoryName;
+        //     switch (predictedClass + 1)
+        //     {
+        //         case MIP:
+        //             categoryName = "MIP";
+        //             break;
+        //         case HIP:
+        //             categoryName = "HIP";
+        //             break;
+        //         case EM_TRACK:
+        //             categoryName = "EM_TRACK";
+        //             break;
+        //         case EM_SHOWER:
+        //             categoryName = "EM_SHOWER";
+        //             break;
+        //         case DIFFUSE:
+        //             categoryName = "DIFFUSE";
+        //             break;
+        //         default:
+        //             break;
+        //     }
+        //     // Visualise calo hits for class
+        //     if (!caloHitList.empty())
+        //     {
+        //         int visClass(predictedClass + 1);
+        //         PANDORA_MONITORING_API(VisualizeCaloHits(this->GetPandora(), &caloHitList, categoryName,
+        //             visClass == MIP ? BLUE : visClass == HIP ? RED : visClass == EM_TRACK ? VIOLET : visClass == EM_SHOWER ? BLACK : GREEN));
+        //     }
+        // }
+        // PANDORA_MONITORING_API(ViewEvent(this->GetPandora()));
     }
 
+
+    
     return STATUS_CODE_SUCCESS;
 }
 
