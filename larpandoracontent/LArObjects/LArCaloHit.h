@@ -89,6 +89,23 @@ public:
      */
     const pandora::StringVector &GetHitScoreLabels() const;
 
+    float GetMIPScore() const;
+
+    float GetHIPScore() const;
+
+    float GetEMTrackScore() const;
+
+    float GetEMShowerScore() const;
+
+    float GetDiffuseScore() const;        
+
+    float GetTrackScore() const;
+
+    float GetShowerScore() const;    
+    
+    void AddHitScore(const float &hitScore, const std::string &scoreLabel);
+
+
     /**
      *  @brief  Get the probability that the hit is track-like
      *
@@ -217,6 +234,85 @@ inline const pandora::StringVector &LArCaloHit::GetHitScoreLabels() const
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
+inline float LArCaloHit::GetMIPScore() const
+{
+    const auto iter(std::find(m_hitScoreLabels.begin(), m_hitScoreLabels.end(), "MIPScore"));
+
+    if (iter == m_hitScoreLabels.end())
+        throw pandora::StatusCodeException(pandora::STATUS_CODE_NOT_FOUND);
+    
+
+    return (m_hitScores.at(iter - m_hitScoreLabels.begin()));
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+inline float LArCaloHit::GetHIPScore() const
+{
+    const auto iter(std::find(m_hitScoreLabels.begin(), m_hitScoreLabels.end(), "HIPScore"));
+
+    if (iter == m_hitScoreLabels.end())
+        throw pandora::StatusCodeException(pandora::STATUS_CODE_NOT_FOUND);
+    
+
+    return (m_hitScores.at(iter - m_hitScoreLabels.begin()));
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+inline float LArCaloHit::GetEMTrackScore() const
+{
+    const auto iter(std::find(m_hitScoreLabels.begin(), m_hitScoreLabels.end(), "EMTrackScore"));
+
+    if (iter == m_hitScoreLabels.end())
+        throw pandora::StatusCodeException(pandora::STATUS_CODE_NOT_FOUND);
+    
+
+    return (m_hitScores.at(iter - m_hitScoreLabels.begin()));
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+inline float LArCaloHit::GetEMShowerScore() const
+{
+    const auto iter(std::find(m_hitScoreLabels.begin(), m_hitScoreLabels.end(), "EMShowerScore"));
+
+    if (iter == m_hitScoreLabels.end())
+        throw pandora::StatusCodeException(pandora::STATUS_CODE_NOT_FOUND);
+    
+
+    return (m_hitScores.at(iter - m_hitScoreLabels.begin()));
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+inline float LArCaloHit::GetDiffuseScore() const
+{
+    const auto iter(std::find(m_hitScoreLabels.begin(), m_hitScoreLabels.end(), "DiffuseScore"));
+
+    if (iter == m_hitScoreLabels.end())
+        throw pandora::StatusCodeException(pandora::STATUS_CODE_NOT_FOUND);
+    
+
+    return (m_hitScores.at(iter - m_hitScoreLabels.begin()));
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+inline float LArCaloHit::GetTrackScore() const
+{
+    return (this->GetMIPScore() + this->GetHIPScore());
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+inline float LArCaloHit::GetShowerScore() const
+{
+    return (this->GetEMTrackScore() + this->GetEMShowerScore() + this->GetDiffuseScore());
+}
+    
+//------------------------------------------------------------------------------------------------------------------------------------------
+
 inline void LArCaloHit::FillParameters(LArCaloHitParameters &parameters) const
 {
     parameters.m_cellGeometry = this->GetCellGeometry();
@@ -259,6 +355,17 @@ inline float LArCaloHit::GetTrackProbability() const
 inline float LArCaloHit::GetShowerProbability() const
 {
     return m_pShower.Get();
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+inline void LArCaloHit::AddHitScore(const float &hitScore, const std::string &scoreLabel)
+{
+    if (std::find(m_hitScoreLabels.begin(), m_hitScoreLabels.end(), scoreLabel) != m_hitScoreLabels.end())
+        throw pandora::StatusCodeException(pandora::STATUS_CODE_ALREADY_PRESENT);
+
+    m_hitScores.emplace_back(hitScore);
+    m_hitScoreLabels.emplace_back(scoreLabel);
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------

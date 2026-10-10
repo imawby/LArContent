@@ -42,8 +42,8 @@ bool DlPfoCharacterisationAlgorithm::IsClearTrack(const Cluster *const pCluster)
             const LArCaloHit *pLArCaloHit{dynamic_cast<const LArCaloHit *>(pCaloHit)};
             if (pLArCaloHit)
             {
-                const float pTrack{pLArCaloHit->GetTrackProbability()};
-                const float pShower{pLArCaloHit->GetShowerProbability()};
+                const float pTrack{pLArCaloHit->GetTrackScore()};
+                const float pShower{pLArCaloHit->GetShowerScore()};
                 if ((pTrack + pShower) > std::numeric_limits<float>::epsilon())
                     trackLikelihoods.emplace_back(pTrack / (pTrack + pShower));
             }
