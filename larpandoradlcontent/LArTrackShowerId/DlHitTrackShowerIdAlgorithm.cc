@@ -74,9 +74,6 @@ StatusCode DlHitTrackShowerIdAlgorithm::PrepareTrainingSample()
     if (!pCaloHitList || pCaloHitList->empty())
         return STATUS_CODE_SUCCESS;
 
-    std::cout << "nHits before: " << pCaloHitList->size() << std::endl;
-
-    
     // Map truth information for hits
     // mcToHitsMap (to OG hits) leadingToHitsMap (fold up showers) instanceToHitsMap (reassign collinear hits)
     // Simultaneously work out how close hits are to vertex
@@ -148,8 +145,6 @@ StatusCode DlHitTrackShowerIdAlgorithm::PrepareTrainingSample()
 
     if (hitToMCParticle.empty())
         return STATUS_CODE_SUCCESS;
-
-    std::cout << "nHits after: " << hitToMCParticle.size() << std::endl;
 
     
     // Prepare input feature vectors
@@ -319,28 +314,47 @@ StatusCode DlHitTrackShowerIdAlgorithm::Infer()
         LArDLHelper::TorchOutput classProbs{torch::softmax(classLogits, 1)};        
         
         // Now change to classes
-        LArDLHelper::TorchOutput classes{classProbs.argmax(1)}; // [num_cps]
-        std::map<int, CaloHitList> classHitsMap{{MIP, CaloHitList()}, {HIP, CaloHitList()}, {EM_TRACK, CaloHitList()},
-            {EM_SHOWER, CaloHitList()}, {DIFFUSE, CaloHitList()}};
-        std::vector<std::string> classLabels({"MIPScore", "HIPScore", "EMTrackScore", "EMShowerScore", "Diffuse"});
+        //LArDLHelper::TorchOutput classes{classProbs.argmax(1)}; // [num_cps]
+        // std::map<int, CaloHitList> classHitsMap{{MIP, CaloHitList()}, {HIP, CaloHitList()}, {EM_TRACK, CaloHitList()},
+        //     {EM_SHOWER, CaloHitList()}, {DIFFUSE, CaloHitList()}};
+        std::vector<std::string> classLabels({"MIPScore", "HIPScore", "EMTrackScore", "EMShowerScore", "DiffuseScore"});
  
-        for (long i = 0; i < classes.size(0); ++i)
+        for (int i = 0; i < m_maxSeqLen; ++i)
         {
-            if ((s + i) >= totalSize)
+            size_t iInput(s + i);
+
+            if (iInput >= totalSize)
                 continue;
             
-            const int predictedClass{classes[i].item<int>()};
-            const CaloHit *const pCaloHit{caloHitVector[s + i]};
-            classHitsMap[predictedClass].push_back(pCaloHit);
-
+            const CaloHit *const pCaloHit{caloHitVector[iInput]};
             LArCaloHit *const pLArCaloHit{const_cast<LArCaloHit *>(dynamic_cast<const LArCaloHit *>(pCaloHit))};
-            [[maybe_unused]] const int classIndex(classes[i].item<int>());
-            [[maybe_unused]] const float classScore(classProbs[i][classIndex].item<float>());
-            [[maybe_unused]] const std::string classLabel(classLabels.at(classIndex));
+
+            for (unsigned int classIndex = 0; classIndex < classLabels.size(); ++classIndex)
+            {
+                const float classScore(classProbs[i][classIndex].item<float>());
+                const std::string classLabel(classLabels.at(classIndex));
+                pLArCaloHit->AddHitScore(classScore, classLabel);
+            }            
+        }
+
+        // for (long i = 0; i < classes.size(0); ++i)
+        // {
+        //     if ((s + i) >= totalSize)
+        //         continue;
+            
+        //     const int predictedClass{classes[i].item<int>()};
+        //     const CaloHit *const pCaloHit{caloHitVector[s + i]};
+        //     classHitsMap[predictedClass].push_back(pCaloHit);
+
+        //     LArCaloHit *const pLArCaloHit{const_cast<LArCaloHit *>(dynamic_cast<const LArCaloHit *>(pCaloHit))};
+        //     [[maybe_unused]] const int classIndex(classes[i].item<int>());
+        //     [[maybe_unused]] const float classScore(classProbs[i][classIndex].item<float>());
+        //     [[maybe_unused]] const std::string classLabel(classLabels.at(classIndex));
 
             
-            pLArCaloHit->AddHitScore(classScore, classLabel);
-        }
+        //     pLArCaloHit->AddHitScore(classScore, classLabel);
+        // }
+
 
         // for (const auto &[predictedClass, caloHitList] : classHitsMap)
         // {
